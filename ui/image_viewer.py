@@ -36,7 +36,7 @@ from PySide6.QtGui import (
     QPen,
     QPixmap,
     QSurfaceFormat,
-    QWheelEvent,
+    QWheelEvent, QPalette
 )
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
 from PySide6.QtWidgets import (
@@ -397,13 +397,20 @@ class ImageViewer(EditModeMixin, QGraphicsView):
         # View 최적화
         self.setOptimizationFlag(QGraphicsView.OptimizationFlag.DontAdjustForAntialiasing, True)
         self.setOptimizationFlag(QGraphicsView.OptimizationFlag.DontSavePainterState, True)
-        self.setViewportUpdateMode(QGraphicsView.ViewportUpdateMode.MinimalViewportUpdate)
+        #self.setViewportUpdateMode(QGraphicsView.ViewportUpdateMode.MinimalViewportUpdate)
+        self.setViewportUpdateMode(QGraphicsView.ViewportUpdateMode.FullViewportUpdate)
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorViewCenter)
         
         # 배경색
         self.setBackgroundBrush(Qt.GlobalColor.black)
-        
+
+        # OpenGL viewport는 autoFillBackground가 기본 False
+        self.viewport().setAutoFillBackground(True)
+        palette = self.viewport().palette()
+        palette.setColor(QPalette.ColorRole.Window, QColor("#1e1e1e"))
+        self.viewport().setPalette(palette)
+
         # 스크롤바
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
@@ -628,17 +635,15 @@ class ImageViewer(EditModeMixin, QGraphicsView):
         self.zoom_mode = 'fit'
         self._fit_in_view()
 
-
+                
     def set_image(self, pixmap: QPixmap) -> None:
         """정적 이미지 설정 - 깜빡임 없는 전환"""
         
         debug_print(f"\n{'='*50}")
         debug_print(f"[SET_IMAGE] 시작")
 
-        # WebP 워커/오버레이 즉시 정리 (이전 애니메이션 로딩 중이던 경우 대비)
         self._stop_webp_workers()
 
-        # ===== 1. 전환 중이면 대기 이미지로 저장 =====
         if self._transition_in_progress:
             self._pending_image = pixmap
             debug_print("[SET_IMAGE] 전환 중 - 대기 이미지 저장")
@@ -647,15 +652,12 @@ class ImageViewer(EditModeMixin, QGraphicsView):
         self._transition_in_progress = True
         self._pending_image = None
         
-        # ===== 2. 타이머만 정리 (이미지는 유지!) =====
         self._stop_timers_only()
-        
-        # ===== 3. 로딩 플래그 설정 =====
         self._loading_image = True
         new_image_id = id(pixmap)
         self._loading_timer_id = new_image_id
         
-        # ===== 4. 애니메이션만 즉시 정리 =====
+        # ===== 애니메이션 정리 =====
         if self.current_movie:
             self.current_movie.stop()
             try:
@@ -665,94 +667,84 @@ class ImageViewer(EditModeMixin, QGraphicsView):
             self.current_movie.deleteLater()
             self.current_movie = None
         
-        # ===== 5. 기존 아이템 제거 (Scene에서만, 메모리는 나중에) =====
+        # ===== 기존 아이템 참조 저장 =====
         old_item = self.pixmap_item
-        self.pixmap_item = None
-        self.pixmap_item = QGraphicsPixmapItem(pixmap)
-        self.graphics_scene.addItem(self.pixmap_item)
 
+        # ===== ✅ 새 아이템 단 1번만 생성 =====
+        new_item = QGraphicsPixmapItem(pixmap)
+        new_item.setTransformationMode(Qt.TransformationMode.SmoothTransformation)
+        new_item.setCacheMode(QGraphicsItem.CacheMode.NoCache)
+        new_item.setShapeMode(QGraphicsPixmapItem.ShapeMode.BoundingRectShape)
+
+        # ===== Scene rect 먼저 교체 (OpenGL 클리어 타이밍) =====
+        self.graphics_scene.setSceneRect(QRectF(pixmap.rect()))
+
+        # ===== 새 아이템 추가 =====
+        self.graphics_scene.addItem(new_item)
+        self.pixmap_item = new_item
+
+        # ===== 기존 아이템 즉시 제거 (고아 방지) =====
         if old_item:
             if isinstance(old_item, (AnimatedGraphicsItem, WebPAnimatedItem)):
                 old_item.cleanup()
-            # ⚠️ 즉시 제거하지 않고 새 아이템 추가 후 제거
-        
-        # ===== 6. 새 이미지 즉시 설정 (깜빡임 방지) =====
+            self.graphics_scene.removeItem(old_item)
+            # old_item 참조 해제 (GC 허용)
+            del old_item
+
+        # ===== 상태 갱신 =====
         self.current_image_id = new_image_id
         self.current_pixmap = pixmap
         self.original_pixmap_size = (pixmap.width(), pixmap.height())
         
-        # 새 아이템 생성 및 추가
-        self.pixmap_item = QGraphicsPixmapItem(pixmap)
-        self.pixmap_item.setTransformationMode(Qt.TransformationMode.SmoothTransformation)
-        self.pixmap_item.setCacheMode(QGraphicsItem.CacheMode.DeviceCoordinateCache)
-        self.pixmap_item.setShapeMode(QGraphicsPixmapItem.ShapeMode.BoundingRectShape)
-        self.graphics_scene.addItem(self.pixmap_item)
-        
-        # ===== 7. 이제 기존 아이템 제거 (새 이미지가 이미 보이는 상태) =====
-        if old_item:
-            self.graphics_scene.removeItem(old_item)
-            # deleteLater() 호출하지 않음 (자동 메모리 관리)
-        
-        # ===== 8. Scene 초기화 =====
-        self.graphics_scene.setSceneRect(QRectF(pixmap.rect()))
         self.resetTransform()
-
         self.zoom_factor = 1.0
         self.zoom_mode = 'fit'
 
         intent = self._auto_zoom_mode(pixmap.width(), pixmap.height())
         self.zoom_mode = intent
-        self._zoom_intent_stack = [intent]   # 스택에 push (replace_pixmap 공유)
+        self._zoom_intent_stack = [intent]
 
         if intent == 'actual':
-            # fit_in_view 호출 자체를 차단
             self._suppress_fit_in_view = True
-            self._suppress_start_ms    = time.monotonic()
+            self._suppress_start_ms = time.monotonic()
             self.resetTransform()
             self.zoom_factor = 1.0
             self._calculate_and_emit_zoom()
-        # elif intent == 'manual':
-        #     # 수동 줌 유지 — 기존 zoom_factor 그대로
-        #     self._suppress_fit_in_view = False
-        #     self.resetTransform()
-        #     self.scale(self.zoom_factor, self.zoom_factor)
-        #     self._calculate_and_emit_zoom()
         else:
-            # fit / width
             self._suppress_fit_in_view = False
             self._fit_in_view()
 
-        # 기존 코드 계속 (minimap, scene update 등) ...
         self.zoom_apply_timer.start(50)
         
-        # 드래그 상태
         self.is_dragging = False
         self.last_mouse_pos = None
         self.setCursor(Qt.CursorShape.ArrowCursor)
         
-        # 미니맵
         if hasattr(self, 'minimap'):
             self.minimap.set_thumbnail(pixmap)
             self.minimap.hide()
         
-        # ===== 10. Scene 업데이트 (단 1회만) =====
+        # ===== ✅ 씬 내 아이템 수 검증 (디버그용, 배포 시 제거) =====
+        item_count = len(self.graphics_scene.items())
+        if item_count > 1:
+            debug_print(f"[SET_IMAGE] ⚠️ 씬 아이템 수 이상: {item_count}개")
+
         self.graphics_scene.update()
-        
+        self.viewport().update()
+
         debug_print(f"[SET_IMAGE] ✅ 완료")
         debug_print(f"{'='*50}\n")
         
-        # ===== 11. 전환 완료 =====
         self._transition_in_progress = False
         
-        # ===== 12. 대기 중인 이미지가 있으면 즉시 처리 =====
         if self._pending_image:
             pending = self._pending_image
             self._pending_image = None
             debug_print("[SET_IMAGE] 대기 이미지 처리")
             QTimer.singleShot(0, lambda: self.set_image(pending))
         else:
-            # resize 활성화 (50ms로 단축)
             QTimer.singleShot(50, lambda: self._unlock_resize(new_image_id))
+
 
 
     def set_rotation_preview(self, pixmap: QPixmap) -> None:
@@ -1160,8 +1152,11 @@ class ImageViewer(EditModeMixin, QGraphicsView):
                 30, lambda: self._restore_scroll_position(h_ratio, v_ratio)
             )
         self._update_cursor()
-        debug_print("replace_pixmap 완료")
 
+        self.graphics_scene.update()
+        self.viewport().update()  # ← 추가
+
+        debug_print("replace_pixmap 완료")
 
     def clear(self) -> None:
         """이미지 초기화"""
