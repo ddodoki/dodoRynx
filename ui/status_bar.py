@@ -139,17 +139,17 @@ class SortMenuButton(QPushButton):
 
     # 버튼 텍스트용 약식 레이블
     _SHORT_LABELS: dict[tuple[str, bool], str] = {
-        ("highlight",    False): "★",
+        ("highlight",    False): "⭐",
         ("name",         False): "⇅",   # 기본값 — 원래 아이콘 유지
         ("name",         True):  "Az↓",
-        ("created",      True):  "C↓",
-        ("created",      False): "C↑",
-        ("modified",     True):  "M↓",
-        ("modified",     False): "M↑",
-        ("size",         True):  "S↓",
-        ("size",         False): "S↑",
-        ("exif_date",    True):  "E↓",
-        ("exif_date",    False): "E↑",
+        ("created",      True):  "📅↓",
+        ("created",      False): "📅↑",
+        ("modified",     True):  "🕒↓",
+        ("modified",     False): "🕒↑",
+        ("size",         True):  "📦↓",
+        ("size",         False): "📦↑",
+        ("exif_date",    True):  "📸↓",
+        ("exif_date",    False): "📸↑",
         ("camera_model", False): "📷",
     }
 
@@ -157,7 +157,7 @@ class SortMenuButton(QPushButton):
         super().__init__("⇅", parent)
         self.setToolTip(t('statusbar.sort_btn_tooltip'))
         self.setStyleSheet(self._STYLE)
-        self.setFixedWidth(34)
+        self.setFixedWidth(45)
 
         # (sort_type, reverse) → QAction 참조 보관
         self._action_map: dict[tuple[str, bool], QAction] = {}
@@ -933,7 +933,7 @@ class AppStatusBar:
 
         # 파일 열기
         self.open_file_btn = QPushButton("📂")
-        self.open_file_btn.setFixedWidth(34)
+        self.open_file_btn.setFixedWidth(45)
         self.open_file_btn.setToolTip(t('statusbar.open_file_tooltip'))
         self.open_file_btn.setStyleSheet(self._BTN_STYLE)
         lay.addWidget(self.open_file_btn)
@@ -944,7 +944,7 @@ class AppStatusBar:
 
         # 편집 모드
         self.edit_mode_btn = QPushButton("🎨")
-        self.edit_mode_btn.setFixedWidth(34)
+        self.edit_mode_btn.setFixedWidth(45)
         self.edit_mode_btn.setToolTip(t('statusbar.edit_mode_tooltip'))
         self.edit_mode_btn.setStyleSheet(self._BTN_STYLE)
         lay.addWidget(self.edit_mode_btn)
