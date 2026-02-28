@@ -1,0 +1,161 @@
+========================================================================
+THIRD PARTY NOTICES
+========================================================================
+
+[ 한국어 ]
+
+본 프로그램은 다음 서드파티 소프트웨어/구성요소를 포함하거나 의존합니다.
+
+포함 라이브러리:
+
+- Python (Python Software Foundation License)
+- PySide6 / Qt (LGPL v3)
+- Pillow (HPND)
+- opencv-python (Apache 2.0, 포함된 FFmpeg는 LGPL v2.1)
+- rawpy (MIT)
+- numpy (BSD-3-Clause)
+- natsort (MIT)
+- Send2Trash (BSD-3-Clause)
+- watchdog (Apache 2.0)
+- psutil (BSD-3-Clause)
+- requests (Apache 2.0)
+- PyInstaller (GPL-2.0-or-later with exception)
+- pyinstaller-hooks-contrib (GPL-2.0-or-later)
+- pywin32-ctypes (BSD-3-Clause)
+- pywin32 (PSF License)
+- piexif (MIT)
+
+Windows Runtime (HEIF/HEIC/AVIF 디코딩 지원):
+
+- winrt-runtime (MIT)
+- winrt-Windows.Foundation (MIT)
+- winrt-Windows.Foundation.Collections (MIT)
+- winrt-Windows.Graphics (MIT)
+- winrt-Windows.Graphics.Imaging (MIT)
+- winrt-Windows.Storage (MIT)
+- winrt-Windows.Storage.Streams (MIT)
+
+지도 데이터 및 타일 서비스:
+
+- OpenFreeMap
+  - 지도 타일 호스팅 서비스
+  - 서버 코드 라이선스: MIT
+  - 지도 데이터: OpenStreetMap (ODbL)
+  - 크레딧: OpenFreeMap © OpenMapTiles Data from OpenStreetMap
+  - 웹사이트: https://openfreemap.org
+
+- MapLibre GL JS
+  - 벡터 타일 렌더링 엔진
+  - 라이선스: BSD-3-Clause
+  - Copyright: MapLibre contributors
+  - 웹사이트: https://maplibre.org
+
+
+HEVC / H.265 관련 고지:
+
+본 프로그램은 Windows 운영체제의 HEVC/HEIF 디코딩 기능을
+호출할 수 있습니다.
+
+HEVC(H.265)는 특허 보호 대상 기술일 수 있으며,
+해당 코덱 사용에 따른 라이선스 및 특허 문제는
+각 사용자 및 시스템 환경에 따라 달라질 수 있습니다.
+
+본 프로그램은 코덱을 직접 포함하거나 배포하지 않으며,
+운영체제에 이미 설치된 기능을 호출하는 방식입니다.
+HEVC 특허 라이선스와 관련된 책임은 사용자에게 있습니다.
+
+
+본 프로그램은 GPS 좌표를 다음 공개 웹 서비스 URL로 연결합니다:
+
+- 네이버 지도
+- 카카오맵
+- 구글 지도
+
+(API를 사용하지 않으며, 사용자의 기본 웹 브라우저를 통해
+해당 웹사이트를 여는 방식입니다.)
+
+각 라이브러리의 라이선스 전문은 다음 경로에 포함됩니다:
+
+Licenses/third_party/<library_name>/
+
+
+------------------------------------------------------------------------
+
+[ English ]
+
+This program includes and depends on the following
+third-party software/components:
+
+Included libraries:
+
+- Python (Python Software Foundation License)
+- PySide6 / Qt (LGPL v3)
+- Pillow (HPND)
+- opencv-python (Apache 2.0, bundled FFmpeg LGPL v2.1)
+- rawpy (MIT)
+- numpy (BSD-3-Clause)
+- natsort (MIT)
+- Send2Trash (BSD-3-Clause)
+- watchdog (Apache 2.0)
+- psutil (BSD-3-Clause)
+- requests (Apache 2.0)
+- PyInstaller (GPL-2.0-or-later with exception)
+- pyinstaller-hooks-contrib (GPL-2.0-or-later)
+- pywin32-ctypes (BSD-3-Clause)
+- pywin32 (PSF License)
+- piexif (MIT)
+
+Windows Runtime (HEIF/HEIC/AVIF decoding support):
+
+- winrt-runtime (MIT)
+- winrt-Windows.Foundation (MIT)
+- winrt-Windows.Foundation.Collections (MIT)
+- winrt-Windows.Graphics (MIT)
+- winrt-Windows.Graphics.Imaging (MIT)
+- winrt-Windows.Storage (MIT)
+- winrt-Windows.Storage.Streams (MIT)
+
+Map services and data:
+
+- OpenFreeMap
+  - Tile hosting service
+  - Server code license: MIT
+  - Map data: OpenStreetMap (ODbL)
+  - Credit: OpenFreeMap © OpenMapTiles Data from OpenStreetMap
+  - Website: https://openfreemap.org
+
+- MapLibre GL JS
+  - Vector tile rendering engine
+  - License: BSD-3-Clause
+  - Website: https://maplibre.org
+
+
+HEVC / H.265 Notice:
+
+This program may call the Windows operating system's
+built-in HEVC/HEIF decoding functionality.
+
+HEVC (H.265) may be subject to patent protection.
+License and patent obligations related to HEVC
+may vary depending on the user's system environment.
+
+This program does not distribute any codec directly;
+it only invokes functionality already present in the OS.
+Responsibility for HEVC patent licensing lies with the user.
+
+
+This program links GPS coordinates to public map service URLs:
+
+- Naver Map
+- Kakao Map
+- Google Maps
+
+(No API usage – the application simply opens these
+websites via the user's default web browser.)
+
+License texts for bundled third-party components
+are provided under:
+
+Licenses/third_party/
+
+========================================================================

@@ -1,0 +1,796 @@
+{
+  "statusbar": {
+    "sort_btn_tooltip": "File sort criteria",
+    "zoom_btn_tooltip": "Zoom / Fit to window (click)",
+    "zoom_current_tooltip": "Current zoom: {pct}%  (click → zoom menu)",
+    "open_file_tooltip": "Open file (Ctrl+O)",
+    "edit_mode_tooltip": "Edit mode (E)",
+    "rotate_left_tooltip":  "Rotate 90° left (Ctrl+Shift+←)",
+    "rotate_right_tooltip": "Rotate 90° right (Ctrl+Shift+→)",
+    "rotate_reset_tooltip": "Reset rotation (Ctrl+Shift+↑)",
+    "rotate_apply_tooltip": "Apply rotation (Ctrl+Shift+↓)",
+
+    "task": {
+      "file_op": "File Operation",
+      "sort":    "Sort",
+      "scan":    "Folder Scan",
+      "thumb":   "Thumbnail"
+    },
+
+    "sort_menu": {
+      "highlight":    "⭐ Highlight First",
+      "name_asc":     "📄 Name (A→Z)",
+      "name_desc":    "📄 Name (Z→A)",
+      "created_new":  "🆕 Created (Newest)",
+      "created_old":  "📅 Created (Oldest)",
+      "modified_new": "🕒 Modified (Newest)",
+      "modified_old": "📆 Modified (Oldest)",
+      "size_large":   "📦 Size (Largest)",
+      "size_small":   "📦 Size (Smallest)",
+      "exif_new":     "📸 Shot Date (Newest)",
+      "exif_old":     "📸 Shot Date (Oldest)",
+      "camera":       "📷 Camera Model"
+    },
+
+    "sort_name": {
+      "highlight":    "Highlight",
+      "name":         "Name",
+      "created":      "Created",
+      "modified":     "Modified",
+      "size":         "Size",
+      "exif_date":    "EXIF Shot Date",
+      "camera_model": "Camera Model"
+    },
+
+    "zoom_menu": {
+      "fit":    "🪟 Fit to Window  (F)",
+      "actual": "🔍 100%  (1)"
+    },
+
+    "sort_asc":  "▲",
+    "sort_desc": "▼",
+
+    "sort_progress": "⇅ {label} sorting...",
+    "sort_done":     "✓ {label} sorted",
+    "sort_error":    "⚠ Sort error",
+
+    "file_op_default":        "Processing files...",
+    "file_op_progress_total": "📁 {text}  {current} / {total}",
+    "file_op_progress_count": "📁 {text}  {count} items",
+    "file_op_done":           "✓ File operation complete",
+    "file_op_done_short":     "✓ Done",
+
+    "scan_start":          "🔍 Scanning folder...",
+    "scan_progress_total": "🔍 Scanning...  {current} / {total}",
+    "scan_progress_count": "🔍 Scanning...  {count} items",
+    "scan_done_finish":    "✓ {total} files loaded",
+    "scan_done_toast":     "✓ Folder scan complete  {total} items",
+
+    "thumb_start":    "🖼 Loading thumbnails...  0 / {total}",
+    "thumb_progress": "🖼 Thumbnails  {done} / {total}",
+    "thumb_done":     "✓ {total} thumbnails loaded"
+  },
+
+  "menu": {
+    "exit": "🚪 Exit",
+
+    "file": {
+      "title_open":    "📝 Open File",
+      "rename":        "📝 Rename",
+      "cut":           "✂️ Cut",
+      "copy":          "📋 Copy",
+      "paste":         "📌 Paste",
+      "delete":        "🗑️ Delete",
+      "copy_path":     "🔗 Copy Path",
+      "copy_image":    "🖼️ Copy Image to Clipboard",
+      "open_location": "📂 Open File Location",
+      "properties":    "🔍 Properties"
+    },
+
+    "highlight": {
+      "gps_view":  "🗺️ View GPS Location",
+      "toggle":    "⭐ Toggle Highlight",
+      "clear_all": "⭐ Clear All Highlights ({count})"
+    },
+
+    "view": {
+      "title":          "📟 Layout",
+      "folder_explorer":"📂 Folder Panel",
+      "overlay_info":   "🔲 Overlay Info",
+      "metadata_panel": "📊 Metadata Panel",
+      "thumbnail_bar":  "🖼️ Thumbnail Bar",
+      "status_bar":     "📟 Status Bar",
+      "perf_overlay":   "⚡ Performance Overlay",
+      "fullscreen":     "⛶ Full Screen"
+    },
+
+    "rotate": {
+      "title": "🔄 Rotate",
+      "left":  "↶ Rotate Left 90°",
+      "right": "↷ Rotate Right 90°",
+      "reset": "↺ Reset Rotation",
+      "apply": "✔ Apply Rotation (Save)"
+    },
+
+    "capture": {
+      "title":     "📷 Screen Capture",
+      "clipboard": "📋 Capture to Clipboard",
+      "save_file": "💾 Save to File"
+    },
+
+    "print": {
+      "title":   "🖨️ Print",
+      "current": "🖼️ Print Current Image",
+      "all":     "📚 Print All Images",
+      "highlighted": "⭐ Print highlighted Images"
+    },
+
+    "info": {
+      "title":       "ℹ️ Info / Settings",
+      "settings":    "⚙️ Settings",
+      "system_info": "🖥️ System Info",
+      "about":       "❓ About"
+    }
+  },
+
+
+  "meta": {
+    "language": "English",
+    "code": "en",
+    "version": "1.0"
+  },
+
+  "app": {
+    "name": "dodoRynx"
+  },
+
+  "settings": {
+    "title": "Settings",
+    "tab_rendering": "Rendering",
+    "tab_cache": "Cache",
+    "tab_browser": "Map",
+    "tab_layout": "Layout",
+
+    "restart_title": "Settings Saved",
+    "restart_body": "Some settings require a restart to take effect.\n\nChanged settings:\n",
+    "restart_rendering": "• Rendering (OpenGL, V-Sync, MSAA)",
+    "restart_cache_disk": "• Cache capacity (thumbnail / map tile)",
+
+    "language": {
+      "group_title": "Language",
+      "label": "Display Language:",
+      "restart_hint": "⚠️ Language changes take effect after restarting the program.",
+      "auto": "Auto (System Default)"
+    },
+
+    "rendering": {
+      "group_opengl": "GPU Acceleration (OpenGL)",
+      "opengl_checkbox": "Use OpenGL Rendering (GPU Acceleration)",
+      "opengl_tooltip": "Enables hardware-accelerated rendering using the GPU.\nProvides smoother zoom and pan, but may cause issues on older GPUs.\n\nWhen disabled, software rendering is used. (Slower but more compatible)",
+      "vsync_checkbox": "Vertical Sync (V-Sync)",
+      "vsync_tooltip": "Prevents screen tearing.\nSyncs rendering to the monitor refresh rate, but may add slight input lag.\n\n※ Only active when OpenGL is enabled.",
+      "msaa_label": "Anti-Aliasing (MSAA):",
+      "msaa_off": "Off (0x)",
+      "msaa_tooltip": "Smooths image edges.\nHigher values improve quality but reduce performance.\n\nRecommended: 4x\n※ Only active when OpenGL is enabled.",
+      "restart_hint": "⚠️ Rendering changes require a program restart.",
+      "perf_group": "💡 Performance Guide",
+      "perf_text": "• OpenGL ON: Recommended for large images or fast zoom (requires GPU)\n• OpenGL OFF: Recommended for older PCs or GPU driver issues\n• V-Sync: Enable when screen tearing is visible\n• MSAA: Disable on high-DPI monitors (already sharp enough)",
+      "anim_group": "Animation Settings",
+      "anim_quality_label": "Quality:",
+      "anim_quality_low": "Low (Fast)",
+      "anim_quality_medium": "Medium",
+      "anim_quality_high": "High (Original)",
+      "anim_cache_checkbox": "Frame Caching (increases memory usage)",
+      "webp_label": "WebP Playback Mode:",
+      "webp_fast": "⚡ Fast — Instant playback (QMovie)",
+      "webp_quality": "🎞 Quality — Accurate timing (Pillow)",
+      "webp_tooltip": "WebP animation only\n\n⚡ Fast: Qt built-in decoder, instant playback\n  (frame timing may be slightly inaccurate)\n\n🎞 Quality: Background decode then accurate-timing playback\n  (shows loading indicator before playback begins)"
+    },
+
+    "cache": {
+      "viewer_group": "Image Viewer Cache (Memory only — cleared on restart)",
+      "ahead": "Forward pre-cache:",
+      "ahead_tooltip": "Number of images to pre-load after the current one.",
+      "behind": "Backward cache:",
+      "behind_tooltip": "Number of previous images to keep in cache.",
+      "max_memory": "Max memory usage:",
+      "memory_tooltip": "Upper memory limit for the image viewer main cache.",
+      "hybrid_group": "Hybrid Cache Capacity",
+      "thumb_group": "Thumbnail Cache",
+      "thumb_memory": "Memory limit:",
+      "thumb_memory_tooltip": "Thumbnail memory cache limit.\n72px thumbnails: ~1 MB per 500 items.",
+      "thumb_disk": "Disk limit:",
+      "thumb_disk_tooltip": "Thumbnail disk cache limit.\nOldest entries are evicted automatically (LRU).",
+      "ofm_group": "Map Tile Cache",
+      "ofm_memory": "Memory limit:",
+      "ofm_memory_tooltip": "Map tile memory cache limit.",
+      "ofm_disk": "Disk limit:",
+      "ofm_disk_tooltip": "Map tile disk cache limit.\n30-day expiry, LRU auto-eviction.",
+      "ofm_expiry": "Map tile expiry date",
+      "ofm_expiry_tooltip": "Map tile expiry date",
+      "ofm_expiry_suffix": " days",
+      "restart_hint": "⚠️ Capacity changes take effect after a program restart.",
+      "mgmt_group": "Cache Folder Management",
+      "location_label": "Location:",
+      "open_folder_tooltip": "Open cache folder",
+      "refresh_tooltip": "Recalculate size",
+      "calculating": "Calculating...",
+      "thumb_label": "🖼️ Thumbnail Cache",
+      "ofm_label": "🗺️ Map Tile Cache",
+      "clear_thumb": "🗑️ Clear Thumb..",
+      "clear_ofm": "🗑️ Clear Tiles",
+      "hint": "💡 Clearing thumbnails will regenerate them on the next folder visit.\n   Clearing map tiles will re-download them on next display."
+    },
+
+    "browser": {
+      "group_map": "Map Service",
+      "default_map_label": "Default Map:",
+      "naver": "Naver Maps",
+      "kakao": "Kakao Maps",
+      "google": "Google Maps",
+      "group_browser": "Web Browser",
+      "system_default": "System Default",
+      "custom": "Custom...",
+      "path_placeholder": "Browser executable path",
+      "browse_btn": "Browse",
+      "select_title": "Select Browser",
+      "select_filter": "Executable (*.exe)",
+      "no_browser_title": "Browser Not Found",
+      "no_browser_msg": "{name} could not be found:\n{path}\n\nContinue? (System default browser will be used instead)"
+    },
+
+    "overlay": {
+      "info_text": "The overlay displays EXIF, GPS, and other info over the image.",
+      "group_items": "Display Items",
+      "file_info": "📄 File Info (name, size, resolution)",
+      "camera_info": "📷 Camera Info (make, model, date)",
+      "exif_info": "EXIF (ISO, aperture, shutter speed, focal length)",
+      "lens_info": "🔭 Lens Info",
+      "gps_info": "🗺️ GPS Coordinates",
+      "map": "🗺️ Show Map",
+      "group_appearance": "Appearance",
+      "scale": "Scale:",
+      "opacity": "Opacity:",
+      "position": "Position:",
+      "pos_top_left": "Top Left",
+      "pos_top_right": "Top Right",
+      "pos_bottom_left": "Bottom Left",
+      "pos_bottom_right": "Bottom Right"
+    }
+  },
+
+  "dialog": {
+    "open_file": "Open Image",
+    "open_folder": "Open Folder",
+    "save": "Save",
+    "cancel": "Cancel",
+    "yes": "Yes",
+    "no": "No",
+    "confirm_delete": "Delete File",
+    "confirm_delete_msg": "Delete '{name}'?\nThis action cannot be undone.",
+    "thumb_clear_title": "Clear Thumbnail Cache",
+    "thumb_clear_msg": "Clear all thumbnail cache?\n\nThumbnails will be regenerated on the next folder visit.\nThe currently open folder will reload immediately.",
+    "thumb_cleared_title": "Cache Cleared",
+    "thumb_cleared_msg": "Thumbnail cache has been cleared.\nFreed: {size}",
+    "tile_clear_title": "Clear Map Tile Cache",
+    "tile_clear_msg": "Clear all map tile cache?\n\nTiles will be re-downloaded when images with GPS data are opened.",
+    "tile_cleared_title": "Cache Cleared",
+    "tile_cleared_msg": "Map tile cache has been cleared.\nFreed: {size}",
+    "folder_open_error_title": "Error",
+    "folder_open_error_msg": "Cannot open cache folder:\n{error}",
+    "cache_delete_error_title": "Error",
+    "cache_delete_error_msg": "An error occurred while deleting the cache:\n{error}"
+  },
+
+  "status": {
+    "zoom": "Zoom: {zoom}%",
+    "file_count": "{current} / {total}",
+    "loading": "Loading...",
+    "ready": "Ready",
+    "highlight_count": "⭐ Highlighted: {count}"
+  },
+
+  "error": {
+    "file_not_found": "File not found: {path}",
+    "load_failed": "Failed to load: {name}",
+    "config_load_failed": "Could not load settings file:\n{error}\n\nRunning with default settings.",
+    "init_failed": "Application initialization failed:\n{error}",
+    "config_load_failed_title": "Settings Load Failed",
+    "init_failed_title": "Initialization Failed",
+    "fatal_title": "Fatal Error",
+    "fatal": "A fatal error occurred during startup:\n{error}"
+  },
+
+  "thumbnail_bar": {
+    "highlight_range": "⭐ {count} files {action} (total: {total})"
+  },
+
+  "msg": {
+    "edit_auto_exit":    "Edit mode auto-exited (image navigation)",
+    "capture_clipboard": "📷 Captured to clipboard ({width}×{height})",
+    "capture_saved":     "💾 Saved: {name}",
+    "rotate_saved":      "Rotation saved to original file.",
+    "rotate_no_change":  "No rotation to apply, or operation failed.",
+    "edit_blocked":      "Cannot {action} in edit mode — press E to exit first",
+    "edit_nav_blocked":  "In edit mode — exit first to navigate (E)",
+    "edit_exited":       "Edit mode exited",
+    "edit_anim_blocked": "Animation files cannot be edited"
+  },
+
+  "capture": {
+    "fail_title":       "Capture Failed",
+    "no_viewer":        "Image viewer not found.",
+    "no_capture":       "Unable to capture screen.",
+    "error_title":      "Error",
+    "error_msg":        "Screen capture failed:\n{error}",
+    "no_file_title":    "Save Failed",
+    "no_file_msg":      "No file is currently open.",
+    "save_ok_title":    "Saved",
+    "save_ok_msg":      "File saved:\n{name}\nSize: {width}×{height}",
+    "save_fail_title":  "Save Failed",
+    "save_fail_msg":    "Failed to save file:\n{path}",
+    "save_error_msg":   "File save failed:\n{error}"
+  },
+
+  "rotate": {
+    "blocked_title":    "Cannot Rotate",
+    "blocked_msg":      "Cannot rotate animated images.",
+    "no_change_title":  "No Rotation Applied",
+    "no_change_msg":    "No rotation changes for the current image.",
+    "apply_title":      "Apply Rotation",
+    "apply_msg":        "Overwrite the original file with the current rotation?\nThis action cannot be undone."
+  },
+
+  "print_dialog": {
+    "error_title":        "Error",
+    "error_msg":          "Print function unavailable:\n\n{error}\n\nSee console for details.",
+    "dialog_error_msg":   "Print dialog error:\n{error}",
+    "warn_title":         "Warning",
+    "notice_title":       "Notice",
+    "no_file_msg":        "No file to print.",
+    "no_highlight_msg":   "No highlighted files.",
+    "no_image_msg":       "No image files.",
+    "confirm_all_title":  "Confirm",
+    "confirm_all_msg":    "Print all {count} files?",
+    "meta_loading":       "Loading metadata...",
+    "meta_cancel":        "Cancel",
+    "already_printing":   "It is currently printing. Please try again later."
+  },
+
+  "edit_dialog": {
+    "save_title":       "Save Edit",
+    "save_text":        "Save the edited image?",
+    "save_info":        "Save to same folder: Creates a JPG automatically in the original folder.\nSave As: Choose a save location manually.",
+    "btn_same_folder":  "Save to Same Folder",
+    "btn_save_as":      "Save As",
+    "btn_discard":      "Discard",
+    "error_title":      "Save Error",
+    "save_as_title":    "Save As",
+    "save_as_filter":   "JPEG (*.jpg *.jpeg)"
+  },
+
+  "file_manager": {
+    "renamed":           "Renamed to '{name}'",
+    "path_copied":       "Path copied: {path}",
+    "image_clipboard":   "'{name}' image copied to clipboard",
+    "highlight_status":  "{status} ({count})",
+    "highlight_cleared": "{count} highlights cleared",
+    "highlight_copied":  "{count} highlighted files copied",
+    "highlight_cut":     "{count} highlighted files cut",
+    "file_changed":      "File change detected: '{name}'",
+    "file_moved":        "Moved to '{name}'",
+    "label_copied":      "{label} copied",
+    "label_cut":         "{label} cut",
+    "rename_dialog_title":  "Rename",
+    "rename_dialog_body" :  "Enter a new name. will be added automatically",
+
+    "rename_exists": "The file '{name}' already exists.",
+    "rename_permission_error": "Access to '{name}' is denied. It may be used by another process.",
+    "rename_error_title":    "Error",
+    "rename_error_msg":      "Rename failed:\n{error}",
+    "paste_fail_title":      "Paste Failed",
+    "paste_no_image_msg":    "No image files in clipboard.",
+    "paste_no_valid_msg":    "No valid image files to paste.",
+    "no_highlight_title":    "Notice",
+    "no_highlight_msg":      "No highlighted files.",
+    "delete_hl_title":       "Delete Highlighted Files",
+    "delete_hl_msg":         "Delete {count} files?\n\n{preview}",
+    "delete_file_title":     "Delete File",
+    "delete_single_msg":     "Delete '{name}'?",
+    "delete_multi_msg":      "Delete {count} files?\n\n{preview}",
+    "delete_more":           "\n... and {count} more",
+    "open_image_title":      "Open Image",
+    "open_image_filter":     "Image files (*.jpg *.jpeg *.png *.gif *.webp *.bmp *.heif *.heic *.avif *.tiff *.tif *.nef *.cr2 *.arw *.dng *.raf *.orf)",
+    "open_folder_title":     "Open Folder"
+  },
+
+  "print": {
+    "window_title":    "Print Preview",
+    "printer_label":   "🖨️ Printer:",
+    "properties_btn":  "⚙️ Printer Properties",
+    "refresh_tooltip": "Refresh printer list",
+
+    "zoom_out_tooltip":  "Zoom out (Ctrl + scroll down)",
+    "zoom_reset_tooltip":"Original size",
+    "zoom_in_tooltip":   "Zoom in (Ctrl + scroll up)",
+    "zoom_fit_btn":      "📐 Fit",
+    "zoom_fit_tooltip":  "Fit to screen",
+
+    "prev_btn":   "◀ Prev",
+    "next_btn":   "Next ▶",
+    "cancel_btn": "Cancel",
+    "pdf_btn":    "💾 Save as PDF",
+    "print_btn":  "🖨️ Print",
+
+    "no_printer_title":  "Warning",
+    "no_printer_msg":    "Please select a printer.",
+    "props_title":       "Printer Properties",
+    "props_msg":         "Printer: {name}\n\nPrinter properties can be changed in Windows Settings.\n(Control Panel > Printers & Devices)",
+    "props_info_title":  "Info",
+    "props_info_msg":    "Printer properties can be changed in system settings.",
+
+    "pdf_save_title": "Save as PDF",
+    "pdf_filter":     "PDF Files (*.pdf)",
+    "pdf_error_msg":  "PDF save failed:\n{error}",
+
+    "pdf_printer_title": "Save as PDF",
+    "pdf_printer_msg":   "'{name}' is a PDF printer.\nWould you like to use Save as PDF?",
+    "confirm_title":     "Confirm Print",
+    "confirm_msg":       "Printer: {printer}\nCopies: {copies}\nPaper: {paper}\n\nProceed with printing?",
+    "create_fail_msg":   "Printer creation failed.",
+    "print_error_msg":   "Print failed:\n{error}",
+    "error_title":       "Error",
+
+    "printing_init":      "Printing...",
+    "pdf_generating_init":"Generating PDF...",
+    "cancel_progress":    "Cancel",
+    "printing_progress":  "Printing ({current}/{total})",
+    "pdf_progress":       "Generating PDF ({current}/{total})",
+    "done_title":         "Done",
+    "done_msg":           "Printing complete.",
+    "print_fail_msg":     "Print failed:\n{error}",
+    "pdf_fail_msg":       "PDF generation failed:\n{error}",
+
+    "init_fail":        "Printer initialization failed",
+    "page_render_fail": "Page rendering failed",
+
+    "pdf_done_title":     "PDF Saved",
+    "pdf_done_msg":       "✅ PDF saved!\n\n📁 Location:\n{path}",
+    "open_folder_btn":    "📂 Open Folder",
+    "open_pdf_btn":       "📄 Open PDF",
+    "ok_btn":             "OK",
+    "warn_title":         "Warning",
+    "folder_open_fail":   "Cannot open folder:\n{error}",
+    "pdf_open_fail":      "Cannot open PDF:\n{error}",
+
+    "in_progress_title": "Printing",
+    "in_progress_msg":   "Printing is in progress. Cancel?"
+  },
+
+  "print_settings": {
+    "paper_group":    "📄 Paper",
+    "quality_group":  "⚙️ Quality",
+    "color_group":    "🎨 Color",
+    "layout_group":   "🖼️ Layout",
+    "fit_group":      "📐 Fit",
+    "margin_group":   "📏 Margins (mm)",
+    "rotation_group": "🔄 Rotation",
+    "copies_group":   "📑 Copies",
+
+    "paper_size_label":  "Paper size:",
+    "orientation_label": "Orientation:",
+    "portrait":          "Portrait",
+    "landscape":         "Landscape",
+
+    "color_output":     "Color",
+    "grayscale_output": "Grayscale (B&W)",
+
+    "spacing_label":     "Spacing:",
+    "spacing_tooltip":   "Gap between images when multiple per page (no effect for 1 per page)",
+    "spacing_info_one":  "※ No spacing for 1 image per page",
+    "spacing_info_multi":"※ Spacing applied between images",
+
+    "fit_original": "Original size",
+    "fit_page":     "Fit to page (keep ratio)",
+    "fit_fill":     "Fill page (crop)",
+
+    "preset_label":  "Preset:",
+    "margin_left":   "Left:",
+    "margin_top":    "Top:",
+    "margin_right":  "Right:",
+    "margin_bottom": "Bottom:",
+
+    "margin_preset": {
+      "custom":   "Custom",
+      "none":     "No Margin",
+      "narrow":   "Narrow (5mm)",
+      "normal":   "Normal (10mm)",
+      "wide":     "Wide (20mm)",
+      "document": "Document (H:15mm V:20mm)",
+      "photo":    "Photo (3mm)"
+    },
+
+    "rotation_label":    "Current rotation: {angle}°",
+    "rotate_left_btn":   "◀ Left\n(-90°)",
+    "rotate_reset_btn":  "⟲ Reset\n(0°)",
+    "rotate_right_btn":  "Right ▶\n(+90°)"
+  },
+
+  "print_quality": {
+    "high":     "High Quality (300 DPI)",
+    "standard": "Standard (150 DPI)",
+    "draft":    "Fast Print (72 DPI)"
+  },
+
+  "image_layout": {
+    "one_per_page":  "1 image per page",
+    "two_per_page":  "2 images per page (portrait)",
+    "four_per_page": "4 images per page"
+  },
+
+  "print_preview": {
+    "zoom_initial":  "Zoom: 100% (Ctrl+Wheel: zoom, drag: pan)",
+    "loading":       "Generating preview...",
+    "rendering":     "Rendering page {page}...",
+    "render_failed": "Preview generation failed\n{error}",
+    "zoom_fit":      "Zoom: {pct}% [Fit to screen] (Ctrl+Wheel: zoom, drag: pan)",
+    "zoom_free":     "Zoom: {pct}% (Fit: {fit}%) (Ctrl+Wheel: zoom, drag: pan)",
+    "no_preview":    "No preview",
+    "zoom_cleared":  "Zoom: 100% (Ctrl+Wheel to adjust)"
+  },
+
+  "about_dialog": {
+    "title":            "About {name}",
+    "intro_title":      "📱 About",
+    "intro_text":       "{name} is a simple and powerful image viewer.\n\nSupports various formats including RAW, JPG, WEBP, and more. View EXIF metadata and GPS information. Loads large images quickly and easily browse images in folders.",
+    "license_title":    "📜 License",
+    "license_text":     "This program includes various open-source licenses including Python, PySide6/Qt(LGPL), Pillow, OpenCV, and more.\nClick the 'Open Licenses Folder' button below for details.",
+    "usage_title":      "📖 Usage",
+    "usage_text":       "● Navigation\n  • Next: Right or Space\n  • Previous: Left or Backspace\n  • First: Home, Last: End\n\n● Zoom\n  • F: Fit to window, 1: Actual size (1:1), W: Fit to width\n  • Ctrl + Mouse Wheel: Zoom in/out\n\n● View Toggles\n  • F11: Fullscreen\n  • N: Folder explorer toggle\n  • I: Overlay toggle\n  • M: Metadata panel toggle\n  • T: Thumbnail bar toggle\n  • S: Status bar toggle\n  • F12: Performance overlay toggle\n\n● File Operations\n  • Ctrl+O: Open file\n  • Ctrl+Shift+O: Open folder\n  • F2: Rename\n  • Ctrl+X/C/V: Cut/Copy/Paste\n  • Delete: Delete\n  • Ctrl+Shift+E: Open file location\n  • Alt+Enter: Properties\n  • Ctrl+Shift+A: Copy file path\n  • Ctrl+Shift+I: Copy image to clipboard\n\n● Highlight\n  • H: Toggle highlight\n  • Ctrl+Shift+H: Clear all highlights\n  • Ctrl+Shift+Delete: Delete highlighted files\n  • Ctrl+Shift+C: Copy highlighted files\n  • Ctrl+Shift+X: Cut highlighted files\n\n● Rotate\n  • Ctrl+Shift+Left: Rotate left\n  • Ctrl+Shift+Right: Rotate right\n  • Ctrl+Shift+Up: Reset rotation\n  • Ctrl+Shift+Down: Apply rotation\n\n● Capture\n  • Ctrl+Alt+C: Capture screen to clipboard\n  • Ctrl+Alt+S: Capture screen to file\n\n● Print\n  • Ctrl+P: Print current image\n  • Ctrl+Alt+P: Print all images\n  • Ctrl+Shift+P: Print highlighted images\n\n● Misc\n  • Ctrl+G: GPS map\n  • Ctrl+,: Settings\n  • F1: About\n  • F4: System information\n  • F5: Refresh current image\n  • E: Enter edit mode",
+    "licenses_btn":     "📁 Open Licenses Folder",
+    "licenses_tooltip": "View LICENSE.txt, THIRD_PARTY_NOTICES.txt, etc.",
+    "close_btn":        "Close",
+    "no_folder_title":  "Folder Not Found",
+    "no_folder_msg":    "Licenses folder not found:\n{path}",
+    "open_error_title": "Error",
+    "open_error_msg":   "Cannot open folder."
+  },
+
+  "edit_toolbar": {
+    "placeholder": "── Select Shape ──",
+    "tool_select":  "⬚ Select",
+    "tool_shape":   "⬜ Shape",
+    "tool_text":    "T Text",
+    "crop":         "✂ Crop",
+    "copy":         "⎘ Copy",
+    "mosaic":       "⬛ Mosaic",
+    "size_label":   "Size:",
+    "resize_apply": "↔ Apply",
+    "shape_color_tooltip": "Shape color",
+    "thickness_label":     "Width:",
+    "shape_insert": "+ Shape Insert",
+    "text_color_tooltip":  "Text color",
+    "text_insert":  "+ Text Insert",
+    "hint":         "  ·  Del: Delete  ·  Ctrl+Z: Undo",
+    "apply":        "✔ Apply",
+    "cancel":       "✖ Cancel",
+    "color_dlg_shape": "Shape Color",
+    "color_dlg_line": "Line Color",    
+    "color_dlg_text":  "Text Color",
+    "shape": {
+      "None":           "─ Select Shape ─",
+      "rect":           "⬜ Rectangle",
+      "rect_filled":    "■ Filled Rect",
+      "ellipse":        "⬭ Ellipse",
+      "ellipse_filled": "● Filled Ellipse",
+      "line":           "— Line",
+      "arrow":          "→ Arrow",
+      "cross":          "✕ Cross",
+      "triangle":       "▲ Triangle",
+      "star":           "★ Star"
+    },
+
+    "line_style": {
+      "solid":    "━ Solid",
+      "dashed":   "╌ Dashed",
+      "dotted":   "┄ Dotted",
+      "dash_dot": "┅ Dash-dot"
+    }
+  },
+  
+  "metadata_labels": {
+    "filename":         "Filename",
+    "size":             "Size",
+    "modified":         "Modified",
+    "resolution":       "Resolution",
+    "format":           "Format",
+    "mode":             "Mode",
+    "color_profile":    "Color Profile",
+    "date_taken":       "Date Taken",
+    "make":             "Make",
+    "model":            "Model",
+    "iso":              "ISO",
+    "exposure_time":    "Exposure",
+    "f_stop":           "F-Stop",
+    "focal_length":     "Focal Length",
+    "flash":            "Flash",
+    "orientation":      "Orientation",
+    "lens_make":        "Lens Make",
+    "lens_model":       "Lens Model",
+    "software":         "Software",
+    "white_balance":    "White Balance",
+    "metering_mode":    "Metering Mode",
+    "exposure_program": "Exposure Program",
+    "error":            "Error",
+    "image_error":      "Image Error"
+  },
+
+  "metadata": {
+    "error_path":           "Path error",
+    "error_not_found":      "File not found",
+    "error_empty":          "Empty file (0 bytes)",
+    "error_access":         "Access denied",
+    "error_read":           "Read error: {error}",
+    "error_info_read":      "Failed to read file info",
+    "error_img_access":     "Access denied",
+    "error_img_not_found":  "File not found",
+    "error_img_corrupted":  "Corrupted or unsupported format",
+    "unknown":              "Unknown",
+    "unknown_with_val":     "Unknown ({value})",
+    "icc_profile":          "ICC Profile included",
+    "format_fail":          "Read failed",
+    "focal_35mm":           "35mm equiv.",
+    "flash_none":           "No flash",
+    "flash_fired":          "Flash fired",
+    "flash_fired_no_ret":   "Flash fired (no return detected)",
+    "flash_fired_ret":      "Flash fired (return detected)",
+    "flash_forced":         "Flash forced",
+    "flash_forced_no_ret":  "Flash forced (no return detected)",
+    "flash_forced_ret":     "Flash forced (return detected)",
+    "flash_suppressed":     "Flash suppressed",
+    "flash_auto":           "Flash auto",
+    "flash_auto_fired":     "Flash auto fired",
+    "orient_normal":            "Normal",
+    "orient_flip_h":            "Horizontally flipped",
+    "orient_rotate_180":        "Rotated 180°",
+    "orient_flip_v":            "Vertically flipped",
+    "orient_flip_h_rotate_90":  "H-flip + 90° CW",
+    "orient_rotate_90_cw":      "90° CW",
+    "orient_flip_h_rotate_270": "H-flip + 90° CCW",
+    "orient_rotate_90_ccw":     "90° CCW",
+    "wb_auto":              "Auto",
+    "wb_manual":            "Manual",
+    "metering_unknown":     "Unknown",
+    "metering_avg":         "Average",
+    "metering_center":      "Center-weighted",
+    "metering_spot":        "Spot",
+    "metering_multi":       "Multi-spot",
+    "metering_pattern":     "Pattern",
+    "metering_partial":     "Partial",
+    "prog_undefined":       "Undefined",
+    "prog_manual":          "Manual",
+    "prog_normal":          "Normal program",
+    "prog_aperture":        "Aperture priority",
+    "prog_shutter":         "Shutter priority",
+    "prog_creative":        "Creative program",
+    "prog_action":          "Action program",
+    "prog_portrait":        "Portrait mode",
+    "prog_landscape":       "Landscape mode"
+  },
+  
+  "metadata_panel": {
+    "section_file":           "📄 File Info",
+    "section_camera":         "📷 Camera Info",
+    "section_exif":           "⚙ EXIF",
+    "auto_load_map":          "Auto-load map",
+    "map_placeholder":        "Enable auto-load\nto display map",
+    "map_loading_zoom":       "🗺️ Loading map...\nZoom: {zoom}",
+    "map_progress_format":    "Loading map... %p%",
+    "tile_download_progress": "Downloading tiles {current}/{total} ({pct}%)",
+    "tile_loading":           "🗺️ Loading map...\nTiles: {current}/{total}",
+    "zoom_label":             "Zoom: {zoom}",
+    "zoom_in_tooltip":        "Zoom in",
+    "zoom_out_tooltip":       "Zoom out",
+    "reset_tooltip":          "Reset (zoom 15)",
+    "copy_feedback":          "✓ Copied!"
+  },
+  
+  "overlay": {
+    "map_loading":    "🗺️ Loading...",
+    "map_load_fail":  "❌ Map load failed\n{error}"
+  },
+
+  "system_info_dialog": {
+    "title":              "System Info",
+    "heading":            "🔍 {name} System Info",
+    "close_btn":          "Close",
+    "gpu_group":          "🎮 Rendering Status",
+    "gpu_active":         "✅ <b>GPU Acceleration Active</b><br>• OpenGL Version: {version}<br>• MSAA: {msaa}x<br>• V-Sync: {vsync}",
+    "vsync_on":           "Enabled",
+    "vsync_off":          "Disabled",
+    "gpu_unavailable":    "⚠️ <b>OpenGL Unavailable</b><br>• Check your GPU drivers<br>• Falling back to software rendering",
+    "gpu_software":       "💻 <b>Software Rendering</b><br>• GPU acceleration is disabled<br>• Higher compatibility but lower performance",
+    "rendering_tip":      "💡 Rendering settings can be changed in [Settings → Rendering].",
+    "opengl_unknown":     "Unknown",
+    "section_app":        "Application Info",
+    "app_name":           "Name: {name}",
+    "app_version":        "Version: {version}",
+    "section_system":     "System Info",
+    "sys_os":             "OS: {system} {release}",
+    "sys_version":        "Version: {version}",
+    "sys_arch":           "Architecture: {machine}",
+    "sys_processor":      "Processor: {processor}",
+    "section_memory":     "Memory Info",
+    "mem_total":          "Total: {value:.2f} GB",
+    "mem_available":      "Available: {value:.2f} GB",
+    "mem_usage":          "Usage: {value}%",
+    "mem_error":          "Failed to retrieve memory info: {error}",
+    "section_rendering":  "Rendering Info",
+    "render_opengl":      "GPU Acceleration (OpenGL): {status}",
+    "render_opengl_on":   "✅ Enabled",
+    "render_opengl_off":  "❌ Disabled",
+    "render_software":    "Rendering Mode: Software Rendering",
+    "section_cache":      "Cache Settings",
+    "cache_ahead":        "Prefetch: {count} images",
+    "cache_behind":       "Trail cache: {count} images",
+    "cache_max_mem":      "Max Memory: {value}MB",
+    "opengl_version":     "OpenGL Version: 3.3 Core Profile",
+    "opengl_vsync":       "V-Sync: {status}",
+    "opengl_msaa":        "MSAA: {value}x",
+    "opengl_gpu":         "GPU: {name}",
+    "opengl_error":       "Failed to retrieve OpenGL info: {error}"
+  },
+
+  "folder_explorer": {
+      "toolbar": {
+          "quick_access":       "📂 Shortcuts",
+          "favorites":          "⭐ Favorites",
+          "go_up":              "↑ Up",
+          "go_up_tooltip":      "Parent Folder",
+          "new_folder":         "+ Folder",
+          "new_folder_tooltip": "New Folder"
+      },
+      "quick": {
+          "computer":  "🖥  My Computer",
+          "desktop":   "🖥  Desktop",
+          "documents": "📄  Documents",
+          "pictures":  "🖼  Pictures",
+          "downloads": "⬇  Downloads"
+      },
+      "fav": {
+          "empty": "No favorites yet"
+      },
+      "menu": {
+          "open":             "📂  Open",
+          "open_in_explorer": "🗂  Open in Explorer",
+          "fav_remove":       "⭐  Remove from Favorites",
+          "fav_add":          "☆  Add to Favorites",
+          "new_folder":       "🗁  New Folder",
+          "rename":           "✏️  Rename",
+          "copy":             "📋  Copy",
+          "cut":              "✂️  Cut",
+          "copy_path":        "🔗  Copy Path",
+          "paste":            "📌  Paste",
+          "properties":       "ℹ️  Properties",
+          "delete":           "🗑️  Delete"
+      },
+      "dialog": {
+          "new_folder_title": "New Folder",
+          "new_folder_label": "Folder name:",
+          "error_title":      "Error",
+          "new_folder_fail":  "Failed to create folder:\n",
+          "rename_title":     "Rename",
+          "rename_label":     "New name:",
+          "rename_fail":      "Failed to rename:\n",
+          "delete_title":     "Delete Folder",
+          "delete_confirm":   "Delete folder '{name}'?\n\n",
+          "delete_warn":      "This action cannot be undone.",
+          "delete_fail":      "Failed to delete:\n",
+          "paste_title":      "Paste",
+          "paste_no_target":  "Please select a target folder.",
+          "paste_no_clip":    "No files in clipboard.",
+          "paste_fail":       "Paste failed:\n"
+      }
+  }  
+
+}

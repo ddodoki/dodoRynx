@@ -1,0 +1,35 @@
+========================================================================
+DISCLAIMER.txt
+========================================================================
+
+[ 한국어 ]
+
+dodoRynx는 교육/학습 목적의 무료 프로그램입니다.
+
+본 프로그램은 "있는 그대로(AS IS)" 제공되며,
+어떠한 명시적 또는 묵시적 보증도 제공하지 않습니다.
+
+사용에 따른 모든 책임은 사용자에게 있으며,
+파일 처리 전 반드시 중요한 데이터는 백업하시기 바랍니다.
+
+프로그램 사용으로 인해 발생하는 데이터 손실,
+파일 손상, 시스템 문제 등 직·간접적인 모든 피해에 대해
+저자는 책임을 지지 않습니다.
+
+------------------------------------------------------------------------
+
+[ English ]
+
+dodoRynx is provided for educational and learning purposes
+and is distributed free of charge.
+
+This software is provided "AS IS", without any express or implied warranty.
+
+Use at your own risk.
+Always back up important data before processing files.
+
+The author shall not be liable for any direct or indirect damages,
+including data loss, file corruption, or system issues
+arising from the use of this software.
+
+========================================================================

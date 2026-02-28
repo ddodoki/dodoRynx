@@ -1,0 +1,57 @@
+========================================================================
+LICENSE.txt
+========================================================================
+
+[ 한국어 안내문 ]
+
+저작권자:
+Copyright (c) 2026 blog.naver.com/ddodoki
+
+프로젝트:
+dodoRynx
+
+본 소프트웨어는 MIT 라이선스에 따라 배포됩니다.
+
+허용 사항:
+- 개인 및 상업적 사용
+- 수정
+- 재배포
+- 상업적 제품/서비스와의 번들 배포
+
+조건:
+1. 소스 재배포 시 저작권 표시 및 본 라이선스를 포함해야 합니다.
+2. 바이너리 배포 시 (예: PyInstaller onedir 배포)
+   LICENSE.txt를 포함해야 합니다.
+
+면책:
+본 소프트웨어는 어떠한 보증 없이 제공됩니다.
+사용으로 인해 발생하는 모든 문제에 대한 책임은 사용자에게 있습니다.
+
+※ 법적 효력 기준은 아래 영문 원문입니다.
+
+
+========================================================================
+MIT License
+========================================================================
+
+Copyright (c) 2026 blog.naver.com/ddodoki
+
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the "Software"),
+to deal in the Software without restriction, including without limitation
+the rights to use, copy, modify, merge, publish, distribute, sublicense,
+and/or sell copies of the Software, and to permit persons to whom the
+Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included
+in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+========================================================================
