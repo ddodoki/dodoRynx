@@ -667,6 +667,10 @@ class ImageViewer(EditModeMixin, QGraphicsView):
         
         # ===== 5. 기존 아이템 제거 (Scene에서만, 메모리는 나중에) =====
         old_item = self.pixmap_item
+        self.pixmap_item = None
+        self.pixmap_item = QGraphicsPixmapItem(pixmap)
+        self.graphics_scene.addItem(self.pixmap_item)
+
         if old_item:
             if isinstance(old_item, (AnimatedGraphicsItem, WebPAnimatedItem)):
                 old_item.cleanup()
@@ -1165,17 +1169,43 @@ class ImageViewer(EditModeMixin, QGraphicsView):
         self._transition_in_progress = False
         self._pending_image = None
         self._stop_timers_only()
+        
+        # ===== 기존 애니메이션 정리 =====
         if self.current_movie:
             self.current_movie.stop()
+            try:
+                self.current_movie.frameChanged.disconnect()
+            except (RuntimeError, TypeError):
+                pass
+            self.current_movie.deleteLater()
             self.current_movie = None
-        # graphics_scene.clear() 전에 WebPAnimatedItem 명시적 정리
-        if isinstance(self.pixmap_item, (AnimatedGraphicsItem, WebPAnimatedItem)):
-            self.pixmap_item.cleanup()
         
+        # ===== pixmap_item 명시적 정리 (핵심 수정) =====
+        if self.pixmap_item:
+            if isinstance(self.pixmap_item, (AnimatedGraphicsItem, WebPAnimatedItem)):
+                self.pixmap_item.cleanup()
+            
+            # C++ 객체가 살아있을 때만 제거
+            try:
+                self.graphics_scene.removeItem(self.pixmap_item)
+            except RuntimeError:
+                pass  # 이미 clear()나 다른 경로에서 삭제된 경우
+            
+            # Python 래퍼 참조 해제 (RuntimeError 방지)
+            self.pixmap_item = None
+        
+        # ===== Scene 클리어 (안전) =====
+        self.graphics_scene.clear()
+        
+        # ===== 상태 초기화 =====
         self.current_pixmap   = None
         self.current_gps      = None
         self.current_image_id = 0
-        self.graphics_scene.clear()
+        self.original_pixmap_size = (0, 0)
+        self.zoom_mode = 'fit'
+        self.zoom_factor = 1.0
+        
+        debug_print("✅ ImageViewer 완전 초기화 완료")
 
 
 # ============================================
