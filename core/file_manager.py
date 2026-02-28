@@ -746,15 +746,21 @@ class FileManager:
             self._file_worker.wait(3000)
 
 
+    # 현재 파일 전용
     def _get_target_files(self) -> list[Path]:
-        """작업 대상 파일 결정: 하이라이트 우선, 없으면 현재 파일."""
         mw = self._mw
-        highlighted = mw.navigator.get_highlighted_files()
-        if highlighted:
-            return highlighted
         if mw._current_file:
             return [mw._current_file]
         return []
+
+
+    # 하이라이트 배치 전용
+    def _get_highlighted_targets(self) -> list[Path]:
+        mw = self._mw
+        highlighted = mw.navigator.get_highlighted_files()
+        if not highlighted:
+            mw._show_status_message("하이라이트된 파일이 없습니다.", 1500)
+        return highlighted
 
 
     def copy_file(self) -> None:

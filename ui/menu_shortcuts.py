@@ -195,6 +195,23 @@ class MenuBuilder:
             clear_act.setShortcut(QKeySequence("Ctrl+Shift+H"))
             clear_act.triggered.connect(mw._clear_all_highlights)
 
+            hl_sub = _menu(t('menu.highlight.task', count=highlight_count), parent)
+
+            a = hl_sub.addAction(t('menu.highlight.delete'))
+            a.setShortcut(QKeySequence("Ctrl+Shift+Delete"))
+            a.triggered.connect(mw._delete_highlighted_files)
+
+            a = hl_sub.addAction(t('menu.highlight.copy'))
+            a.setShortcut(QKeySequence("Ctrl+Shift+C"))
+            a.triggered.connect(mw._copy_highlighted_files)
+
+            a = hl_sub.addAction(t('menu.highlight.cut'))
+            a.setShortcut(QKeySequence("Ctrl+Shift+X"))
+            a.triggered.connect(mw._cut_highlighted_files)
+
+            menu.addMenu(hl_sub)
+
+
     # ── 뷰 토글 ───────────────────────────────────────────────
 
     def _section_view(self, menu: QMenu, parent: Optional[QWidget]) -> None:

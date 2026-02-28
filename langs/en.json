@@ -90,7 +90,11 @@
     "highlight": {
       "gps_view":  "🗺️ View GPS Location",
       "toggle":    "⭐ Toggle Highlight",
-      "clear_all": "⭐ Clear All Highlights ({count})"
+      "clear_all": "❌ Clear All Highlights ({count})",
+      "task":      "📝 Highlight Task ({count})",      
+      "delete":    "🗑️ Delete Highlights",
+      "cut":       "✂️ Cut Highlights",
+      "copy":      "📋 Copy Highlights"      
     },
 
     "view": {

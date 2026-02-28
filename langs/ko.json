@@ -90,7 +90,11 @@
     "highlight": {
       "gps_view":  "🗺️ GPS 위치 보기",
       "toggle":    "⭐ 하이라이트 토글",
-      "clear_all": "⭐ 하이라이트 전체 해제 ({count}개)"
+      "clear_all": "❌ 하이라이트 전체 해제 ({count}개)",
+      "task":      "📝 하이라이트 작업 ({count}개)",      
+      "delete":    "🗑️ 하이라이트 파일 삭제",
+      "cut":       "✂️ 하이라이트 파일 잘라내기",
+      "copy":      "📋 하이라이트 파일 복사"     
     },
 
     "view": {
