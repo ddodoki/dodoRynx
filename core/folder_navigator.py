@@ -378,7 +378,8 @@ class FolderNavigator(QObject):
         """
         self.image_files = files
         self.current_index = current_index
-        self._highlighted.clear()
+        #self._highlighted.clear()
+        self.clear_highlights()
         
         if files:
             self.current_folder = files[0].parent
@@ -525,7 +526,7 @@ class FolderNavigator(QObject):
             self._temp_scan_prev_index = self.current_index
 
             if self.current_folder != folder:
-                self._highlighted.clear()
+                self.clear_highlights()  
                 self._temporary_highlights.clear()
                 self.current_folder = folder
                 self.folder_changed.emit(folder)
@@ -932,7 +933,7 @@ class FolderNavigator(QObject):
             self.highlights_cleared.emit() 
                 
 
-    # [신규 추가] 일괄 설정 API — Shift+클릭의 깜빡임 제거용 (TB-9와 공유)
+    # 일괄 설정 API — Shift+클릭의 깜빡임 제거용
     def set_highlights(self, file_paths: set) -> None:
         """
         하이라이트를 file_paths 집합으로 완전 교체 (일괄 처리).

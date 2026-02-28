@@ -987,30 +987,12 @@ class ThumbnailBar(QWidget):
             pass
 
 
-    # def sync_from_navigator(self) -> None:
-    #     if not self.main_window or not hasattr(self.main_window, 'navigator'):
-    #         return
-    #     nav = self.main_window.navigator
-    #     new_highlighted = set(nav.get_highlighted_files())
-    #     new_temp = set(nav.get_temporary_highlights())
-
-    #     # 변경된 파일만 계산
-    #     changed_hl  = new_highlighted.symmetric_difference(self.highlighted_files)
-    #     changed_tmp = new_temp.symmetric_difference(self.temp_highlighted_files)
-
-    #     self.highlighted_files = new_highlighted
-    #     self.temp_highlighted_files = new_temp
-
-    #     # 변경된 것만 UI 업데이트
-    #     for fp in changed_hl | changed_tmp:
-    #         try:
-    #             idx = self.image_list.index(fp)
-    #             if 0 <= idx < len(self.thumbnail_items):
-    #                 item = self.thumbnail_items[idx]
-    #                 item.set_highlighted(fp in new_highlighted)
-    #                 item.set_temp_highlighted(fp in new_temp)
-    #         except ValueError:
-    #             pass
+    @Slot()
+    def on_highlights_cleared(self) -> None:
+        """전체 해제 수신"""
+        self.highlighted_files.clear()
+        for item in self.thumbnail_items:
+            item.set_highlighted(False)
 
 
 # ============================================
@@ -1193,14 +1175,6 @@ class ThumbnailBar(QWidget):
         for i, path in enumerate(self.image_list):
             if i < len(self.thumbnail_items):
                 self.thumbnail_items[i].set_highlighted(path in highlighted)
-
-
-    @Slot()
-    def on_highlights_cleared(self) -> None:
-        """전체 해제 수신"""
-        self.highlighted_files.clear()
-        for item in self.thumbnail_items:
-            item.set_highlighted(False)
 
 
     @Slot(int, bool)
