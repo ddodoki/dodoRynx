@@ -670,7 +670,6 @@ class ImageViewer(EditModeMixin, QGraphicsView):
         # ===== 기존 아이템 참조 저장 =====
         old_item = self.pixmap_item
 
-        # ===== ✅ 새 아이템 단 1번만 생성 =====
         new_item = QGraphicsPixmapItem(pixmap)
         new_item.setTransformationMode(Qt.TransformationMode.SmoothTransformation)
         new_item.setCacheMode(QGraphicsItem.CacheMode.NoCache)
@@ -724,7 +723,6 @@ class ImageViewer(EditModeMixin, QGraphicsView):
             self.minimap.set_thumbnail(pixmap)
             self.minimap.hide()
         
-        # ===== ✅ 씬 내 아이템 수 검증 (디버그용, 배포 시 제거) =====
         item_count = len(self.graphics_scene.items())
         if item_count > 1:
             debug_print(f"[SET_IMAGE] ⚠️ 씬 아이템 수 이상: {item_count}개")
@@ -744,7 +742,6 @@ class ImageViewer(EditModeMixin, QGraphicsView):
             QTimer.singleShot(0, lambda: self.set_image(pending))
         else:
             QTimer.singleShot(50, lambda: self._unlock_resize(new_image_id))
-
 
 
     def set_rotation_preview(self, pixmap: QPixmap) -> None:

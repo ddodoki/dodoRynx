@@ -32,7 +32,7 @@ from PySide6.QtCore import (
     QTimer,
     Signal,
 )
-from PySide6.QtGui import QColor, QPainter, QPen
+from PySide6.QtGui import QColor, QPainter, QPen, QAction
 from PySide6.QtWidgets import (
     QGraphicsOpacityEffect,
     QHBoxLayout,
@@ -109,39 +109,76 @@ class SortMenuButton(QPushButton):
         QPushButton:pressed { background: #555; }
     """
 
+    # 활성 항목: 텍스트 파란색 + 볼드, 체크 인디케이터 자체 아이콘 제거
+    _MENU_STYLE = """
+        QMenu {
+            min-width: 180px;
+            font-size: 12px;
+            padding: 4px 0;
+        }
+        QMenu::item {
+            padding: 6px 20px 6px 28px;
+        }
+        QMenu::item:selected {
+            background: #4a9eff;
+            color: #fff;
+        }
+        QMenu::item:checked {
+            color: #4a9eff;
+            font-weight: bold;
+        }
+        QMenu::indicator {
+            width: 0px;
+        }
+        QMenu::separator {
+            height: 1px;
+            background: #444;
+            margin: 3px 8px;
+        }
+    """
+
+    # 버튼 텍스트용 약식 레이블
+    _SHORT_LABELS: dict[tuple[str, bool], str] = {
+        ("highlight",    False): "★",
+        ("name",         False): "⇅",   # 기본값 — 원래 아이콘 유지
+        ("name",         True):  "Az↓",
+        ("created",      True):  "C↓",
+        ("created",      False): "C↑",
+        ("modified",     True):  "M↓",
+        ("modified",     False): "M↑",
+        ("size",         True):  "S↓",
+        ("size",         False): "S↑",
+        ("exif_date",    True):  "E↓",
+        ("exif_date",    False): "E↑",
+        ("camera_model", False): "📷",
+    }
+
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__("⇅", parent)
         self.setToolTip(t('statusbar.sort_btn_tooltip'))
         self.setStyleSheet(self._STYLE)
         self.setFixedWidth(34)
+
+        # (sort_type, reverse) → QAction 참조 보관
+        self._action_map: dict[tuple[str, bool], QAction] = {}
+
         self._menu = self._build_menu()
         self.clicked.connect(self._show_menu)
 
     def _build_menu(self) -> QMenu:
+        from PySide6.QtGui import QAction  # 지역 임포트 (순환 방지)
         m = QMenu(self)
-        m.setStyleSheet("""
-            QMenu {
-                min-width: 180px;
-                font-size: 12px;
-                padding: 4px 0;
-            }
-            QMenu::item {
-                padding: 6px 20px 6px 12px;
-            }
-            QMenu::item:selected {
-                background: #4a9eff;
-                color: #fff;
-            }
-            QMenu::separator {
-                height: 1px;
-                background: #444;
-                margin: 3px 8px;
-            }
-        """)
+        m.setStyleSheet(self._MENU_STYLE)
 
-        _add = lambda label, key, rev: m.addAction(label).triggered.connect(
-            lambda: self.sort_requested.emit(key, rev)
-        )
+        def _add(label: str, key: str, rev: bool) -> None:
+            action: QAction = m.addAction(label)
+            action.setCheckable(True)
+
+            action.triggered.connect(
+                lambda checked=False, k=key, r=rev: self.sort_requested.emit(k, r)
+            )
+            self._action_map[(key, rev)] = action
+
         _add(t('statusbar.sort_menu.highlight'),    "highlight",    False); m.addSeparator()
         _add(t('statusbar.sort_menu.name_asc'),     "name",         False)
         _add(t('statusbar.sort_menu.name_desc'),    "name",         True);  m.addSeparator()
@@ -154,11 +191,31 @@ class SortMenuButton(QPushButton):
         _add(t('statusbar.sort_menu.exif_new'),     "exif_date",    True)
         _add(t('statusbar.sort_menu.exif_old'),     "exif_date",    False)
         _add(t('statusbar.sort_menu.camera'),       "camera_model", False)
+
+        self._apply_check("name", False)
+
         return m
 
+    def _apply_check(self, sort_type: str, reverse: bool) -> None:
+        """기존 체크 전부 해제 → 해당 항목만 체크."""
+        for action in self._action_map.values():
+            action.setChecked(False)
+        target = self._action_map.get((sort_type, reverse))
+        if target:
+            target.setChecked(True)
+
+    def update_active_sort(self, sort_type: str, reverse: bool) -> None:
+        """
+        외부 호출용 — 현재 적용된 정렬 옵션을 메뉴와 버튼 텍스트에 반영.
+        정렬 완료 시, 폴더 변경(리셋) 시 호출.
+        """
+        self._apply_check(sort_type, reverse)
+        label = self._SHORT_LABELS.get((sort_type, reverse), "⇅")
+        self.setText(label)
+
     def _show_menu(self) -> None:
-        pos  = self.mapToGlobal(QPoint(0, 0))
-        mh   = self._menu.sizeHint().height()
+        pos = self.mapToGlobal(QPoint(0, 0))
+        mh  = self._menu.sizeHint().height()
         self._menu.exec(QPoint(pos.x(), pos.y() - mh))
 
 
@@ -821,8 +878,8 @@ class AppStatusBar:
         self._parent = parent
         self._build()
 
-        self.op_label    = QLabel()   # 파일 작업 텍스트 (현재 StatusProgressWidget으로 대체됨)
-        self.thumb_label = QLabel()   # 썸네일 카운트 (현재 StatusProgressWidget으로 대체됨)
+        self.op_label    = QLabel() 
+        self.thumb_label = QLabel()
         self.op_label.hide()
         self.thumb_label.hide()
 
@@ -1019,10 +1076,6 @@ class StatusBarController:
 
     def connect_signals(self) -> None:
         mw, sb = self._mw, self._sb
-
-        #sb.zoom_label.clicked.connect(lambda: mw.image_viewer.set_zoom_mode("actual"))
-        #sb.fit_btn.clicked.connect(lambda: mw.image_viewer.set_zoom_mode("fit"))
-        
         sb.zoom_btn.zoom_action_requested.connect(self._on_zoom_action)
 
         sb.open_file_btn.clicked.connect(mw._open_file_dialog)
@@ -1033,11 +1086,20 @@ class StatusBarController:
         sb.rotate_apply_btn.clicked.connect(mw._on_rotate_apply)
         sb.edit_mode_btn.clicked.connect(mw.enter_edit_mode)
 
+        # 폴더 변경 시 정렬 버튼 기본값으로 리셋
+        mw.navigator.folder_changed.connect(self._on_folder_changed)
+
         # 오버레이 스케일 초기값 적용
         saved_scale = mw.config.get_overlay_scale()
         mw.overlay_widget.set_scale(saved_scale / 100.0)
 
         debug_print("StatusBarController: 시그널 연결 완료")
+
+
+    def _on_folder_changed(self, folder) -> None:
+        """폴더 변경 → 정렬 표시 기본값(이름순)으로 리셋."""
+        self._sb.sort_btn.update_active_sort("name", False)
+
 
     def _on_zoom_action(self, action: str) -> None:
         """배율 메뉴 선택 처리."""
@@ -1095,13 +1157,12 @@ class StatusBarController:
         """정렬 버튼 클릭 → 비동기 정렬 시작"""
         if not self._mw.navigator.image_files:
             return
-        
-        sort_order = SortOrder(sort_type)
-        sort_name = t(f'statusbar.sort_name.{sort_type}') or sort_type
-        direction = t('statusbar.sort_desc') if reverse else t('statusbar.sort_asc')
-        label     = f"{sort_name} {direction}"
 
-        # 진행 표시 시작 (Pulse 모드)
+        sort_order = SortOrder(sort_type)
+        sort_name  = t(f'statusbar.sort_name.{sort_type}') or sort_type
+        direction  = t('statusbar.sort_desc') if reverse else t('statusbar.sort_asc')
+        label      = f"{sort_name} {direction}"
+
         self.progress_widget.task_start(
             TaskPriority.SORT,
             t('statusbar.sort_progress', label=label),
@@ -1111,17 +1172,12 @@ class StatusBarController:
         mw = self._mw
 
         def on_sort_done() -> None:
-            """정렬 완료 — 메인 스레드에서 호출됨 (Signal 경유)"""
             try:
                 image_list    = mw.navigator.get_image_list()
                 current_index = mw.navigator.current_index
 
-                # 캐시 목록 갱신 (인덱스 재매핑)
                 mw.cache_manager.set_image_list(image_list)
-
-                # set_image_list 대신 reorder_for_sort 사용 (버그 5 수정)
                 mw.thumbnail_bar.reorder_for_sort(image_list, current_index)
-
                 mw._load_current_image()
                 mw._sync_highlight_state(force_full_sync=True)
 
@@ -1131,15 +1187,17 @@ class StatusBarController:
                     finish_text=t('statusbar.sort_done', label=label),
                     toast_text=t('statusbar.sort_done', label=label),
                 )
+                # 정렬 완료 후 버튼 활성 표시 갱신
+                self._sb.sort_btn.update_active_sort(sort_type, reverse)
+
             except Exception as e:
                 error_print(f"on_sort_done 오류: {e}")
                 self.progress_widget.task_finish(
                     TaskPriority.SORT,
                     finish_text=t('statusbar.sort_error'),
-                     toast_text=t('statusbar.sort_error'),
+                    toast_text=t('statusbar.sort_error'),
                 )
 
-        # 비동기 정렬 시작 (메인 스레드 블로킹 없음)
         mw.navigator.sort_files_async(sort_order, reverse, on_completed=on_sort_done)
 
 
