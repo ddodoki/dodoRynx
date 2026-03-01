@@ -379,7 +379,6 @@ class _FolderTree(QTreeView):
     def __init__(self, empty_set: set, parent=None) -> None:
         super().__init__(parent)
         self._empty_set = empty_set
-        self._pending_navigate: Optional[Path] = None
         self._fe_pending_scroll = None
         
         self._scroll_timer = QTimer(self)  
@@ -456,57 +455,76 @@ class _FolderTree(QTreeView):
 
 
     def navigate_to(self, path: Path) -> None:
-        """지정 경로를 선택하고 화면 중앙으로 스크롤."""
         self._fe_pending_scroll = path
-        self._scroll_retry = 0   
-        src_idx = self._fs_model.index(str(path))
+        self._scroll_retry = 0
 
+        src_idx = self._fs_model.index(str(path))
         if src_idx.isValid():
-            # 이미 로드된 경우: 즉시 선택하고 타이머로 스크롤 예약
             proxy_idx = self._proxy.mapFromSource(src_idx)
             if proxy_idx.isValid():
                 self.expand(proxy_idx)
                 self.setCurrentIndex(proxy_idx)
         else:
-            # 미로드: 부모를 expand 해서 로드 트리거
-            parent = path.parent
-            parent_src = self._fs_model.index(str(parent))
-            if parent_src.isValid():
-                parent_proxy = self._proxy.mapFromSource(parent_src)
-                if parent_proxy.isValid():
-                    self.expand(parent_proxy)
+            # directoryLoaded 연결 (중복 방지)
             try:
                 self._fs_model.directoryLoaded.disconnect(self._on_directory_loaded)
             except (RuntimeError, TypeError):
                 pass
             self._fs_model.directoryLoaded.connect(self._on_directory_loaded)
 
+            self._expand_path_chain(path)
+
         self._scroll_timer.start()
 
 
+    def _expand_path_chain(self, target: Path) -> None:
+        """루트 → target 방향으로 알려진 조상까지 순서대로 expand."""
+        current = Path(target.parts[0])  # C:\ 또는 /
+        for part in target.parts[1:]:
+            src_idx = self._fs_model.index(str(current))
+            if not src_idx.isValid():
+                break  # 이 레벨부터 미로드 — directoryLoaded가 이어받음
+            proxy_idx = self._proxy.mapFromSource(src_idx)
+            if proxy_idx.isValid():
+                self.expand(proxy_idx)  # expand → Qt 내부에서 directoryLoaded 트리거
+            current = current / part
+            
+
     def _on_directory_loaded(self, loaded_dir: str) -> None:
-        """directoryLoaded: 대기 경로의 부모가 로드되면 인덱스 재시도."""
+        """directoryLoaded: 로드된 경로가 target의 조상이면 다음 레벨 cascade."""
         if self._fe_pending_scroll is None:
             return
+
         target = self._fe_pending_scroll
         loaded = Path(loaded_dir)
-        if loaded != target.parent and loaded != target:
-            return
+
+        # loaded 가 target의 조상인지 확인
+        try:
+            rel = target.relative_to(loaded)
+        except ValueError:
+            return  # 관계없는 디렉터리 — 무시
 
         src_idx = self._fs_model.index(str(target))
-        if not src_idx.isValid():
+        if src_idx.isValid():
+            try:
+                self._fs_model.directoryLoaded.disconnect(self._on_directory_loaded)
+            except RuntimeError:
+                pass
+            proxy_idx = self._proxy.mapFromSource(src_idx)
+            if proxy_idx.isValid():
+                self.expand(proxy_idx)
+                self.setCurrentIndex(proxy_idx)
+            self._scroll_timer.start()
             return
 
-        try:
-            self._fs_model.directoryLoaded.disconnect(self._on_directory_loaded)
-        except RuntimeError:
-            pass
-
-        proxy_idx = self._proxy.mapFromSource(src_idx)
-        if proxy_idx.isValid():
-            self.expand(proxy_idx)
-            self.setCurrentIndex(proxy_idx)
-
+        if rel.parts:
+            next_path = loaded / rel.parts[0]
+            next_src  = self._fs_model.index(str(next_path))
+            if next_src.isValid():
+                next_proxy = self._proxy.mapFromSource(next_src)
+                if next_proxy.isValid():
+                    self.expand(next_proxy)  # → 다음 directoryLoaded 트리거
+                    
 
     def _do_scroll(self) -> None:
         if self._fe_pending_scroll is None:
@@ -569,7 +587,7 @@ class _FolderTree(QTreeView):
         """내 컴퓨터 — 모든 펼침 닫기 → 드라이브 목록만 표시."""
         self._fe_pending_scroll = None
         self._scroll_timer.stop()
-        self.collapseAll()              # ★ 모든 펼침 닫기
+        self.collapseAll()
         self.clearSelection()
         self.setCurrentIndex(QModelIndex())
         self.scrollToTop()
@@ -636,7 +654,6 @@ class _FavTree(QTreeView):
         self.header().setSectionResizeMode(
             0, self.header().ResizeMode.ResizeToContents
         )
-        self.setRootIsDecorated(False)
 
 
     def drawBranches(self, painter, rect, index) -> None:
@@ -1034,7 +1051,7 @@ class FolderExplorer(QWidget):
             return
         key = action.data()
 
-        # ★ 내 컴퓨터 — 경로 없이 루트(드라이브 목록)로 이동
+        # 내 컴퓨터 — 경로 없이 루트(드라이브 목록)로 이동
         if key == "computer":
             self._normal_tree.navigate_to_root()
             return  # folder_selected 시그널 발생 없음 (선택된 폴더 없으므로)
@@ -1048,7 +1065,7 @@ class FolderExplorer(QWidget):
     @staticmethod
     def _resolve_quick_path(key: str) -> Optional[Path]:
         if key == "computer":
-            return None  # ★ navigate_to_root() 로 처리 — 여기선 None
+            return None  # navigate_to_root() 로 처리 — 여기선 None
 
         home = Path.home()
         mapping = {

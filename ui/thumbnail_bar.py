@@ -460,7 +460,6 @@ class ThumbnailBar(QWidget):
         self.thumbnail_items: List[ThumbnailItem] = []
         self.highlighted_files: set = set()
         self.temp_highlighted_files: set = set()
-        #self.main_window = None
         self.last_clicked_index = -1
 
         self.thread_pool = QThreadPool()
@@ -478,8 +477,6 @@ class ThumbnailBar(QWidget):
         self._scroll_timer = QTimer(self)
         self._scroll_timer.setSingleShot(True)
         self._pending_scroll_index: Optional[int] = None
-        #self._is_scrolling = False
-        #self._pending_scroll_index: Optional[int] = None
 
         # Optional 제거 — 항상 초기화됨, Pylance Optional 오류 해소
         self._thumb_cache: HybridCache = HybridCache(
@@ -490,10 +487,6 @@ class ThumbnailBar(QWidget):
         )
 
         self._init_ui()   # _thumb_cache 초기화 후 호출 (순서 보장)
-
-    # def set_main_window(self, main_window) -> None:
-    #     """메인 윈도우 참조 설정"""
-    #     self.main_window = main_window
 
 
     def _init_ui(self) -> None:
@@ -730,40 +723,6 @@ class ThumbnailBar(QWidget):
         load_chunk(0)
 
 
-    # def _scroll_to_current(self, index: int) -> None:
-    #     """현재 인덱스로 스크롤 (중앙 배치)"""
-    #     if not (0 <= index < len(self.thumbnail_items)):
-    #         return
-        
-    #     # ===== 중복 실행 방지 (디바운싱) =====
-    #     if self._is_scrolling and self._pending_scroll_index == index:
-    #         debug_print(f"스크롤 이미 실행됨 (idx={index}) - 중복 실행 방지")
-    #         return
-        
-    #     item = self.thumbnail_items[index]
-    #     scrollbar = self.scroll_area.horizontalScrollBar()
-        
-    #     # 아이템 위치 계산
-    #     item_x = item.x()
-    #     item_width = item.width()
-    #     viewport_width = self.scroll_area.viewport().width()
-        
-    #     # 중앙에 배치
-    #     target_scroll = item_x - (viewport_width // 2) + (item_width // 2)
-    #     target_scroll = max(0, min(target_scroll, scrollbar.maximum()))
-        
-    #     # ===== 스크롤바 값이 이미 같으면 스킵 =====
-    #     current_scroll = scrollbar.value()
-    #     if abs(current_scroll - target_scroll) < 5:  # 5픽셀 이내면 무시
-    #         debug_print(f"스크롤 위치 거의 동일 (diff={abs(current_scroll - target_scroll)}px) - 스킵")
-    #         return
-        
-    #     # 스크롤 실행
-    #     scrollbar.setValue(target_scroll)
-        
-    #     debug_print(f"썸네일 스크롤: idx={index}, x={item_x}, scroll={target_scroll}")
-
-
     def add_thumbnail(self, file_path: Path, insert_index: int) -> None:
         # generation_id는 건드리지 않음 (set_image_list 전용)
         current_gen = self._generation_id   # ← 현재 세대 그대로 사용
@@ -785,7 +744,6 @@ class ThumbnailBar(QWidget):
         # Bug B 수정: done은 건드리지 않고 total만 증가
         self._thumb_total  += 1
         self._thumb_active  = True
-        #self.thumbnail_load_started.emit(1)
         self.thumbnail_load_progress.emit(self._thumb_done, self._thumb_total)
 
         self._load_thumbnail_async(insert_index, file_path, current_gen)
@@ -1036,14 +994,6 @@ class ThumbnailBar(QWidget):
     # ============================================
 
     def _request_scroll(self, index: int) -> None:
-        """
-        스크롤 요청 진입점 (디바운싱 포함).
-
-        정리 내용:
-        - import warnings 파일 상단으로 이동 (매 호출마다 import 제거)
-        - _scroll_to_current() / _scroll_to_index() 통합 삭제
-        - 동일 인덱스 중복 요청 시 early return
-        """
         # 동일 인덱스 재요청 방지
         if self._pending_scroll_index == index and self._scroll_timer.isActive():
             return
@@ -1051,49 +1001,46 @@ class ThumbnailBar(QWidget):
         self._scroll_timer.stop()
         try:
             self._scroll_timer.timeout.disconnect()
-        except RuntimeError:
-            pass  # 기존 연결 없음 — 정상
+        except Exception:
+            pass  # ★ RuntimeError → Exception (disconnect 실패 시 connect 누적 방지)
 
         self._pending_scroll_index = index
         self._scroll_timer.timeout.connect(lambda: self._do_scroll(index))
         self._scroll_timer.start(16)
-
+        
 
     def _do_scroll(self, index: int, retry: int = 0) -> None:
-        """
-        실제 스크롤 실행 (레이아웃 미완성 시 최대 10회 재시도).
-
-        정리 내용:
-        - 무한 루프 방지: retry >= MAX_RETRY 시 추정 위치로 강제 이동
-        - 재시도 시 _scroll_timer 재사용 대신 단순 singleShot 사용
-            (타이머 disconnect/reconnect 반복으로 인한 시그널 누적 제거)
-        """
-        MAX_RETRY = 10
+        MAX_RETRY = 15   # 기존 10 → 15 (max 확정까지 여유 확보)
 
         if not (0 <= index < len(self.thumbnail_items)):
             self._pending_scroll_index = None
             return
 
-        item = self.thumbnail_items[index]
-        item_x = item.x()
-        item_w = item.width()
-        vp_width = self.scroll_area.viewport().width()
+        item      = self.thumbnail_items[index]
+        item_x    = item.x()
+        item_w    = item.width()
+        vp_width  = self.scroll_area.viewport().width()
         scrollbar = self.scroll_area.horizontalScrollBar()
 
-        # 레이아웃 미완성 감지 (index > 0인데 x == 0)
-        if item_x == 0 and index > 0:
+        # 레이아웃 미완성 판정:
+        #   조건 1) index > 0 인데 item.x() == 0  → 위젯 위치 미계산
+        #   조건 2) scrollbar.maximum() == 0       → QScrollArea 크기 미확정 ← 기존 누락
+        layout_not_ready = (item_x == 0 and index > 0) or \
+                        (scrollbar.maximum() == 0 and index > 0)
+
+        if layout_not_ready:
             if retry >= MAX_RETRY:
-                # 강제 추정: 아이템 너비 기반 위치 계산
+                # 추정 위치로 강제 이동
                 estimated_x = index * (item_w if item_w > 0 else self.THUMBNAIL_SIZE + 15)
                 target = max(0, estimated_x - vp_width // 2)
                 scrollbar.setValue(min(target, scrollbar.maximum()))
                 self._pending_scroll_index = None
-                debug_print(f"_do_scroll: 레이아웃 타임아웃 → 추정 위치 강제 스크롤 (idx={index})")
+                debug_print(f"_do_scroll: 타임아웃 → 추정 강제 스크롤 (idx={index})")
                 return
-            # 단순 singleShot — 타이머 재조작 없음
             QTimer.singleShot(50, lambda: self._do_scroll(index, retry + 1))
             return
 
+        # ── 정상 스크롤 ──────────────────────────────────────────
         target = max(0, min(
             item_x - vp_width // 2 + item_w // 2,
             scrollbar.maximum()
@@ -1101,7 +1048,8 @@ class ThumbnailBar(QWidget):
         if abs(scrollbar.value() - target) >= 2:
             scrollbar.setValue(target)
 
-        self._pending_scroll_index = None  # 완료 후 초기화
+        self._pending_scroll_index = None
+        debug_print(f"_do_scroll: idx={index}, x={item_x}, target={target}, max={scrollbar.maximum()}")
 
 
     def _ensure_layout_and_scroll(self, target_index: int, retry_count: int = 0) -> None:
@@ -1322,15 +1270,18 @@ class ThumbnailBar(QWidget):
         """메모리 캐시만 삭제 (설정 다이얼로그 버튼용)"""
         self._thumb_cache.clear_memory()
 
+
     def update_cache_limits(self, memory_mb: int, disk_mb: int) -> None:
         """캐시 한도 런타임 갱신 (설정 변경 시)"""
         self._thumb_cache.max_memory_bytes = memory_mb * 1024 * 1024
         self._thumb_cache.max_disk_bytes   = disk_mb   * 1024 * 1024
         debug_print(f"썸네일 캐시 한도 갱신: {memory_mb}MB / {disk_mb}MB")
 
+
     def get_cache_stats(self) -> dict:
         """캐시 통계 반환 (설정 화면 표시용)"""
         return self._thumb_cache.stats()
+
 
     def clear_disk_cache(self) -> None:
         """캐시 전체 삭제 (설정 화면 버튼용)"""
