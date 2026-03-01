@@ -27,7 +27,7 @@ from PySide6.QtGui import (
     QPainter,
     QPalette,
     QStandardItem,
-    QStandardItemModel,
+    QStandardItemModel, 
 )
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -43,7 +43,8 @@ from PySide6.QtWidgets import (
     QToolButton,
     QTreeView,
     QVBoxLayout,
-    QWidget,
+    QWidget, 
+    QStyle
 )
 
 from utils.lang_manager import t
@@ -84,24 +85,45 @@ def _norm_path(p: Path | str) -> str:
     return s
 
 
+# ─────────────────────────────────────────────────────────────
+# 디자인 토큰 (상태바와 공유)
+# ─────────────────────────────────────────────────────────────
+_C_BG_BASE      = "#1e1e1e"           # 트리 배경
+_C_BG_TOOLBAR   = "#252525"           # 툴바/상태바 배경
+_C_BORDER       = "rgba(255,255,255,0.08)"   # 기본 테두리
+_C_BTN_BG       = "rgba(255,255,255,0.05)"   # 버튼 기본 배경
+_C_BTN_BORDER   = "rgba(255,255,255,0.10)"   # 버튼 기본 테두리
+_C_ACCENT       = "rgba(74,158,255,0.20)"    # 선택/호버 배경
+_C_ACCENT_FULL  = "rgba(74,158,255,0.60)"    # 호버 테두리
+_C_ACCENT_PRESS = "rgba(74,158,255,0.32)"    # 프레스 배경
+_C_SEP          = "rgba(255,255,255,0.07)"   # 구분선
+
+
 _TOOLBAR_STYLE = """
     QWidget#fe_toolbar {
         background: #252525;
-        border-bottom: 1px solid #3a3a3a;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     }
     QToolButton {
-        background: #2e2e2e;
+        background: rgba(255, 255, 255, 0.05);
         color: #cccccc;
-        border: 1px solid #484848;
-        border-radius: 3px;
-        padding: 3px 6px;
-        font-size: 11px;
-        min-height: 22px;
+        border: 1px solid rgba(255, 255, 255, 0.10);
+        border-radius: 4px;
+        padding: 0px 6px;
+        font-size: 13px;
     }
-    QToolButton:hover  { background: #3a3a3a; border-color: #5a5a5a; }
-    QToolButton:pressed { background: #444; }
+    QToolButton:hover {
+        background: rgba(74, 158, 255, 0.18);
+        border-color: rgba(74, 158, 255, 0.60);
+        color: #ffffff;
+    }
+    QToolButton:pressed {
+        background: rgba(74, 158, 255, 0.32);
+        border-color: rgba(74, 158, 255, 0.80);
+    }
     QToolButton::menu-indicator { image: none; }
 """
+
 
 _TREE_STYLE = """
     QTreeView {
@@ -110,92 +132,135 @@ _TREE_STYLE = """
         border: none;
         font-size: 11px;
         show-decoration-selected: 1;
+        outline: none;
     }
     QTreeView::item {
         padding: 2px 2px;
-        min-height: 20px;
+        min-height: 22px;
     }
     QTreeView::item:selected {
-        background: #2d5a8e;
+        background: rgba(74, 158, 255, 0.22);
+        color: #ffffff;
+    }
+    QTreeView::item:selected:active {
+        background: rgba(74, 158, 255, 0.28);
         color: #ffffff;
     }
     QTreeView::item:hover:!selected {
-        background: #2a2a2a;
+        background: rgba(255, 255, 255, 0.05);
     }
+
     QTreeView::branch {
         background: #1e1e1e;
+        border-image: none;
+        image: none;
     }
-    QTreeView::branch:selected { background: #2d5a8e; }
-    QTreeView::branch:hover:!selected { background: #2a2a2a; }
+    QTreeView::branch:selected {
+        background: rgba(74, 158, 255, 0.22);
+    }
+    QTreeView::branch:hover:!selected {
+        background: rgba(255, 255, 255, 0.05);
+    }
+
+    QTreeView::branch:has-siblings:!adjoins-item {
+        border-image: none; image: none;
+        background: #1e1e1e;
+    }
+    QTreeView::branch:has-siblings:adjoins-item {
+        border-image: none; image: none;
+        background: #1e1e1e;
+    }
+    QTreeView::branch:!has-children:!has-siblings:adjoins-item {
+        border-image: none; image: none;
+        background: #1e1e1e;
+    }
     QTreeView::branch:has-children:!has-siblings:closed,
     QTreeView::branch:closed:has-children:has-siblings {
-        image: url(none); border-image: none;
+        border-image: none; image: none;
     }
     QTreeView::branch:open:has-children:!has-siblings,
     QTreeView::branch:open:has-children:has-siblings {
-        image: url(none); border-image: none;
+        border-image: none; image: none;
     }
 
-    /* ── 세로 스크롤바 ── */
+    /* ── 스크롤바 (이하 동일) ── */
     QScrollBar:vertical {
-        width: 8px;
-        background: rgba(30, 30, 30, 80);
-        border-radius: 4px;
-        margin: 2px 0px;
+        width: 6px; background: transparent;
+        border-radius: 3px; margin: 2px 0px;
     }
     QScrollBar::handle:vertical {
-        background: rgba(100, 100, 100, 100);
-        border-radius: 4px;
-        min-height: 30px;
+        background: rgba(255,255,255,0.15);
+        border-radius: 3px; min-height: 30px;
     }
-    QScrollBar::handle:vertical:hover  { background: rgba(120, 120, 120, 160); }
-    QScrollBar::handle:vertical:pressed { background: rgba(140, 140, 140, 200); }
-    QScrollBar::add-line:vertical,
-    QScrollBar::sub-line:vertical { height: 0px; border: none; background: none; }
-    QScrollBar::add-page:vertical,
-    QScrollBar::sub-page:vertical { background: none; }
+    QScrollBar::handle:vertical:hover   { background: rgba(255,255,255,0.25); }
+    QScrollBar::handle:vertical:pressed { background: rgba(74,158,255,0.60); }
+    QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical
+        { height: 0px; border: none; background: none; }
+    QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical
+        { background: none; }
 
-    /* ── 가로 스크롤바 ── */
     QScrollBar:horizontal {
-        height: 8px;
-        background: rgba(30, 30, 30, 80);
-        border-radius: 4px;
-        margin: 0px 2px;
+        height: 6px; background: transparent;
+        border-radius: 3px; margin: 0px 2px;
     }
     QScrollBar::handle:horizontal {
-        background: rgba(100, 100, 100, 100);
-        border-radius: 4px;
-        min-width: 30px;
+        background: rgba(255,255,255,0.15);
+        border-radius: 3px; min-width: 30px;
     }
-    QScrollBar::handle:horizontal:hover  { background: rgba(120, 120, 120, 160); }
-    QScrollBar::handle:horizontal:pressed { background: rgba(140, 140, 140, 200); }
-    QScrollBar::add-line:horizontal,
-    QScrollBar::sub-line:horizontal { width: 0px; border: none; background: none; }
-    QScrollBar::add-page:horizontal,
-    QScrollBar::sub-page:horizontal { background: none; }
+    QScrollBar::handle:horizontal:hover   { background: rgba(255,255,255,0.25); }
+    QScrollBar::handle:horizontal:pressed { background: rgba(74,158,255,0.60); }
+    QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal
+        { width: 0px; border: none; background: none; }
+    QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal
+        { background: none; }
 """
+
 
 _MENU_STYLE = """
     QMenu {
-        background: #2a2a2a;
+        background-color: #1e1e1e;
         color: #cccccc;
-        border: 1px solid #484848;
+        border: 1px solid rgba(255, 255, 255, 0.10);
+        border-radius: 6px;
+        padding: 4px 0;
         font-size: 11px;
     }
-    QMenu::item { padding: 5px 22px; }
-    QMenu::item:selected { background: #2d5a8e; color: #fff; }
-    QMenu::separator { height: 1px; background: #3a3a3a; margin: 3px 0; }
+    QMenu::item {
+        padding: 6px 22px 6px 14px;
+        background-color: transparent;
+    }
+    QMenu::item:selected {
+        background: rgba(74, 158, 255, 0.22);
+        color: #ffffff;
+        border-radius: 3px;
+    }
+    QMenu::item:disabled { color: rgba(255,255,255,0.25); }
+    QMenu::separator {
+        height: 1px;
+        background: rgba(255, 255, 255, 0.07);
+        margin: 3px 8px;
+    }
 """
+
 
 _QUICK_MENU_STYLE = """
     QMenu {
-        background: #2a2a2a;
+        background-color: #1e1e1e;
         color: #cccccc;
-        border: 1px solid #484848;
+        border: 1px solid rgba(255, 255, 255, 0.10);
+        border-radius: 6px;
+        padding: 4px 0;
         font-size: 11px;
     }
-    QMenu::item { padding: 5px 16px; }
-    QMenu::item:selected { background: #2d5a8e; color: #fff; }
+    QMenu::item {
+        padding: 6px 16px;
+        background-color: transparent;
+    }
+    QMenu::item:selected {
+        background: rgba(74, 158, 255, 0.22);
+        color: #ffffff;
+        border-radius: 3px;
+    }
 """
 
 
@@ -261,11 +326,16 @@ class _BranchDelegate(QStyledItemDelegate):
                 painter.setRenderHint(QPainter.RenderHint.Antialiasing)
                 r = option.rect
                 branch_rect = QRect(r.x() - self.BRANCH_W, r.y(), self.BRANCH_W, r.height())
+
                 from PySide6.QtGui import QFont as _QF
                 f = _QF(painter.font())
                 f.setPointSize(7)
                 painter.setFont(f)
-                painter.setPen(QColor("#888888"))
+
+                is_selected = option.state & QStyle.StateFlag.State_Selected
+                arrow_color = QColor("#ffffff") if is_selected else QColor("#888888")
+                painter.setPen(arrow_color)
+
                 painter.drawText(
                     branch_rect,
                     Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignHCenter,
@@ -288,7 +358,6 @@ class _BranchDelegate(QStyledItemDelegate):
         if not path_str:
             return
 
-        # ★ 정규화: 슬래시 통일, 후행 슬래시 제거
         normalized = _norm_path(path_str)
 
         if normalized not in self._empty:
@@ -357,14 +426,16 @@ class _FolderTree(QTreeView):
         self.setUniformRowHeights(True)
         self.setStyleSheet(_TREE_STYLE)
 
-        # QPalette 강제 지정 — 테마가 branch 색상을 덮어쓰는 것 방지
         p = self.palette()
         p.setColor(QPalette.ColorRole.Text,            QColor("#cccccc"))
         p.setColor(QPalette.ColorRole.Base,            QColor("#1e1e1e"))
-        p.setColor(QPalette.ColorRole.AlternateBase,   QColor("#252525"))
-        p.setColor(QPalette.ColorRole.Highlight,       QColor("#2d5a8e"))
+        p.setColor(QPalette.ColorRole.AlternateBase,   QColor("#222222"))
+        p.setColor(QPalette.ColorRole.Highlight,       QColor(52, 84, 122))
         p.setColor(QPalette.ColorRole.HighlightedText, QColor("#ffffff"))
         p.setColor(QPalette.ColorRole.BrightText,      QColor("#888888"))
+        p.setColor(QPalette.ColorRole.Mid,             QColor("#1e1e1e")) 
+        p.setColor(QPalette.ColorRole.Midlight,        QColor("#1e1e1e"))  
+        p.setColor(QPalette.ColorRole.Dark,            QColor("#1e1e1e"))  
         self.setPalette(p)
 
         self.activated.connect(self._on_activated)
@@ -372,12 +443,20 @@ class _FolderTree(QTreeView):
 
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        self.header().setStretchLastSection(True)    # 컬럼이 뷰 너비 채움
-        self.header().setSectionResizeMode(          # 내용 기준으로 최소 너비 결정
+        self.header().setStretchLastSection(True)  
+        self.header().setSectionResizeMode(       
             0, self.header().ResizeMode.ResizeToContents
         )
         self._proxy.rowsInserted.connect(self._on_rows_inserted)
+        self.setRootIsDecorated(False)
 
+
+    def drawBranches(self, painter, rect, index) -> None:
+        painter.fillRect(rect, QColor("#1e1e1e"))
+
+        # 선택 상태만 처리 — hover는 스타일시트 ::item:hover 에 위임
+        if self.selectionModel().isSelected(index):
+            painter.fillRect(rect, QColor(74, 158, 255, int(255 * 0.28)))
 
     def _on_activated(self, proxy_idx: QModelIndex) -> None:
         src_idx = self._proxy.mapToSource(proxy_idx)
@@ -549,8 +628,13 @@ class _FavTree(QTreeView):
         p = self.palette()
         p.setColor(QPalette.ColorRole.Text,            QColor("#cccccc"))
         p.setColor(QPalette.ColorRole.Base,            QColor("#1e1e1e"))
-        p.setColor(QPalette.ColorRole.Highlight,       QColor("#2d5a8e"))
+        p.setColor(QPalette.ColorRole.AlternateBase,   QColor("#222222"))
+        p.setColor(QPalette.ColorRole.Highlight,       QColor(52, 84, 122))
         p.setColor(QPalette.ColorRole.HighlightedText, QColor("#ffffff"))
+        p.setColor(QPalette.ColorRole.BrightText,      QColor("#888888"))
+        p.setColor(QPalette.ColorRole.Mid,             QColor("#1e1e1e")) 
+        p.setColor(QPalette.ColorRole.Midlight,        QColor("#1e1e1e")) 
+        p.setColor(QPalette.ColorRole.Dark,            QColor("#1e1e1e")) 
         self.setPalette(p)
 
         self.activated.connect(self._on_activated)
@@ -562,7 +646,15 @@ class _FavTree(QTreeView):
         self.header().setSectionResizeMode(
             0, self.header().ResizeMode.ResizeToContents
         )
+        self.setRootIsDecorated(False)
 
+
+    def drawBranches(self, painter, rect, index) -> None:
+        painter.fillRect(rect, QColor("#1e1e1e"))
+
+        # 선택 상태만 처리 — hover는 스타일시트 ::item:hover 에 위임
+        if self.selectionModel().isSelected(index):
+            painter.fillRect(rect, QColor(74, 158, 255, int(255 * 0.28)))
 
     def _on_activated(self, idx: QModelIndex) -> None:
         item = self._model.itemFromIndex(idx)
@@ -742,14 +834,19 @@ class FolderExplorer(QWidget):
         toolbar_widget.setStyleSheet(_TOOLBAR_STYLE)
         toolbar_widget.setFixedHeight(36)
         toolbar_layout = QHBoxLayout(toolbar_widget)
-        toolbar_layout.setContentsMargins(4, 3, 4, 3)
+        toolbar_layout.setContentsMargins(6, 0, 6, 0)
         toolbar_layout.setSpacing(4)
+
+        _TOOL_BTN_H = 26
 
         # ① 바로가기 드롭다운
         self._quick_btn = QToolButton()
-        self._quick_btn.setText(t("folder_explorer.toolbar.quick_access"))
+        #self._quick_btn.setText(t("folder_explorer.toolbar.quick_access"))
+        self._quick_btn.setText("📂")
+        self._quick_btn.setFixedHeight(_TOOL_BTN_H)
         self._quick_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         self._quick_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        
         _quick_menu = QMenu(self._quick_btn)
         _quick_menu.setStyleSheet(_QUICK_MENU_STYLE)
         for key in self._QUICK_KEYS:
@@ -761,7 +858,9 @@ class FolderExplorer(QWidget):
 
         # ② 즐겨찾기 드롭다운 버튼 (탭 대체)
         self._fav_btn = QToolButton()
-        self._fav_btn.setText(t("folder_explorer.toolbar.favorites"))
+        #self._fav_btn.setText(t("folder_explorer.toolbar.favorites"))
+        self._fav_btn.setText("⭐")
+        self._fav_btn.setFixedHeight(_TOOL_BTN_H)
         self._fav_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         self._fav_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self._fav_menu = QMenu(self._fav_btn)
@@ -770,14 +869,18 @@ class FolderExplorer(QWidget):
 
         # ③ 위로 버튼
         self._up_btn = QToolButton()
-        self._up_btn.setText(t("folder_explorer.toolbar.go_up"))
+        #self._up_btn.setText(t("folder_explorer.toolbar.go_up"))
+        self._up_btn.setText("↑")
+        self._up_btn.setFixedHeight(_TOOL_BTN_H)
         self._up_btn.setToolTip(t("folder_explorer.toolbar.go_up_tooltip"))
         self._up_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self._up_btn.clicked.connect(self._go_up)
 
         # ④ 새 폴더 버튼
         self._new_btn = QToolButton()
-        self._new_btn.setText(t("folder_explorer.toolbar.new_folder"))
+        #self._new_btn.setText(t("folder_explorer.toolbar.new_folder"))
+        self._new_btn.setText("+")
+        self._new_btn.setFixedHeight(_TOOL_BTN_H)
         self._new_btn.setToolTip(t("folder_explorer.toolbar.new_folder_tooltip"))
         self._new_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self._new_btn.clicked.connect(self._create_folder)

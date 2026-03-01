@@ -148,9 +148,12 @@ class MainWindow(QMainWindow):
     @property
     def thumb_label(self):              return self.status_bar.thumb_label
     @property
-    def status_message_label(self):     return self.status_bar.status_message_label
+    def status_message_label(self):
+        return getattr(self.status_bar, 'status_message_label', None)
+
     @property
-    def status_message_timer(self):     return self.status_bar.status_message_timer
+    def status_message_timer(self):
+        return getattr(self.status_bar, 'status_message_timer', None)
 
 
 # ============================================
@@ -284,9 +287,9 @@ class MainWindow(QMainWindow):
         self.folder_explorer.set_main_window(self)
         self.folder_explorer.setVisible(False)
 
-        self.folder_explorer.setMinimumWidth(310)
-        self.folder_explorer.setMaximumWidth(310)
-        self._fe_panel_width = 310
+        self.folder_explorer.setMinimumWidth(270)
+        self.folder_explorer.setMaximumWidth(270)
+        self._fe_panel_width = 270
 
         self.h_splitter.addWidget(self.folder_explorer)   # index 0
 

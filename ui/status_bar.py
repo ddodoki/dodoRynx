@@ -88,6 +88,116 @@ class TaskInfo:
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# StatusMessageOverlay  — 레이아웃 비간섭 플로팅 임시 메시지
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+class StatusMessageOverlay(QLabel):
+    """
+    상태바 레이아웃에 전혀 영향을 주지 않는 플로팅 임시 메시지 위젯.
+
+    - MainWindow 를 parent 로 가지는 절대 좌표 플로팅 라벨
+    - 상태바 위쪽 수평 중앙에 fade-in/out 으로 표시
+
+    생명주기:
+      show_message(text, duration)
+        → fade-in 150ms → 대기 → fade-out 400ms → hide
+    """
+
+    _STYLE = """
+        QLabel {
+            color: #4affb4;
+            font-size: 11px;
+            font-weight: bold;
+            padding: 5px 14px;
+            background: rgba(28, 52, 40, 230);
+            border: 1px solid #4affb4;
+            border-radius: 4px;
+        }
+    """
+
+    def __init__(self, main_window: QWidget, statusbar: "QStatusBar") -> None:
+        super().__init__(main_window)
+        self._mw = main_window
+        self._sb = statusbar            # 위치 계산 기준 위젯
+
+        self.setStyleSheet(self._STYLE)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self.setVisible(False)
+
+        self._opacity_eff = QGraphicsOpacityEffect(self)
+        self._opacity_eff.setOpacity(0.0)
+        self.setGraphicsEffect(self._opacity_eff)
+
+        self._fade_anim = QPropertyAnimation(self._opacity_eff, b"opacity", self)
+
+        self._hide_timer = QTimer(self)
+        self._hide_timer.setSingleShot(True)
+        self._hide_timer.timeout.connect(self._start_fadeout)
+
+    # ── 공개 API ──────────────────────────────────────────────
+
+    def show_message(self, text: str, duration: int = 2000) -> None:
+        """임시 메시지 표시. 중복 호출 시 타이머 재시작."""
+        self._hide_timer.stop()
+        self._fade_anim.stop()
+        self._disconnect_hidden()
+
+        self.setText(text)
+        self.adjustSize()
+        self.setVisible(True)
+        self.raise_()
+        self._reposition()
+
+        # fade-in
+        self._fade_anim.setDuration(150)
+        self._fade_anim.setStartValue(self._opacity_eff.opacity())
+        self._fade_anim.setEndValue(1.0)
+        self._fade_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._fade_anim.start()
+
+        self._hide_timer.start(duration)
+
+    def hide_immediate(self) -> None:
+        """즉시 숨김 (하위 호환)."""
+        self._hide_timer.stop()
+        self._fade_anim.stop()
+        self._disconnect_hidden()
+        self._opacity_eff.setOpacity(0.0)
+        self.setVisible(False)
+
+    # ── 내부 ──────────────────────────────────────────────────
+
+    def _reposition(self) -> None:
+        """상태바 바로 위, 수평 중앙에 배치."""
+        sb_global = self._sb.mapToGlobal(QPoint(0, 0))
+        sb_local  = self._mw.mapFromGlobal(sb_global)
+        x = sb_local.x() + (self._sb.width() - self.width()) // 2
+        y = sb_local.y() - self.height() - 6
+        self.move(max(0, x), max(0, y))
+
+    def _start_fadeout(self) -> None:
+        self._fade_anim.stop()
+        self._disconnect_hidden()
+        self._fade_anim.setDuration(400)
+        self._fade_anim.setStartValue(self._opacity_eff.opacity())
+        self._fade_anim.setEndValue(0.0)
+        self._fade_anim.setEasingCurve(QEasingCurve.Type.InCubic)
+        self._fade_anim.finished.connect(self._on_hidden)
+        self._fade_anim.start()
+
+    def _on_hidden(self) -> None:
+        self._disconnect_hidden()
+        self.setVisible(False)
+
+    def _disconnect_hidden(self) -> None:
+        """finished 시그널 중복 연결 방지."""
+        try:
+            self._fade_anim.finished.disconnect(self._on_hidden)
+        except RuntimeError:
+            pass
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # SortMenuButton
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -101,27 +211,35 @@ class SortMenuButton(QPushButton):
 
     _STYLE = """
         QPushButton {
-            color: #fff; font-size: 11px; font-weight: bold;
-            padding: 5px 10px; background: #3b3b3b;
-            border: 1px solid #555; border-radius: 3px;
+            color: #ccc; font-size: 11px; font-weight: bold;
+            padding: 0px 10px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.10);
+            border-radius: 4px;
         }
-        QPushButton:hover   { background: #4b4b4b; border-color: #4a9eff; }
-        QPushButton:pressed { background: #555; }
+        QPushButton:hover   { background: rgba(74,158,255,0.18); border-color: rgba(74,158,255,0.60); color: #fff; }
+        QPushButton:pressed { background: rgba(74,158,255,0.30); }
     """
 
     # 활성 항목: 텍스트 파란색 + 볼드, 체크 인디케이터 자체 아이콘 제거
     _MENU_STYLE = """
         QMenu {
+            background-color: #1e1e1e; 
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 6px;
+            padding: 4px 0;
             min-width: 180px;
             font-size: 12px;
-            padding: 4px 0;
         }
         QMenu::item {
-            padding: 6px 20px 6px 28px;
+            padding: 7px 20px 7px 28px;
+            color: #ccc;
+            background-color: transparent;
         }
         QMenu::item:selected {
-            background: #4a9eff;
+            background-color: rgba(74, 158, 255, 0.25);
             color: #fff;
+            border-radius: 3px;
         }
         QMenu::item:checked {
             color: #4a9eff;
@@ -132,7 +250,7 @@ class SortMenuButton(QPushButton):
         }
         QMenu::separator {
             height: 1px;
-            background: #444;
+            background: rgba(255,255,255,0.08);
             margin: 3px 8px;
         }
     """
@@ -141,23 +259,23 @@ class SortMenuButton(QPushButton):
     _SHORT_LABELS: dict[tuple[str, bool], str] = {
         ("highlight",    False): "⭐",
         ("name",         False): "⇅",   # 기본값 — 원래 아이콘 유지
-        ("name",         True):  "Az↓",
-        ("created",      True):  "📅↓",
-        ("created",      False): "📅↑",
-        ("modified",     True):  "🕒↓",
-        ("modified",     False): "🕒↑",
-        ("size",         True):  "📦↓",
-        ("size",         False): "📦↑",
-        ("exif_date",    True):  "📸↓",
-        ("exif_date",    False): "📸↑",
+        ("name",         True):  "Az",
+        ("created",      True):  "📅",
+        ("created",      False): "📅",
+        ("modified",     True):  "🕒",
+        ("modified",     False): "🕒",
+        ("size",         True):  "📦",
+        ("size",         False): "📦",
+        ("exif_date",    True):  "📸",
+        ("exif_date",    False): "📸",
         ("camera_model", False): "📷",
     }
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, parent=None, widget_height: int = 26) -> None:
         super().__init__("⇅", parent)
         self.setToolTip(t('statusbar.sort_btn_tooltip'))
         self.setStyleSheet(self._STYLE)
-        self.setFixedWidth(45)
+        self.setFixedSize(37, widget_height) 
 
         # (sort_type, reverse) → QAction 참조 보관
         self._action_map: dict[tuple[str, bool], QAction] = {}
@@ -231,18 +349,21 @@ class ZoomMenuButton(QPushButton):
     _BASE_STYLE = """
         QPushButton {{
             color: {color}; font-size: 11px; font-weight: bold;
-            padding: 5px 10px; background: #3b3b3b;
-            border: 1px solid #555; border-radius: 3px;
+            padding: 0px 10px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.10);
+            border-radius: 4px;
         }}
-        QPushButton:hover   {{ background: #4b4b4b; border-color: {color}; }}
-        QPushButton:pressed {{ background: #555; }}
+        QPushButton:hover   {{ background: rgba(74,158,255,0.18); border-color: rgba(74,158,255,0.60); color: #fff; }}
+        QPushButton:pressed {{ background: rgba(74,158,255,0.30); }}
     """
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, parent=None, widget_height: int = 26) -> None: 
         super().__init__("🔍 100%", parent)
         self.setToolTip(t('statusbar.zoom_btn_tooltip'))
+        self.setFixedHeight(widget_height) 
         self.setMinimumWidth(90)
-        self._apply_style("#050505")
+        self._apply_style("#ccc")
         self._menu = self._build_menu()
         self.clicked.connect(self._show_menu)
 
@@ -253,20 +374,26 @@ class ZoomMenuButton(QPushButton):
         m = QMenu(self)
         m.setStyleSheet("""
             QMenu {
+                background-color: #1e1e1e;  
+                border: 1px solid rgba(255,255,255,0.12);
+                border-radius: 6px;
+                padding: 4px 0;
                 min-width: 180px;
                 font-size: 12px;
-                padding: 4px 0;
             }
             QMenu::item {
-                padding: 6px 20px 6px 12px;
+                padding: 7px 20px 7px 14px;
+                color: #ccc;
+                background-color: transparent;
             }
             QMenu::item:selected {
-                background: #4a9eff;
+                background-color: rgba(74, 158, 255, 0.25);
                 color: #fff;
+                border-radius: 3px;
             }
             QMenu::separator {
                 height: 1px;
-                background: #444;
+                background: rgba(255,255,255,0.08);
                 margin: 3px 8px;
             }
         """)
@@ -856,76 +983,99 @@ class AppStatusBar:
         left_container         : 좌측 QWidget
     """
 
-    _LABEL_STYLE = """
-        QLabel {
-            color: #fff; font-size: 11px; font-weight: bold;
-            padding: 5px 10px; background: #3b3b3b;
-            border: 1px solid #555; border-radius: 3px; min-height: 16px;
-        }
-    """
+    _BAR_H    = 36 
+    _WIDGET_H = 26 
+
+    # padding 에서 상하값 제거 (setFixedHeight 가 높이를 강제하므로 불필요)
     _BTN_STYLE = """
         QPushButton {
-            color: #fff; font-size: 11px; font-weight: bold;
-            padding: 5px 10px; background: #3b3b3b;
-            border: 1px solid #555; border-radius: 3px; min-height: 16px;
+            color: #ccc;
+            font-size: 11px;
+            font-weight: bold;
+            padding: 0px 10px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.10);
+            border-radius: 4px;
         }
-        QPushButton:hover   { background: #4b4b4b; border-color: #4a9eff; }
-        QPushButton:pressed { background: #555; }
+        QPushButton:hover {
+            background: rgba(74, 158, 255, 0.18);
+            border-color: rgba(74, 158, 255, 0.60);
+            color: #fff;
+        }
+        QPushButton:pressed {
+            background: rgba(74, 158, 255, 0.30);
+        }
     """
-    _SEP_STYLE = "color: #555; font-size: 14px; padding: 0 1px;"
+    _LABEL_STYLE = """
+        QLabel {
+            color: #aaa;
+            font-size: 11px;
+            font-weight: bold;
+            padding: 0px 10px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 4px;
+        }
+    """
+    _SEP_STYLE = "color: rgba(255,255,255,0.12); font-size: 13px; padding: 0 2px;"
+    _STATUSBAR_STYLE = f"""
+        QStatusBar {{
+            background: #252525;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            min-height: {_BAR_H}px;
+            max-height: {_BAR_H}px;
+        }}
+        QStatusBar::item {{ border: none; }}
+    """
 
     def __init__(self, parent: QWidget) -> None:
         self._parent = parent
         self._build()
 
-        self.op_label    = QLabel() 
+        self.op_label    = QLabel()
         self.thumb_label = QLabel()
         self.op_label.hide()
         self.thumb_label.hide()
 
-    def _hide_status_message(self) -> None:
-        """하위 호환: 상태 메시지 숨기기."""
-        try:
-            self.status_message_label.clear()
-            self.status_message_label.setVisible(False)
-            if self.status_message_timer.isActive():
-                self.status_message_timer.stop()
-        except Exception:
-            pass
+        self.status_message_label = QLabel()
+        self.status_message_label.setVisible(False)
+
+        self.status_message_timer = QTimer()
+        self.status_message_timer.setSingleShot(True)
+
 
     def _build(self) -> None:
         self.statusbar = QStatusBar()
-        self.statusbar.setStyleSheet("""
-            QStatusBar { background: #2b2b2b; border-top: 1px solid #555; }
-            QStatusBar::item { border: none; }
-        """)
-        self._build_message_timer()
+        self.statusbar.setSizeGripEnabled(False) 
+        self.statusbar.setFixedHeight(self._BAR_H)
+        self.statusbar.setStyleSheet(self._STATUSBAR_STYLE)
+
+        self.msg_overlay: Optional[StatusMessageOverlay] = None
         self._build_left_container()
-        # 우측 고정 위젯 (StatusProgressWidget) 은 StatusBarController 에서 주입
         QTimer.singleShot(0, self._add_widgets)
         debug_print("AppStatusBar: 빌드 완료")
 
-    def _build_message_timer(self) -> None:
-        self.status_message_timer = QTimer()
-        self.status_message_timer.setSingleShot(True)
-        self.status_message_timer.timeout.connect(
-            lambda: self.status_message_label.setVisible(False)
-        )
-
     def _build_left_container(self) -> None:
         self.left_container = QWidget()
+        self.left_container.setStyleSheet("background: transparent;")
+        self.left_container.setFixedHeight(self._BAR_H)
         lay = QHBoxLayout(self.left_container)
-        lay.setContentsMargins(10, 4, 10, 4)
-        lay.setSpacing(8)
+        lay.setContentsMargins(12, 0, 12, 0)
+        lay.setSpacing(6)
+
+        lay.addStretch(1) 
 
         # 줌
+        lay.addWidget(self._sep())
         self.zoom_btn = ZoomMenuButton()
+        self.zoom_btn.setFixedHeight(self._WIDGET_H)
         lay.addWidget(self.zoom_btn)
         lay.addWidget(self._sep())
 
         # 파일 번호
         self.progress_label = QLabel("📄 0 / 📦 0")
         self.progress_label.setStyleSheet(self._LABEL_STYLE)
+        self.progress_label.setFixedHeight(self._WIDGET_H)
         self.progress_label.setMinimumWidth(120)
         self.progress_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lay.addWidget(self.progress_label)
@@ -933,7 +1083,8 @@ class AppStatusBar:
 
         # 파일 열기
         self.open_file_btn = QPushButton("📂")
-        self.open_file_btn.setFixedWidth(45)
+        self.open_file_btn.setFixedSize(self._WIDGET_H, self._WIDGET_H)
+        self.open_file_btn.setFixedWidth(37)
         self.open_file_btn.setToolTip(t('statusbar.open_file_tooltip'))
         self.open_file_btn.setStyleSheet(self._BTN_STYLE)
         lay.addWidget(self.open_file_btn)
@@ -944,7 +1095,8 @@ class AppStatusBar:
 
         # 편집 모드
         self.edit_mode_btn = QPushButton("🎨")
-        self.edit_mode_btn.setFixedWidth(45)
+        self.edit_mode_btn.setFixedSize(self._WIDGET_H, self._WIDGET_H)
+        self.edit_mode_btn.setFixedWidth(37)
         self.edit_mode_btn.setToolTip(t('statusbar.edit_mode_tooltip'))
         self.edit_mode_btn.setStyleSheet(self._BTN_STYLE)
         lay.addWidget(self.edit_mode_btn)
@@ -965,26 +1117,15 @@ class AppStatusBar:
             (self.rotate_left_btn, self.rotate_right_btn,
              self.rotate_reset_btn, self.rotate_apply_btn), _tips
         ):
-            btn.setFixedWidth(30)
+            btn.setFixedSize(30, self._WIDGET_H)
             btn.setToolTip(tip)
             btn.setStyleSheet(self._BTN_STYLE)
             lay.addWidget(btn)
 
         lay.addWidget(self._sep())
 
-        # 임시 메시지
-        self.status_message_label = QLabel("")
-        self.status_message_label.setStyleSheet("""
-            QLabel {
-                color: #4affb4; font-size: 11px; font-weight: bold;
-                padding: 5px 10px; background: #2b4b3b;
-                border: 1px solid #4affb4; border-radius: 3px; min-height: 16px;
-            }
-        """)
-        self.status_message_label.setVisible(False)
-        lay.addWidget(self.status_message_label)
+        lay.addStretch(1) 
 
-        lay.addStretch()
 
     def _add_widgets(self) -> None:
         try:
@@ -992,6 +1133,7 @@ class AppStatusBar:
             debug_print("AppStatusBar: 위젯 배치 완료")
         except Exception as e:
             error_print(f"AppStatusBar._add_widgets: {e}")
+
 
     # ── 헬퍼 ──────────────────────────────────────────────────
 
@@ -1002,20 +1144,16 @@ class AppStatusBar:
 
     def show_message(self, message: str, duration: int = 2000) -> None:
         max_length = 50
-
         if len(message) > max_length:
             name, ext = os.path.splitext(message)
-            cut_length = max_length - len(ext) - 3  # "..." 3자 확보
-
-            # cut_length 음수 방어 — ext가 너무 길면 단순 절단
+            cut_length = max_length - len(ext) - 3
             if cut_length > 0:
                 message = name[:cut_length] + "..." + ext
             else:
                 message = message[:max_length - 3] + "..."
 
-        self.status_message_label.setText(message)
-        self.status_message_label.setVisible(True)
-        self.status_message_timer.start(duration)
+        if self.msg_overlay:
+            self.msg_overlay.show_message(message, duration)
 
     def update_progress(self, current: int, total: int) -> None:
         self.progress_label.setText(f"📄 {current} / 📦 {total}")
@@ -1029,6 +1167,20 @@ class AppStatusBar:
     def is_visible(self) -> bool:
         return self.statusbar.isVisible()
 
+    def _hide_status_message(self) -> None:
+        """하위 호환: 오버레이 즉시 숨기기."""
+        if hasattr(self, "msg_overlay") and self.msg_overlay:
+            self.msg_overlay.hide_immediate()
+
+    def _link_compat_timer(self) -> None:
+        """
+        StatusBarController 가 msg_overlay 를 주입한 뒤 호출.
+        하위 호환 timer.timeout → overlay.hide_immediate() 로 위임.
+        """
+        if self.msg_overlay:
+            self.status_message_timer.timeout.connect(
+                self.msg_overlay.hide_immediate
+            )
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # StatusBarController  — MainWindow ↔ AppStatusBar 브릿지
@@ -1062,12 +1214,18 @@ class StatusBarController:
         # progress_widget 을 상태바에 permanent 등록
         # (_add_widgets 보다 늦게 실행되도록 singleShot)
         QTimer.singleShot(50, self._register_permanent)
-        #self._register_permanent()
 
     def _register_permanent(self) -> None:
         try:
-            #self.progress_widget.show()
             self._sb.statusbar.addPermanentWidget(self.progress_widget)
+
+            self._sb.msg_overlay = StatusMessageOverlay(
+                self._mw,
+                self._sb.statusbar,
+            )
+
+            self._sb._link_compat_timer() 
+
             debug_print("StatusBarController: progress_widget permanent 등록 완료")
         except Exception as e:
             error_print(f"StatusBarController._register_permanent: {e}")

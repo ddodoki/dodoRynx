@@ -324,38 +324,65 @@ class MetadataPanel(QWidget):
             
             self.metadata_layout.addWidget(row_widget)
             self.metadata_widgets.append(row_widget)
-    
+
 
     def _add_gps_section(self, gps_info: Dict[str, Any]) -> None:
-        """GPS 섹션 추가 (클릭 가능 + 지도)"""
-        # 섹션 제목
+
+        # ── 공통 디자인 토큰 ──────────────────────────────────────
+        _C_BG        = "#1e1e1e"
+        _C_BG_RAISED = "#252525"
+        _C_BORDER    = "rgba(255,255,255,0.08)"
+        _C_BTN_BG    = "rgba(255,255,255,0.05)"
+        _C_BTN_BOR   = "rgba(255,255,255,0.10)"
+        _C_HOVER_BG  = "rgba(74,158,255,0.18)"
+        _C_HOVER_BOR = "rgba(74,158,255,0.60)"
+        _C_PRESS_BG  = "rgba(74,158,255,0.32)"
+        _C_ACCENT    = "#4a9eff"
+        _C_TEXT      = "#cccccc"
+        _C_TEXT_DIM  = "#888888"
+        _RADIUS      = "4px"
+        _BTN_H       = 26
+
+        # ── 섹션 제목 ─────────────────────────────────────────────
         title_label = QLabel("🌍 GPS")
         title_label.setFont(QFont("", 10, QFont.Weight.Bold))
-        title_label.setStyleSheet("color: #4a9eff; margin-top: 5px;")
+        title_label.setStyleSheet(f"""
+            QLabel {{
+                color: {_C_ACCENT};
+                font-size: 11px;
+                font-weight: bold;
+                padding: 6px 0 2px 0;
+                background: transparent;
+            }}
+        """)
         self.metadata_layout.addWidget(title_label)
         self.metadata_widgets.append(title_label)
-        
-        # ===== GPS 버튼 (좌표 + 고도 한 줄로) =====
+
+        # ── GPS 좌표 버튼 ─────────────────────────────────────────
         gps_display = f"📍 {gps_info.get('display', '위치 정보')}"
-        
-        # 고도 추가
         if 'altitude' in gps_info:
-            gps_display += f"  |  ⛰️ {gps_info['altitude']}"
-        
+            gps_display += f"   ⛰ {gps_info['altitude']}"
+
         gps_btn = QPushButton(gps_display)
-        
-        gps_btn.setStyleSheet("""
-            QPushButton {
+        gps_btn.setFixedHeight(_BTN_H)
+        gps_btn.setStyleSheet(f"""
+            QPushButton {{
                 text-align: left;
-                padding: 5px;
-                background-color: #2b2b2b;
-                color: #4a9eff;
-                border: 1px solid #555;
-                font-size: 10px;
-            }
-            QPushButton:hover {
-                background-color: #3b3b3b;
-            }
+                padding: 0 8px;
+                background: {_C_BTN_BG};
+                color: {_C_ACCENT};
+                border: 1px solid {_C_BTN_BOR};
+                border-radius: {_RADIUS};
+                font-size: 11px;
+            }}
+            QPushButton:hover {{
+                background: {_C_HOVER_BG};
+                border-color: {_C_HOVER_BOR};
+                color: #ffffff;
+            }}
+            QPushButton:pressed {{
+                background: {_C_PRESS_BG};
+            }}
         """)
         gps_btn.clicked.connect(
             lambda: self.gps_clicked.emit(
@@ -365,170 +392,186 @@ class MetadataPanel(QWidget):
         )
         self.metadata_layout.addWidget(gps_btn)
         self.metadata_widgets.append(gps_btn)
-        
-        # GPS 저장
-        self.current_gps = (gps_info['latitude'], gps_info['longitude'])
+
+        self.current_gps  = (gps_info['latitude'], gps_info['longitude'])
         self.current_zoom = self.config.get_gps_map_setting("default_zoom", 15)
-                
-        # 자동 로드 체크박스
+
+        # ── 자동 로드 체크박스 ────────────────────────────────────
         auto_load_checkbox = QCheckBox(t('metadata_panel.auto_load_map'))
-        auto_load_checkbox.setStyleSheet("""
-            QCheckBox {
-                color: #ccc;
-                font-size: 10px;
-                spacing: 5px;
-            }
-            QCheckBox::indicator {
-                width: 16px;
-                height: 16px;
-            }
+        auto_load_checkbox.setStyleSheet(f"""
+            QCheckBox {{
+                color: {_C_TEXT};
+                font-size: 11px;
+                spacing: 6px;
+                background: transparent;
+            }}
+            QCheckBox::indicator {{
+                width: 14px;
+                height: 14px;
+                border: 1px solid {_C_BTN_BOR};
+                border-radius: 3px;
+                background: {_C_BTN_BG};
+            }}
+            QCheckBox::indicator:checked {{
+                background: rgba(74,158,255,0.40);
+                border-color: {_C_ACCENT};
+            }}
+            QCheckBox::indicator:hover {{
+                border-color: {_C_HOVER_BOR};
+            }}
         """)
         auto_load = self.config.get_gps_map_setting("auto_load", False)
         auto_load_checkbox.setChecked(auto_load)
         auto_load_checkbox.stateChanged.connect(self._on_auto_load_changed)
         self.metadata_layout.addWidget(auto_load_checkbox)
         self.metadata_widgets.append(auto_load_checkbox)
-        
-        # 지도 컨테이너
+
+        # ── 지도 컨테이너 ─────────────────────────────────────────
         map_container = QWidget()
+        map_container.setStyleSheet(f"""
+            QWidget {{
+                background: transparent;
+            }}
+        """)
         map_layout = QVBoxLayout(map_container)
-        map_layout.setContentsMargins(0, 5, 0, 0)
-        map_layout.setSpacing(5)
-        
-        # 진행률 바 추가
+        map_layout.setContentsMargins(0, 4, 0, 0)
+        map_layout.setSpacing(4)
+
+        # 진행률 바
         self.map_progress = QProgressBar()
         self.map_progress.setMaximum(100)
         self.map_progress.setValue(0)
         self.map_progress.setTextVisible(True)
         self.map_progress.setFormat(t('metadata_panel.map_progress_format'))
-        self.map_progress.setFixedHeight(20)
-        self.map_progress.setStyleSheet("""
-            QProgressBar {
-                border: 1px solid #555;
-                border-radius: 3px;
-                background-color: #2b2b2b;
+        self.map_progress.setFixedHeight(18)
+        self.map_progress.setStyleSheet(f"""
+            QProgressBar {{
+                border: 1px solid {_C_BTN_BOR};
+                border-radius: {_RADIUS};
+                background: {_C_BTN_BG};
                 text-align: center;
-                color: #ccc;
+                color: {_C_TEXT};
                 font-size: 10px;
-            }
-            QProgressBar::chunk {
-                background-color: #4a9eff;
-                border-radius: 2px;
-            }
+            }}
+            QProgressBar::chunk {{
+                background: rgba(74,158,255,0.50);
+                border-radius: 3px;
+            }}
         """)
-        self.map_progress.setVisible(False)  # 처음엔 숨김
+        self.map_progress.setVisible(False)
         map_layout.addWidget(self.map_progress)
-        
+
         # 지도 이미지
         self.map_label = QLabel(t('metadata_panel.map_placeholder'))
         self.map_label.setFixedSize(280, 200)
         self.map_label.setScaledContents(False)
         self.map_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.map_label.setStyleSheet("""
-            QLabel {
-                background-color: #2b2b2b;
-                color: #888;
-                border: 1px solid #555;
-                border-radius: 3px;
-                font-size: 10px;
-            }
+        self.map_label.setStyleSheet(f"""
+            QLabel {{
+                background: {_C_BG};
+                color: {_C_TEXT_DIM};
+                border: 1px solid {_C_BORDER};
+                border-radius: {_RADIUS};
+                font-size: 11px;
+            }}
         """)
         map_layout.addWidget(self.map_label)
-            
-        # 지도 컨트롤 버튼
-        controls_layout = QHBoxLayout()
-        
-        zoom_in_btn = QPushButton("🔍+")
-        zoom_in_btn.setFixedHeight(25)
-        zoom_in_btn.setToolTip(t('metadata_panel.zoom_in_tooltip'))
-        zoom_in_btn.clicked.connect(self._zoom_in)
-        
-        zoom_out_btn = QPushButton("🔍-")
-        zoom_out_btn.setFixedHeight(25)
-        zoom_out_btn.setToolTip(t('metadata_panel.zoom_out_tooltip'))
-        zoom_out_btn.clicked.connect(self._zoom_out)
-        
-        reset_btn = QPushButton("↺")
-        reset_btn.setFixedHeight(25)
-        reset_btn.setToolTip(t('metadata_panel.reset_tooltip'))
-        reset_btn.clicked.connect(self._reset_zoom)
-        
-        # 현재 줌 레벨 표시
-        self.zoom_level_label = QLabel(t('metadata_panel.zoom_label', zoom=self.current_zoom))
-        self.zoom_level_label.setStyleSheet("""
-            QLabel {
-                color: #aaa;
-                font-size: 10px;
-                padding: 0 5px;
-            }
-        """)
-        self.zoom_level_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.zoom_level_label.setFixedWidth(60)
-        
-        # 버튼 스타일
-        btn_style = """
-            QPushButton {
-                background-color: #3b3b3b;
-                color: #ccc;
-                border: 1px solid #555;
-                border-radius: 3px;
-                font-size: 14px;
-            }
-            QPushButton:hover {
-                background-color: #4b4b4b;
-            }
-            QPushButton:pressed {
-                background-color: #2b2b2b;
-            }
+
+        # ── 지도 컨트롤 버튼 ─────────────────────────────────────
+        _btn_style = f"""
+            QPushButton {{
+                background: {_C_BTN_BG};
+                color: {_C_TEXT};
+                border: 1px solid {_C_BTN_BOR};
+                border-radius: {_RADIUS};
+                font-size: 13px;
+                padding: 0;
+            }}
+            QPushButton:hover {{
+                background: {_C_HOVER_BG};
+                border-color: {_C_HOVER_BOR};
+                color: #ffffff;
+            }}
+            QPushButton:pressed {{
+                background: {_C_PRESS_BG};
+            }}
         """
-        zoom_in_btn.setStyleSheet(btn_style)
-        zoom_out_btn.setStyleSheet(btn_style)
-        reset_btn.setStyleSheet(btn_style)
-        
+
+        zoom_in_btn  = QPushButton("🔍+")
+        zoom_out_btn = QPushButton("🔍-")
+        reset_btn    = QPushButton("↺")
+
+        for btn, tip, slot in (
+            (zoom_in_btn,  t('metadata_panel.zoom_in_tooltip'),  self._zoom_in),
+            (zoom_out_btn, t('metadata_panel.zoom_out_tooltip'), self._zoom_out),
+            (reset_btn,    t('metadata_panel.reset_tooltip'),    self._reset_zoom),
+        ):
+            btn.setFixedHeight(_BTN_H)
+            btn.setToolTip(tip)
+            btn.setStyleSheet(_btn_style)
+            btn.clicked.connect(slot)
+
+        # 줌 레벨 표시 라벨
+        self.zoom_level_label = QLabel(
+            t('metadata_panel.zoom_label', zoom=self.current_zoom)
+        )
+        self.zoom_level_label.setFixedSize(60, _BTN_H)
+        self.zoom_level_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.zoom_level_label.setStyleSheet(f"""
+            QLabel {{
+                color: {_C_TEXT_DIM};
+                font-size: 10px;
+                background: transparent;
+                border: none;
+                padding: 0;
+            }}
+        """)
+
+        controls_layout = QHBoxLayout()
+        controls_layout.setSpacing(4)
+        controls_layout.setContentsMargins(0, 0, 0, 0)
         controls_layout.addWidget(zoom_in_btn)
         controls_layout.addWidget(zoom_out_btn)
         controls_layout.addWidget(self.zoom_level_label)
         controls_layout.addWidget(reset_btn)
-        
         map_layout.addLayout(controls_layout)
-        
+
         self.metadata_layout.addWidget(map_container)
         self.metadata_widgets.append(map_container)
-        
-        # 자동 로드가 활성화되어 있으면 지도 로드
+
         if auto_load:
             self._load_map()
 
-        # ── 지도 출처 attribution ──────────────────────────────────────
+        # ── Attribution ───────────────────────────────────────────
         attr_label = QLabel(
             '<a href="https://openfreemap.org/">© OpenFreeMap</a>'
-            '&nbsp; · &nbsp;'
+            '&nbsp;·&nbsp;'
             '<a href="https://www.openmaptiles.org/">© OpenMapTiles</a>'
-            '&nbsp; · &nbsp;'
+            '&nbsp;·&nbsp;'
             '<a href="https://www.openstreetmap.org/copyright">© OpenStreetMap</a>'
         )
         attr_label.setTextFormat(Qt.TextFormat.RichText)
-        attr_label.setOpenExternalLinks(True)          # 클릭 → 기본 브라우저
+        attr_label.setOpenExternalLinks(True)
         attr_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         attr_label.setWordWrap(True)
-        attr_label.setStyleSheet("""
-            QLabel {
-                color: #555;
+        attr_label.setStyleSheet(f"""
+            QLabel {{
+                color: rgba(255,255,255,0.20);
                 font-size: 9px;
-                padding: 2px 0px;
-            }
-            QLabel a {
-                color: #4a9eff;
+                padding: 2px 0;
+                background: transparent;
+            }}
+            QLabel a {{
+                color: rgba(74,158,255,0.50);
                 text-decoration: none;
-            }
-            QLabel a:hover {
-                color: #6bb4ff;
+            }}
+            QLabel a:hover {{
+                color: {_C_ACCENT};
                 text-decoration: underline;
-            }
+            }}
         """)
         map_layout.addWidget(attr_label)
-        # ──────────────────────────────────────────────────────────────
-
+        
 
 # ============================================
 # 위젯 정리
