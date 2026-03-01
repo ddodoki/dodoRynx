@@ -69,16 +69,22 @@ class MenuBuilder:
         menu.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         
         self._section_file(menu, parent)
+
         menu.addSeparator()
+
         self._section_highlight(menu, parent)
+
         menu.addSeparator()
-        self._section_view(menu, parent)
-        menu.addSeparator()
+
         self._section_rotate(menu, parent)
         self._section_capture(menu, parent)
         self._section_print(menu, parent)
+
         menu.addSeparator()
+
+        self._section_view(menu, parent)
         self._section_info(menu, parent)
+
         menu.addSeparator()
 
         exit_act = menu.addAction(t('menu.exit'))
@@ -131,18 +137,6 @@ class MenuBuilder:
 
         menu.addSeparator()
 
-        a = menu.addAction(t('menu.file.copy_path'))
-        a.setShortcut(QKeySequence("Ctrl+Shift+A"))
-        a.setEnabled(has_file)
-        a.triggered.connect(mw._copy_file_path)
-
-        a = menu.addAction(t('menu.file.copy_image'))
-        a.setShortcut(QKeySequence("Ctrl+Shift+I"))
-        a.setEnabled(has_file)
-        a.triggered.connect(mw._copy_image_to_clipboard)
-
-        menu.addSeparator()
-
         a = menu.addAction(t('menu.file.open_location'))
         a.setShortcut(QKeySequence("Ctrl+Shift+E"))
         a.setEnabled(has_file)
@@ -152,6 +146,18 @@ class MenuBuilder:
         a.setShortcut(QKeySequence("Alt+Return"))
         a.setEnabled(has_file)
         a.triggered.connect(mw._show_file_properties)
+
+        a = menu.addAction(t('menu.file.copy_path'))
+        a.setShortcut(QKeySequence("Ctrl+Shift+A"))
+        a.setEnabled(has_file)
+        a.triggered.connect(mw._copy_file_path)
+
+        a = menu.addAction(t('menu.view.fullscreen'))
+        a.setShortcut(QKeySequence("F11"))
+        a.setCheckable(True)
+        a.setChecked(getattr(mw, "is_fullscreen", False))
+        a.triggered.connect(mw._toggle_fullscreen)
+
 
     # ── 하이라이트 ────────────────────────────────────────────
 
@@ -256,17 +262,13 @@ class MenuBuilder:
        
         menu.addMenu(toggle_sub)
 
-        a = menu.addAction(t('menu.view.fullscreen'))
-        a.setShortcut(QKeySequence("F11"))
-        a.setCheckable(True)
-        a.setChecked(getattr(mw, "is_fullscreen", False))
-        a.triggered.connect(mw._toggle_fullscreen)
 
     # ── 회전 ──────────────────────────────────────────────────
 
     def _section_rotate(self, menu: QMenu, parent: Optional[QWidget]) -> None:
         mw       = self._mw
         has_file = bool(mw._current_file)
+        
         rot_sub = _menu(t('menu.rotate.title'), menu)
 
         specs = [
@@ -396,7 +398,6 @@ class ShortcutManager:
         reg("location",        "Ctrl+Shift+E",    mw._open_file_location)
         reg("properties",      "Alt+Return",      mw._show_file_properties)
         reg("copy_path",       "Ctrl+Shift+A",    mw._copy_file_path)
-        reg("copy_img_clip",   "Ctrl+Shift+I",    mw._copy_image_to_clipboard)
 
         # ── 하이라이트 ────────────────────────────────────────
         reg("highlight",       "H",               mw._toggle_highlight)
@@ -479,17 +480,21 @@ class MenuShortcutController:
         self._builder  = MenuBuilder(main_window)
         self._shortcut = ShortcutManager(main_window)
 
+
     def setup(self) -> None:
         """단축키 등록. _init_ui() 맨 마지막 줄에서 호출."""
         self._shortcut.setup()
         debug_print("MenuShortcutController: 설정 완료")
 
+
     def build_context_menu(self, parent: Optional[QWidget] = None) -> QMenu:
         """현재 상태를 반영한 컨텍스트 메뉴 반환."""
         return self._builder.build(parent)
 
+
     def set_shortcut_enabled(self, name: str, enabled: bool) -> None:
         self._shortcut.set_enabled(name, enabled)
+
 
     def get_shortcut(self, name: str) -> Optional[QShortcut]:
         return self._shortcut.get(name)

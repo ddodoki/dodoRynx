@@ -1275,8 +1275,6 @@ class MainWindow(QMainWindow):
         if hasattr(self, "file_manager"):
             if hasattr(self.file_manager, "paste_file"):
                 self.file_manager.paste_file()
-            # elif hasattr(self.file_manager, "pastefile"):
-            #     self.file_manager.paste_file()
 
 
     def _copy_file(self):                 
@@ -1285,10 +1283,6 @@ class MainWindow(QMainWindow):
 
     def _copy_file_path(self):            
         self.file_manager.copy_file_path()
-
-
-    def _copy_image_to_clipboard(self):   
-        self.file_manager.copy_image_to_clipboard()
 
 
     def _rename_file(self):               

@@ -315,21 +315,6 @@ class FileOperations:
         info_print(f"경로 복사: {mw._current_file}")
 
 
-    def copy_image_to_clipboard(self) -> None:
-        mw = self._mw
-        if not mw._current_file:
-            return
-        from PySide6.QtCore import QMimeData, QUrl
-        mime = QMimeData()
-        mime.setUrls([QUrl.fromLocalFile(str(mw._current_file))])
-        if sys.platform == "win32":
-            mime.setData("Preferred DropEffect", b"\x01\x00\x00\x00") 
-        QApplication.clipboard().setMimeData(mime)
-        mw._show_status_message(
-            t('file_manager.image_clipboard', name=mw._current_file.name), 2000
-        )
-        info_print(f"이미지 클립보드 복사: {mw._current_file}")
-
     # ── 파일 위치 / 속성 ──────────────────────────────────────
 
     def open_file_location(self) -> None:
@@ -673,7 +658,6 @@ class FileManager:
     def rename_file(self)                -> None: self._file_ops.rename_file()
     def paste_file(self)                 -> None: self._file_ops.paste_file()
     def copy_file_path(self)             -> None: self._file_ops.copy_file_path()
-    def copy_image_to_clipboard(self)    -> None: self._file_ops.copy_image_to_clipboard()
     def open_file_location(self)         -> None: self._file_ops.open_file_location()
     def show_file_properties(self)       -> None: self._file_ops.show_file_properties()
 
