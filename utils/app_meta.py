@@ -7,7 +7,7 @@ dodoRynx 앱 메타데이터.
 
 APP_NAME = "dodoRynx"
 APP_VERSION = "0.1.1.20260301"
-APP_AUTHOR = "ddodoki"
+APP_AUTHOR = ""
 APP_DESCRIPTION = "이미지 뷰어"
 APP_COPYRIGHT = "https://github.com/ddodoki/dodoRynx"
 APP_WEBSITE = "https://github.com/ddodoki/dodoRynx"

@@ -10,7 +10,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from PySide6.QtCore import QMutex, QObject, QRunnable, QThreadPool, Qt, Signal, Slot
+from PySide6.QtCore import QMutex, QObject, QRunnable, QThreadPool, Signal, Slot
 from PySide6.QtGui import QPixmap
 
 from core.image_loader import ImageLoader

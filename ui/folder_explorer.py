@@ -16,7 +16,6 @@ from PySide6.QtCore import (
     QPersistentModelIndex,
     QRect,
     QSortFilterProxyModel,
-    QSortFilterProxyModel as _QSFPBase,
     QTimer,
     Qt,
     Signal,
@@ -88,16 +87,6 @@ def _norm_path(p: Path | str) -> str:
 # ─────────────────────────────────────────────────────────────
 # 디자인 토큰 (상태바와 공유)
 # ─────────────────────────────────────────────────────────────
-_C_BG_BASE      = "#1e1e1e"           # 트리 배경
-_C_BG_TOOLBAR   = "#252525"           # 툴바/상태바 배경
-_C_BORDER       = "rgba(255,255,255,0.08)"   # 기본 테두리
-_C_BTN_BG       = "rgba(255,255,255,0.05)"   # 버튼 기본 배경
-_C_BTN_BORDER   = "rgba(255,255,255,0.10)"   # 버튼 기본 테두리
-_C_ACCENT       = "rgba(74,158,255,0.20)"    # 선택/호버 배경
-_C_ACCENT_FULL  = "rgba(74,158,255,0.60)"    # 호버 테두리
-_C_ACCENT_PRESS = "rgba(74,158,255,0.32)"    # 프레스 배경
-_C_SEP          = "rgba(255,255,255,0.07)"   # 구분선
-
 
 _TOOLBAR_STYLE = """
     QWidget#fe_toolbar {
@@ -123,7 +112,6 @@ _TOOLBAR_STYLE = """
     }
     QToolButton::menu-indicator { image: none; }
 """
-
 
 _TREE_STYLE = """
     QTreeView {
@@ -215,7 +203,6 @@ _TREE_STYLE = """
         { background: none; }
 """
 
-
 _MENU_STYLE = """
     QMenu {
         background-color: #1e1e1e;
@@ -242,7 +229,6 @@ _MENU_STYLE = """
     }
 """
 
-
 _QUICK_MENU_STYLE = """
     QMenu {
         background-color: #1e1e1e;
@@ -262,7 +248,6 @@ _QUICK_MENU_STYLE = """
         border-radius: 3px;
     }
 """
-
 
 def _has_images(folder: Path) -> bool:
     exts = _get_supported_image_exts()
@@ -343,8 +328,6 @@ class _BranchDelegate(QStyledItemDelegate):
                 )
                 painter.restore()
 
-        # ── ② 이미지 없는 폴더 ✕ 배지 ───────────────────────────
-        # 경로 추출 — 정규화(소문자 + 슬래시 통일)로 비교
         raw_model = idx.model()
         path_str = ""
         if isinstance(raw_model, QFileSystemModel):
@@ -454,7 +437,6 @@ class _FolderTree(QTreeView):
     def drawBranches(self, painter, rect, index) -> None:
         painter.fillRect(rect, QColor("#1e1e1e"))
 
-        # 선택 상태만 처리 — hover는 스타일시트 ::item:hover 에 위임
         if self.selectionModel().isSelected(index):
             painter.fillRect(rect, QColor(74, 158, 255, int(255 * 0.28)))
 
@@ -469,14 +451,14 @@ class _FolderTree(QTreeView):
         """새 행이 삽입될 때마다 호출 — 대기 경로가 있으면 타이머 리셋."""
         if self._fe_pending_scroll is None:
             return
-        # 삽입이 계속되는 동안 타이머를 계속 리셋 → 조용해지면 _do_scroll
-        self._scroll_timer.start()  # start()는 이미 실행 중이면 재시작
+
+        self._scroll_timer.start()  
 
 
     def navigate_to(self, path: Path) -> None:
         """지정 경로를 선택하고 화면 중앙으로 스크롤."""
         self._fe_pending_scroll = path
-        self._scroll_retry = 0          # 새 navigate 시 재시도 카운터 초기화
+        self._scroll_retry = 0   
         src_idx = self._fs_model.index(str(path))
 
         if src_idx.isValid():
@@ -499,7 +481,6 @@ class _FolderTree(QTreeView):
                 pass
             self._fs_model.directoryLoaded.connect(self._on_directory_loaded)
 
-        # 80ms 후 스크롤 실행 (rowsInserted가 없어도 fallback으로 실행됨)
         self._scroll_timer.start()
 
 
@@ -583,6 +564,15 @@ class _FolderTree(QTreeView):
         p = self._fs_model.filePath(src_idx)
         return Path(p) if p else None
 
+
+    def navigate_to_root(self) -> None:
+        """내 컴퓨터 — 모든 펼침 닫기 → 드라이브 목록만 표시."""
+        self._fe_pending_scroll = None
+        self._scroll_timer.stop()
+        self.collapseAll()              # ★ 모든 펼침 닫기
+        self.clearSelection()
+        self.setCurrentIndex(QModelIndex())
+        self.scrollToTop()
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 즐겨찾기 탭 트리
@@ -806,7 +796,6 @@ class FolderExplorer(QWidget):
             self._config.schedule_save()
 
 
-    # 호환용: main_window에서 기존 이름으로 부를 수 있게 유지
     def mark_empty_folder(self, path: Path) -> None:
         self.refresh_empty_state(path)
 
@@ -1014,9 +1003,8 @@ class FolderExplorer(QWidget):
             acp.triggered.connect(lambda checked=False, p=path: self._copy_path(p))
             menu.addAction(acp)
 
-        from PySide6.QtWidgets import QApplication as _QApp
         _has_clip = bool(self._clipboard_paths) or \
-                    _QApp.clipboard().mimeData().hasUrls()
+                    QApplication.clipboard().mimeData().hasUrls()
         if _has_clip:
             ap = QAction(t("folder_explorer.menu.paste"), self)
             _dst = path if (path and path.is_dir()) else self._normal_tree.current_path()
@@ -1045,6 +1033,12 @@ class FolderExplorer(QWidget):
         if not isinstance(action, QAction):
             return
         key = action.data()
+
+        # ★ 내 컴퓨터 — 경로 없이 루트(드라이브 목록)로 이동
+        if key == "computer":
+            self._normal_tree.navigate_to_root()
+            return  # folder_selected 시그널 발생 없음 (선택된 폴더 없으므로)
+
         path = self._resolve_quick_path(key)
         if path and path.is_dir():
             self._normal_tree.navigate_to(path)
@@ -1053,9 +1047,11 @@ class FolderExplorer(QWidget):
 
     @staticmethod
     def _resolve_quick_path(key: str) -> Optional[Path]:
+        if key == "computer":
+            return None  # ★ navigate_to_root() 로 처리 — 여기선 None
+
         home = Path.home()
         mapping = {
-            "computer":  Path("/") if os.name != "nt" else Path("C:/"),
             "desktop":   home / "Desktop",
             "documents": home / "Documents",
             "pictures":  home / "Pictures",
@@ -1169,7 +1165,6 @@ class FolderExplorer(QWidget):
         self._clipboard_is_cut = cut
 
     def _copy_path(self, path: Path) -> None:
-        from PySide6.QtWidgets import QApplication
         QApplication.clipboard().setText(str(path))
 
     # ── 붙여넣기 ──────────────────────────────────────────────────────────────
@@ -1189,7 +1184,6 @@ class FolderExplorer(QWidget):
             is_cut       = self._clipboard_is_cut
             use_internal = True
         else:
-            from PySide6.QtWidgets import QApplication
             mime = QApplication.clipboard().mimeData()
             if not mime.hasUrls():
                 QMessageBox.information(
