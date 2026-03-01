@@ -144,7 +144,6 @@ class ThumbnailLoader(QRunnable):
                 pass
 
 
-
     def cancel(self) -> None:
         self.cancelled = True
 
@@ -159,7 +158,7 @@ class ThumbnailLoader(QRunnable):
 
         raw_exts  = ('.cr2', '.cr3', '.nef', '.arw', '.dng',
                     '.orf', '.rw2', '.pef', '.srw', '.raf')
-        heif_exts = ('.heic', '.heif', '.avif')   # ← 추가
+        heif_exts = ('.heic', '.heif', '.avif') 
 
         if ext in raw_exts or ext in heif_exts:   # ← HEIF도 ImageLoader 경유
             return self._generate_raw_thumbnail()
@@ -204,11 +203,11 @@ class ThumbnailLoader(QRunnable):
                             (w+min_side)//2, (h+min_side)//2))
             img = img.resize((self.thumbnail_size, self.thumbnail_size),
                             Image.Resampling.BILINEAR).convert('RGB')
-            # with 블록 내에서 bytes 변환 → 포인터 위험 완전 제거
+
             data = img.tobytes()
             qimg = QImage(data, img.width, img.height,
                         img.width * 3, QImage.Format.Format_RGB888)
-            return qimg.copy()  # data 참조 끊기
+            return qimg.copy()  
         
 
     # ──────────────────────────────────────────────────────────
@@ -248,6 +247,7 @@ class ThumbnailItem(QFrame):
         self.is_selected = False
         self.is_highlighted = False
         self.is_temp_highlighted = False  # 임시 하이라이트 
+        self._is_secondary: bool = False   
 
         # 툴팁 설정
         self.setToolTip(file_name)
@@ -291,9 +291,7 @@ class ThumbnailItem(QFrame):
         # 초기 스타일
         self.setFrameShape(QFrame.Shape.Box)
         self.setLineWidth(0)
-        #self._update_style() 수정
-        self._update_border()  # ← _update_border만 사용
-
+        self._update_border() 
         self.setFixedSize(size + 10, size + 28)
     
         # 컨텍스트 메뉴 활성화
@@ -343,7 +341,15 @@ class ThumbnailItem(QFrame):
         self.is_temp_highlighted = highlighted
         self._update_border()
     
- 
+
+    def set_secondary(self, value: bool) -> None:
+        """보조 뷰어 표시 중 표시 (주황색 테두리)"""
+        if self._is_secondary == value:
+            return
+        self._is_secondary = value
+        self._update_border()
+
+
     def _update_border(self) -> None:
         """테두리 스타일 업데이트 (우선순위 적용)"""
         
@@ -355,9 +361,18 @@ class ThumbnailItem(QFrame):
                     border-radius: 4px;
                     background-color: transparent;
                 }
+                """
+        elif self._is_secondary:
+            # 2순위: 보조 뷰어 (주황색 테두리)
+            style = """
+                QFrame {
+                    border: 2px solid #ff9500;
+                    border-radius: 4px;
+                    background-color: transparent;
+                }
             """
         elif self.is_highlighted:
-            # 2순위: 영구 하이라이트 (노란색 테두리)
+            # 3순위: 영구 하이라이트 (노란색 테두리)
             style = """
                 QFrame {
                     border: 2px solid #FFD700;
@@ -366,7 +381,7 @@ class ThumbnailItem(QFrame):
                 }
             """
         elif self.is_temp_highlighted:
-            # 3순위: 임시 하이라이트 (밝은 녹색 테두리)
+            # 4순위: 임시 하이라이트 (밝은 녹색 테두리)
             style = """
                 QFrame {
                     border: 2px solid #2cda15;
@@ -375,7 +390,7 @@ class ThumbnailItem(QFrame):
                 }
             """
         else:
-            # 4순위: 일반 상태
+            # 5순위: 일반 상태
             style = """
                 QFrame {
                     border: 2px solid #3a3a3a;
@@ -385,7 +400,6 @@ class ThumbnailItem(QFrame):
                     border: 2px solid #555;
                 }
             """
-
         self.setStyleSheet(style)
 
 
@@ -431,7 +445,7 @@ class ThumbnailBar(QWidget):
     thumbnail_load_progress  = Signal(int, int)     # (완료된 수, 전체 수)
     thumbnail_load_finished  = Signal(int)          # 완료된 총 수
 
-    # [추가] Ctrl+클릭 / Shift+클릭 이벤트를 시그널로 전달
+    # Ctrl+클릭 / Shift+클릭 이벤트를 시그널로 전달
     # main_window가 수신하여 navigator를 직접 조작
     highlight_toggle_requested      = Signal(Path)          # Ctrl+클릭
     highlight_range_requested       = Signal(int, int, bool) # Shift+클릭 (start, end, is_ctrl)
@@ -443,9 +457,9 @@ class ThumbnailBar(QWidget):
     MAX_CONCURRENT_LOADS = 8   # 스레드 풀 최대 동시 작업 수
 
 
-# ============================================
-# 초기화
-# ============================================
+    # ============================================
+    # 초기화
+    # ============================================
 
     def __init__(
         self,
@@ -457,6 +471,7 @@ class ThumbnailBar(QWidget):
         self.cache_manager = cache_manager
         self.image_list: List[Path] = []
         self.current_index = -1
+        self._secondary_index: int = -1
         self.thumbnail_items: List[ThumbnailItem] = []
         self.highlighted_files: set = set()
         self.temp_highlighted_files: set = set()
@@ -478,7 +493,6 @@ class ThumbnailBar(QWidget):
         self._scroll_timer.setSingleShot(True)
         self._pending_scroll_index: Optional[int] = None
 
-        # Optional 제거 — 항상 초기화됨, Pylance Optional 오류 해소
         self._thumb_cache: HybridCache = HybridCache(
             namespace="thumbnails",
             max_memory_mb=thumb_memory_mb,
@@ -486,7 +500,7 @@ class ThumbnailBar(QWidget):
             expiry_days=0,
         )
 
-        self._init_ui()   # _thumb_cache 초기화 후 호출 (순서 보장)
+        self._init_ui() 
 
 
     def _init_ui(self) -> None:
@@ -606,9 +620,9 @@ class ThumbnailBar(QWidget):
         self.setFixedHeight(self.THUMBNAIL_SIZE + 60)
 
 
-# ============================================
-# 썸네일 목록 관리
-# ============================================
+    # ============================================
+    # 썸네일 목록 관리
+    # ============================================
 
     def _get_thumb_cache(self) -> 'HybridCache':
         """첫 실제 사용 시에만 DB 열기"""
@@ -647,7 +661,7 @@ class ThumbnailBar(QWidget):
                 widget.deleteLater()
         self.thumbnail_items.clear()
 
-        # ── 빈 목록 완전 초기화 (Bug D 수정) ─────────────────
+        # ── 빈 목록 완전 초기화 ─────────────────
         if not image_list:
             self.image_list               = []
             self.current_index            = -1
@@ -701,6 +715,30 @@ class ThumbnailBar(QWidget):
         debug_print(f"[set_image_list] END")
 
 
+    def set_secondary_index(self, index: int) -> None:
+        """
+        보조 뷰어 인덱스 갱신.
+        이전 항목 주황 테두리 해제 → 새 항목 주황 테두리 설정.
+        primary(파란 테두리)와 겹치면 primary 우선 (is_selected가 덮어씀).
+        """
+        # 이전 항목 해제
+        if 0 <= self._secondary_index < len(self.thumbnail_items):
+            self.thumbnail_items[self._secondary_index].set_secondary(False)
+
+        self._secondary_index = index
+
+        # 신규 항목 설정
+        if 0 <= index < len(self.thumbnail_items):
+            self.thumbnail_items[index].set_secondary(True)
+
+
+    def clear_secondary_index(self) -> None:
+        """보조 뷰어 인덱스 초기화."""
+        if 0 <= self._secondary_index < len(self.thumbnail_items):
+            self.thumbnail_items[self._secondary_index].set_secondary(False)
+        self._secondary_index = -1
+        
+
     def _start_thumbnail_loading(
         self, image_list: List[Path], current_gen: int
     ) -> None:
@@ -709,7 +747,7 @@ class ThumbnailBar(QWidget):
         
         def load_chunk(start: int):
             end = min(start + CHUNK_SIZE, len(image_list))
-            debug_print(f"[load_chunk] {start}-{end}/{len(image_list)}")
+            #debug_print(f"[load_chunk] {start}-{end}/{len(image_list)}")
             
             for i in range(start, end):
                 try:
@@ -759,12 +797,12 @@ class ThumbnailBar(QWidget):
 
         # ── 상태 클리어 ───────────────────────────────────────
         self.highlighted_files.discard(filepath)
-        self.temp_highlighted_files.discard(filepath)  # ← 기존 누락 수정
+        self.temp_highlighted_files.discard(filepath)  
 
         # ── 위젯 제거 ─────────────────────────────────────────
         if 0 <= remove_index < len(self.thumbnail_items):
             item = self.thumbnail_items.pop(remove_index)
-            item.set_selected(False)          # ← 하이라이트 즉시 해제
+            item.set_selected(False)  
             item.set_highlighted(False)
             item.set_temp_highlighted(False)
             self.thumbnail_layout.removeWidget(item)
@@ -804,7 +842,6 @@ class ThumbnailBar(QWidget):
 
         info_print(f"썸네일 제거됨: 인덱스 {remove_index}, {filepath.name}")
         return remove_index
-
 
 
     def update_file_name(self, old_path: Path, new_path: Path) -> bool:
@@ -855,9 +892,9 @@ class ThumbnailBar(QWidget):
         debug_print(f"썸네일 새로고침: {len(file_list)}개, 하이라이트 {len(self.highlighted_files)}개 유지")
 
 
-# ============================================
-# 썸네일 로딩
-# ============================================
+    # ============================================
+    # 썸네일 로딩
+    # ============================================
 
     def _load_thumbnail_async(
         self, index: int, file_path: Path, generation_id: int
@@ -871,7 +908,7 @@ class ThumbnailBar(QWidget):
                 index         = index,
                 file_path     = file_path,
                 size          = self.THUMBNAIL_SIZE,
-                cache         = self._get_thumb_cache(),   # ← 4개 파라미터 → 1개
+                cache         = self._get_thumb_cache(), 
                 bridge        = self._thumb_bridge,
                 generation_id = generation_id,
             )
@@ -886,7 +923,7 @@ class ThumbnailBar(QWidget):
     @Slot(int, QImage, int)
     def _on_thumbnail_loaded(self, index: int, qimage: QImage, genid: int) -> None:
         if genid != self._generation_id:
-            return  # 이전 세대 → 무시
+            return  
 
         # null 이미지(실패/취소)일 때는 픽스맵 설정 스킵, 카운터만 증가
         if not qimage.isNull():
@@ -903,9 +940,9 @@ class ThumbnailBar(QWidget):
             self.thumbnail_load_finished.emit(self._thumb_total)
 
 
-# ============================================
-# 선택 및 하이라이트
-# ============================================
+    # ============================================
+    # 선택 및 하이라이트
+    # ============================================
 
     def set_current_index(self, index: int) -> None:
         """선택 강조 + 중앙 스크롤"""
@@ -953,9 +990,9 @@ class ThumbnailBar(QWidget):
             item.set_highlighted(False)
 
 
-# ============================================
-# 임시 하이라이트 관리
-# ============================================
+    # ============================================
+    # 임시 하이라이트 관리
+    # ============================================
 
     def set_temp_highlights(self, files: List[Path]) -> None:
         """
@@ -989,7 +1026,7 @@ class ThumbnailBar(QWidget):
         info_print(f"썸네일바 임시 하이라이트 해제")
 
 
-   # ============================================
+    # ============================================
     # 스크롤 로직 — 타이머 1개 재사용
     # ============================================
 
@@ -1055,12 +1092,6 @@ class ThumbnailBar(QWidget):
     def _ensure_layout_and_scroll(self, target_index: int, retry_count: int = 0) -> None:
         """
         초기 로딩 후 레이아웃 완성을 기다려 스크롤 (set_image_list / reorder_for_sort용).
-
-        정리 내용:
-        - _do_scroll()에 레이아웃 대기 로직이 통합되었으므로
-            이 메서드는 단순히 _request_scroll()에 위임 가능.
-        - 단, 초기 로딩 시에는 레이아웃이 아직 계산되지 않으므로
-            _do_scroll()의 retry 메커니즘이 자동으로 처리함.
         """
         if not (0 <= target_index < len(self.thumbnail_items)):
             return
@@ -1081,9 +1112,9 @@ class ThumbnailBar(QWidget):
             self._request_scroll(target_index) 
 
 
-# ============================================
-# 클릭 이벤트
-# ============================================
+    # ============================================
+    # 클릭 이벤트
+    # ============================================
 
     @Slot(int)
     def _on_thumbnail_click(self, index: int) -> None:
@@ -1129,13 +1160,6 @@ class ThumbnailBar(QWidget):
     def _on_thumbnail_shift_click(self, index: int, is_ctrl_held: bool) -> None:
         """
         Shift+클릭 — 범위 하이라이트 처리.
-
-        수정 내용:
-        1. main_window 역참조 완전 제거
-        2. 로직을 MainWindow._on_highlight_range_requested()로 이동
-            → ThumbnailBar는 시그널만 emit, 상태 변경 책임 없음
-        3. UI 업데이트는 Navigator.highlights_set 시그널 수신
-            → on_highlights_set()이 1회 일괄 처리 (깜빡임 원천 제거)
         """
         if self.last_clicked_index == -1:
             # 처음 클릭 → Ctrl+클릭처럼 처리
@@ -1147,13 +1171,11 @@ class ThumbnailBar(QWidget):
 
         # 시그널만 emit — 로직은 MainWindow에서 처리
         self.highlight_range_requested.emit(start, end, is_ctrl_held)
-        # last_clicked_index는 이 위치에서 업데이트하지 않음
-        # → shift 연속 클릭 시 기준점(last_clicked_index) 유지
 
         
-# ============================================
-# 스크롤
-# ============================================
+    # ============================================
+    # 스크롤
+    # ============================================
 
     def _scroll_left(self) -> None:
         """왼쪽으로 스크롤"""
@@ -1193,9 +1215,9 @@ class ThumbnailBar(QWidget):
         return super().eventFilter(obj, event)
 
 
-# ============================================
-# UI 관련
-# ============================================
+    # ============================================
+    # UI 관련
+    # ============================================
 
     def contextMenuEvent(self, event: QContextMenuEvent) -> None:
         # 위치 정보만 시그널로 전달, 메뉴 생성은 MainWindow 책임
@@ -1208,9 +1230,6 @@ class ThumbnailBar(QWidget):
         - 위젯 파괴/재생성 없음 (기존 ThumbnailItem 재사용)
         - 메모리 캐시 유지 (clear_memory 미호출)
         - generation_id 유지 (진행 중 로딩 유지)
-
-        동일 파일 집합의 순서만 바뀔 때 사용.
-        파일 추가/삭제가 있으면 set_image_list() 사용.
         """
         # 파일 수가 달라진 경우 → 안전하게 전체 갱신
         if len(new_image_list) != len(self.image_list):

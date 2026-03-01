@@ -197,7 +197,7 @@ class ConfigManager(QObject):
 
     def set(self, key: str, value: Any) -> None:
         self.config[key] = value
-        debug_print(f"config.set [{key}] = {value}")
+        #debug_print(f"config.set [{key}] = {value}")
 
     # ─── UI 가시성 ───────────────────────────────────────────
 

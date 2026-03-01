@@ -97,12 +97,12 @@ class MetadataPanel(QWidget):
     DEFAULT_ZOOM = 15
 
     gps_clicked = Signal(float, float)  # (lat, lon)
-    map_zoom_changed = Signal(int)  # 지도 줌 변경
+    map_zoom_changed = Signal(int) 
     
 
-# ============================================
-# 초기화
-# ============================================
+    # ============================================
+    # 초기화
+    # ============================================
 
     def __init__(self, config: ConfigManager) -> None:
         super().__init__()
@@ -197,9 +197,9 @@ class MetadataPanel(QWidget):
         layout.addWidget(scroll_area)
         
 
-# ============================================
-# 메타데이터 로딩
-# ============================================
+    # ============================================
+    # 메타데이터 로딩
+    # ============================================
 
     def load_metadata(self, file_path: Optional[Path]) -> Dict[str, Any]:
         """메타데이터 로딩"""
@@ -264,9 +264,9 @@ class MetadataPanel(QWidget):
         return self.current_metadata
 
 
-# ============================================
-# 섹션 생성
-# ============================================
+    # ============================================
+    # 섹션 생성
+    # ============================================
 
     def _add_section(self, title: str, data: Dict[str, Any]) -> None:
         """섹션 추가"""
@@ -283,7 +283,7 @@ class MetadataPanel(QWidget):
         # 데이터
         for key, value in data.items():
             str_value = str(value)
-            # 컨테이너 위젯
+
             row_widget = QWidget()
             row = QHBoxLayout(row_widget)
             row.setContentsMargins(0, 0, 0, 0)
@@ -305,22 +305,19 @@ class MetadataPanel(QWidget):
             # Value 라벨
             value_label = ClickableLabel(str_value, copy_value=str_value)
             value_label.setStyleSheet("color: #fff; font-size: 10px;")
-            value_label.setWordWrap(True)  # WordWrap 활성화
-            value_label.setMaximumWidth(160)  # 최대 폭 (280 - 100 - 여백 = 160)
+            value_label.setWordWrap(True) 
+            value_label.setMaximumWidth(160) 
             value_label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
             
-            # SizePolicy 설정 (확장 가능하게)
             value_label.setSizePolicy(
-                QSizePolicy.Policy.Expanding,  # 가로 확장
-                QSizePolicy.Policy.Minimum     # 세로는 내용에 맞춤
+                QSizePolicy.Policy.Expanding,  
+                QSizePolicy.Policy.Minimum  
             )
             
-            # 파일명은 더 많은 높이 허용
             if key == "filename":
-                value_label.setMinimumHeight(20)  # 최소 높이
-                # 최대 높이는 제한하지 않음 (자동 확장)
+                value_label.setMinimumHeight(20)  
 
-            row.addWidget(value_label, 1)  # stretch=1 (확장)
+            row.addWidget(value_label, 1) 
             
             self.metadata_layout.addWidget(row_widget)
             self.metadata_widgets.append(row_widget)
@@ -573,9 +570,9 @@ class MetadataPanel(QWidget):
         map_layout.addWidget(attr_label)
         
 
-# ============================================
-# 위젯 정리
-# ============================================
+    # ============================================
+    # 위젯 정리
+    # ============================================
 
     def _clear_widgets(self) -> None:
         """
@@ -613,9 +610,9 @@ class MetadataPanel(QWidget):
                         self._clear_layout(nested_layout)
 
 
-# ============================================
-# 지도 관리
-# ============================================
+    # ============================================
+    # 지도 관리
+    # ============================================
 
     def stop_map_loader(self) -> None:
         """
@@ -630,7 +627,7 @@ class MetadataPanel(QWidget):
             return
 
         loader = self.map_loader
-        self.map_loader = None          # ① 참조 해제 → 지연 콜백 차단
+        self.map_loader = None  
 
         try:
             loader.map_loaded.disconnect(self._on_map_loaded)
@@ -645,8 +642,8 @@ class MetadataPanel(QWidget):
         except RuntimeError:
             pass
 
-        loader.cancel()                 # ② 취소 (WebView 해제 포함)
-        loader.deleteLater()            # ③ QObject C++ 메모리 해제
+        loader.cancel()      
+        loader.deleteLater()    
         debug_print("OFMMapLoader 취소 완료")
 
 
@@ -675,7 +672,6 @@ class MetadataPanel(QWidget):
             text_h  = metrics.height()
             margin  = 4
 
-            # attribution을 cropped 이미지 기준 우하단에 배치
             x = crop_w - text_w - margin
             y = crop_h - margin
 
@@ -723,7 +719,7 @@ class MetadataPanel(QWidget):
             return
 
         # ── 캐시 MISS → 프로그레스바 + WebView 시작 ──────────────────────
-        self.stop_map_loader()   # 이전 로더 정리
+        self.stop_map_loader() 
 
         try:
             self.map_progress.setVisible(False)
@@ -732,7 +728,7 @@ class MetadataPanel(QWidget):
             self.map_label.setPixmap(QPixmap())
             self.map_label.setText(t("metadata_panel.map_loading_zoom", zoom=self.current_zoom))
         except RuntimeError:
-            return  # 위젯이 이미 삭제된 경우
+            return 
 
         self.map_loader = OFMMapLoader(
             lat, lon,
@@ -758,7 +754,7 @@ class MetadataPanel(QWidget):
         """지도 클리어"""
         debug_print("clear_map() 호출")
 
-        self.stop_map_loader()  # 단일 진입점
+        self.stop_map_loader() 
 
         try:
             if self.map_label:
@@ -913,7 +909,7 @@ class MetadataPanel(QWidget):
         # 설정 저장은 여기서만
         self.config.set_gps_map_setting("default_zoom", self.current_zoom)
         self.config_save_timer.stop()
-        self.config_save_timer.start(200)   # 200ms 후 실제 파일 저장
+        self.config_save_timer.start(200) 
         self._load_map()            
 
 
@@ -959,7 +955,7 @@ class MetadataPanel(QWidget):
                     self.map_label.setPixmap(QPixmap())
                     self.map_label.setText(t('metadata_panel.map_placeholder'))
             except RuntimeError:
-                pass  # 위젯이 이미 소멸된 경우
+                pass
 
 
     def _save_config_delayed(self) -> None:

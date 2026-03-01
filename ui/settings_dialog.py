@@ -40,6 +40,16 @@ from utils.lang_manager import LangManager, t
 from utils.paths import get_cache_dir, get_thumb_cache_dir
 
 
+class ClickableLabel(QLabel):
+    clicked = Signal()
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+        super().mousePressEvent(event)
+
+
+
 class SettingsDialog(QDialog):
     """설정 다이얼로그"""
 
@@ -49,25 +59,19 @@ class SettingsDialog(QDialog):
         "Mozilla Firefox": r"C:\Program Files\Mozilla Firefox\firefox.exe"
     }
     
-    # BROWSER_NAMES = [
-    #     "시스템 기본",
-    #     "Microsoft Edge",
-    #     "Google Chrome",
-    #     "Mozilla Firefox",
-    #     "사용자 지정"
-    # ]
-
-    # BROWSER_NAMES 제거 — _create_browser_tab에서 t()로 직접 추가
-
-    settings_changed = Signal()  # 설정 변경 시그널
-    overlay_settings_changed = Signal()  # 오버레이 설정 변경 시그널
-    cache_settings_changed = Signal()  # 캐시 설정 변경 시그널
-    rendering_settings_changed = Signal()  # 렌더링 설정 변경 시그널 (추가)
+    settings_changed = Signal() 
+    overlay_settings_changed = Signal()
+    cache_settings_changed = Signal() 
+    rendering_settings_changed = Signal() 
     thumbnail_cache_clear_requested = Signal()
     tile_cache_clear_requested = Signal()
 
 
-    def __init__(self, config: ConfigManager, parent=None) -> None:
+    # ============================================
+    # 초기화 / UI 구성
+    # ============================================
+
+    def __init__(self, config: ConfigManager, parent=None) -> None:       
         super().__init__(parent)
         self.config = config
 
@@ -90,18 +94,13 @@ class SettingsDialog(QDialog):
         self._load_settings()
     
 
-# ============================================
-# 초기화
-# ============================================
-
     def _init_ui(self):
-        """UI 초기화"""
         layout = QVBoxLayout(self)
         
         # 탭 위젯
         tabs = QTabWidget()
         
-        # ===== 렌더링 설정 탭 추가 =====
+        # 렌더링 설정 탭
         rendering_tab = self._create_rendering_tab()
         tabs.addTab(rendering_tab, t('settings.tab_rendering'))
         
@@ -127,16 +126,16 @@ class SettingsDialog(QDialog):
         layout.addWidget(button_box)
 
 
-# ============================================
-# 탭 생성
-# ============================================
+    # ============================================
+    # 탭 생성
+    # ============================================
 
     def _create_rendering_tab(self) -> QWidget:
         """렌더링 설정 탭 (OpenGL/GPU 가속)"""
         widget = QWidget()
         layout = QVBoxLayout(widget)
         
-        # ===== OpenGL 설정 그룹 =====
+        # OpenGL 설정 그룹
         opengl_group = QGroupBox(t('settings.rendering.group_opengl'))
         opengl_layout = QVBoxLayout(opengl_group)
         
@@ -158,8 +157,8 @@ class SettingsDialog(QDialog):
         msaa_label = QLabel(t('settings.rendering.msaa_label'))
         self.msaa_combo = QComboBox()
         self.msaa_combo.addItems([t('settings.rendering.msaa_off'), "2x", "4x", "8x", "16x"])
-        self.msaa_combo.setCurrentIndex(2)  # 기본값: 4x
-        self.msaa_combo.setToolTip(t('settings.rendering.msaa_tooltip'))  # msaa_tooltip 키 추가
+        self.msaa_combo.setCurrentIndex(2)
+        self.msaa_combo.setToolTip(t('settings.rendering.msaa_tooltip')) 
         msaa_layout.addWidget(msaa_label)
         msaa_layout.addWidget(self.msaa_combo)
         msaa_layout.addStretch()
@@ -181,7 +180,7 @@ class SettingsDialog(QDialog):
         
         layout.addWidget(opengl_group)
         
-        # ===== 성능 정보 =====
+        # 성능 정보
         info_group = QGroupBox(t('settings.rendering.perf_group'))
         info_layout = QVBoxLayout(info_group)
         info_text = QLabel(t('settings.rendering.perf_text'))
@@ -200,7 +199,7 @@ class SettingsDialog(QDialog):
 
         layout.addWidget(info_group)
 
-        # ── 애니메이션 설정 ──────────────────────────────────────
+        # 애니메이션 설정
         anim_group = QGroupBox(t('settings.rendering.anim_group'))
         anim_form = QFormLayout(anim_group)
 
@@ -227,26 +226,8 @@ class SettingsDialog(QDialog):
         layout.addWidget(anim_group)
 
         layout.addStretch()
-
         return widget
-    
 
-    def _on_opengl_toggled(self, state: int):
-        """OpenGL 체크박스 상태 변경 시"""
-        enabled = (state == Qt.CheckState.Checked.value)
-        
-        # V-Sync와 MSAA는 OpenGL 활성화 시에만 의미가 있음
-        self.vsync_checkbox.setEnabled(enabled)
-        self.msaa_combo.setEnabled(enabled)
-        
-        if not enabled:
-            # 비활성화 시 회색으로 표시
-            self.vsync_checkbox.setStyleSheet("color: #666;")
-            self.msaa_combo.setStyleSheet("color: #666;")
-        else:
-            self.vsync_checkbox.setStyleSheet("")
-            self.msaa_combo.setStyleSheet("")
-    
 
     def _create_cache_tab(self) -> QWidget:
         """캐시 설정 탭"""
@@ -255,9 +236,9 @@ class SettingsDialog(QDialog):
         layout.setSpacing(8)
 
         self.thumb_cache_dir = get_thumb_cache_dir()
-        BASE = get_cache_dir()   # loclabel 표시용
+        BASE = get_cache_dir()
 
-        # ── 이미지 뷰어 캐시 ────────────────────────────────────
+        # 이미지 뷰어 캐시
         viewer_group = QGroupBox(t('settings.cache.viewer_group'))
         viewer_form = QFormLayout(viewer_group)
 
@@ -281,7 +262,7 @@ class SettingsDialog(QDialog):
 
         layout.addWidget(viewer_group)
 
-        # ── 하이브리드 캐시 용량 설정 ────────────────────────────
+        # 하이브리드 캐시 용량 설정
         hybrid_group = QGroupBox(t('settings.cache.hybrid_group'))
         hybrid_layout = QVBoxLayout(hybrid_group)
 
@@ -306,7 +287,7 @@ class SettingsDialog(QDialog):
         hybrid_layout.addWidget(thumb_sub)
 
         # 지도 타일 캐시
-        ofm_sub = QGroupBox(t('settings.cache.ofm_group'))   # "OFM 지도 캐시"
+        ofm_sub = QGroupBox(t('settings.cache.ofm_group'))
         ofm_form = QFormLayout(ofm_sub)
 
         self.ofm_memory_spin = QSpinBox()
@@ -325,7 +306,7 @@ class SettingsDialog(QDialog):
 
         self.ofm_expiry_spin = QSpinBox()
         self.ofm_expiry_spin.setRange(15, 365)
-        self.ofm_expiry_spin.setSuffix(t('settings.cache.ofm_expiry_suffix'))  # " 일"
+        self.ofm_expiry_spin.setSuffix(t('settings.cache.ofm_expiry_suffix'))
         self.ofm_expiry_spin.setToolTip(t('settings.cache.ofm_expiry_tooltip'))
         ofm_form.addRow(t('settings.cache.ofm_expiry'), self.ofm_expiry_spin)
 
@@ -345,8 +326,7 @@ class SettingsDialog(QDialog):
         hybrid_layout.addWidget(restart_label)
         layout.addWidget(hybrid_group)
 
-        # ── 캐시 폴더 관리 ───────────────────────────────────────
-
+        # 캐시 폴더 관리
         mgmt_group = QGroupBox(t('settings.cache.mgmt_group'))
         mgmt_layout = QVBoxLayout(mgmt_group)
         mgmt_layout.setSpacing(10)
@@ -400,7 +380,7 @@ class SettingsDialog(QDialog):
 
         # 지도 타일 캐시 행
         ofm_row = QHBoxLayout()
-        ofm_icon = QLabel(t('settings.cache.ofm_label'))    # "지도 렌더 캐시"
+        ofm_icon = QLabel(t('settings.cache.ofm_label'))  
         ofm_icon.setStyleSheet("font-weight: bold; color: #ccc;")
         ofm_icon.setMinimumWidth(130)
         ofm_row.addWidget(ofm_icon)
@@ -414,7 +394,7 @@ class SettingsDialog(QDialog):
         ofm_refresh.clicked.connect(self._refresh_tile_cache_size)
         ofm_row.addWidget(ofm_refresh)
 
-        ofm_clear_btn = QPushButton(t('settings.cache.clear_ofm'))   # "캐시 삭제"
+        ofm_clear_btn = QPushButton(t('settings.cache.clear_ofm')) 
         ofm_clear_btn.setFixedWidth(110)
         ofm_clear_btn.setStyleSheet(self._danger_btn_style())
         ofm_clear_btn.clicked.connect(self._clear_tile_cache)
@@ -474,7 +454,6 @@ class SettingsDialog(QDialog):
         browser_layout = QVBoxLayout(browser_group)
         
         self.browser_combo = QComboBox()
-        # 인덱스 기반 비교를 위해 개별 addItem 사용 (텍스트 비교 금지)
         self.browser_combo.addItem(t('settings.browser.system_default'))  # index 0
         self.browser_combo.addItem("Microsoft Edge")                        # index 1
         self.browser_combo.addItem("Google Chrome")                         # index 2
@@ -503,12 +482,11 @@ class SettingsDialog(QDialog):
 
     def _create_overlay_tab(self) -> QWidget:
 
-        # widget/layout은 딱 한 번만 생성
         widget = QWidget()
         layout = QVBoxLayout(widget)
         layout.setSpacing(8)
 
-        # ── 언어 설정 그룹 ─────────────────────────────────────────
+        # 언어 설정 그룹
         lang_group = QGroupBox(t('settings.language.group_title'))
         lang_layout = QHBoxLayout(lang_group)
 
@@ -535,8 +513,7 @@ class SettingsDialog(QDialog):
         lang_layout.addWidget(lang_hint)
         layout.addWidget(lang_group) 
 
-        # ── 안내 라벨 ──────────────────────────────────────────────
-        # widget/layout 재생성 없이 바로 이어서 추가
+        # 안내 라벨
         info = QLabel(t('settings.overlay.info_text'))
         info.setWordWrap(True)
         info.setStyleSheet("""
@@ -546,7 +523,7 @@ class SettingsDialog(QDialog):
         """)
         layout.addWidget(info)
 
-        # ── 표시 항목 그룹 ─────────────────────────────────────────
+        # 표시 항목 그룹
         show_group = QGroupBox(t('settings.overlay.group_items'))
         show_layout = QVBoxLayout(show_group)
         self.show_file_info   = QCheckBox(t('settings.overlay.file_info'))
@@ -560,7 +537,7 @@ class SettingsDialog(QDialog):
             show_layout.addWidget(cb)
         layout.addWidget(show_group)
 
-        # ── 외관 그룹 ──────────────────────────────────────────────
+        # 외관 그룹
         SLIDER_STYLE = """
             QSlider::groove:horizontal {
                 height:6px; background:#3b3b3b;
@@ -573,11 +550,14 @@ class SettingsDialog(QDialog):
             QSlider::handle:horizontal:hover { background:#6bb4ff; }
             QSlider::sub-page:horizontal { background:#4a9eff; border-radius:3px; }
         """
-        VALUE_LABEL_STYLE = """
+
+        VALUE_LABEL_CLICK_STYLE = """
             QLabel { color:#4a9eff; font-size:11px; font-weight:bold;
                     padding:4px; background:#3b3b3b; border:1px solid #555;
                     border-radius:3px; min-width:42px; }
+            QLabel:hover { border:1px solid rgba(74,158,255,180); background:#404040; }
         """
+
         FORM_LABEL_STYLE = "QLabel { color:#ccc; font-size:11px; min-width:80px; }"
 
         appear_group = QGroupBox(t('settings.overlay.group_appearance'))
@@ -596,11 +576,18 @@ class SettingsDialog(QDialog):
         self.overlay_scale_slider.setRange(50, 200)
         self.overlay_scale_slider.setTickInterval(25)
         self.overlay_scale_slider.setStyleSheet(SLIDER_STYLE)
-        self.overlay_scale_value_label = QLabel("100%")
+
+        self.overlay_scale_value_label = ClickableLabel("100%")
         self.overlay_scale_value_label.setFixedWidth(48)
         self.overlay_scale_value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.overlay_scale_value_label.setStyleSheet(VALUE_LABEL_STYLE)
+        self.overlay_scale_value_label.setStyleSheet(VALUE_LABEL_CLICK_STYLE)
+        self.overlay_scale_value_label.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.overlay_scale_value_label.setToolTip("Reset to 100% on click")        
+
         self.overlay_scale_slider.valueChanged.connect(self._on_scale_preview)
+        self.overlay_scale_value_label.clicked.connect(
+            lambda: self.overlay_scale_slider.setValue(100)
+        )
         appear_layout.addLayout(
             make_slider_row(t('settings.overlay.scale'), self.overlay_scale_slider,
                             self.overlay_scale_value_label))
@@ -609,11 +596,18 @@ class SettingsDialog(QDialog):
         self.overlay_opacity_slider.setRange(10, 100)
         self.overlay_opacity_slider.setTickInterval(10)
         self.overlay_opacity_slider.setStyleSheet(SLIDER_STYLE)
-        self.overlay_opacity_value_label = QLabel("80%")
+
+        self.overlay_opacity_value_label = ClickableLabel("80%")
         self.overlay_opacity_value_label.setFixedWidth(48)
         self.overlay_opacity_value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.overlay_opacity_value_label.setStyleSheet(VALUE_LABEL_STYLE)
+        self.overlay_opacity_value_label.setStyleSheet(VALUE_LABEL_CLICK_STYLE)
+        self.overlay_opacity_value_label.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.overlay_opacity_value_label.setToolTip("Reset to 100% on click")      
+
         self.overlay_opacity_slider.valueChanged.connect(self._on_opacity_preview)
+        self.overlay_opacity_value_label.clicked.connect(
+            lambda: self.overlay_opacity_slider.setValue(100)
+        )
         appear_layout.addLayout(make_slider_row(t('settings.overlay.opacity'), self.overlay_opacity_slider,
                             self.overlay_opacity_value_label))
 
@@ -659,9 +653,29 @@ class SettingsDialog(QDialog):
                 break
 
 
-# ============================================
-# 브라우저 관련
-# ============================================
+    # ============================================
+    # 렌더링 설정 관련
+    # ============================================    
+
+    def _on_opengl_toggled(self, state: int):
+        """OpenGL 체크박스 상태 변경 시"""
+        enabled = (state == Qt.CheckState.Checked.value)
+        
+        # V-Sync와 MSAA는 OpenGL 활성화 시에만 의미가 있음
+        self.vsync_checkbox.setEnabled(enabled)
+        self.msaa_combo.setEnabled(enabled)
+        
+        if not enabled:
+            self.vsync_checkbox.setStyleSheet("color: #666;")
+            self.msaa_combo.setStyleSheet("color: #666;")
+        else:
+            self.vsync_checkbox.setStyleSheet("")
+            self.msaa_combo.setStyleSheet("")
+
+
+    # ============================================
+    # 브라우저 관련
+    # ============================================
 
     def _on_browser_changed(self, text: str):
         """브라우저 선택 변경"""
@@ -711,13 +725,13 @@ class SettingsDialog(QDialog):
         return True
 
 
-# ============================================
-# 설정 로드/저장
-# ============================================
+    # ============================================
+    # 설정 로드/저장
+    # ============================================
 
     def _load_settings(self):
         """설정 불러오기"""
-        # ===== 렌더링 설정 로드 =====
+        # 렌더링 설정 로드
         use_opengl = self.config.get_rendering_setting('use_opengl', True)
         self.opengl_checkbox.setChecked(use_opengl)
         
@@ -761,7 +775,6 @@ class SettingsDialog(QDialog):
         browser_path = self.config.get('browser.path', 'system_default')
         
         # 역 매핑 생성 (경로 → 인덱스)
-        #path_to_index = {path: idx for idx, (name, path) in enumerate(self.BROWSER_PATHS.items(), 1)}
         path_to_index = {p: idx for idx, (_, p) in enumerate(self.BROWSER_PATHS.items(), 1)}
         path_to_index['system_default'] = 0
         
@@ -774,7 +787,7 @@ class SettingsDialog(QDialog):
             self.browser_path_edit.setEnabled(False)
         else:
             # 사용자 지정
-            self.browser_combo.setCurrentIndex(4)  # "사용자 지정"
+            self.browser_combo.setCurrentIndex(4)
             self.browser_path_edit.setText(browser_path)
             self.browser_path_edit.setEnabled(True)
         
@@ -811,23 +824,22 @@ class SettingsDialog(QDialog):
         self.overlay_position.setCurrentIndex(pos_map.get(cur_pos, 0))
 
 
-
     def accept(self):
         """확인 버튼 - 모든 설정 저장"""
 
         cache_changed = False
         overlay_changed = False
-        rendering_changed = False  # 렌더링 변경 플래그 추가
+        rendering_changed = False
         needs_restart = False
 
         # 언어 설정 저장
-        lang_code = self.lang_combo.currentData()  # userData 반환
+        lang_code = self.lang_combo.currentData()
         old_lang = self.config.get('ui.language', 'auto')
         if old_lang != lang_code:
             self.config.set('ui.language', lang_code)
             needs_restart = True   # 언어 변경은 항상 재시작 필요
             
-        # ===== 렌더링 설정 저장 =====
+        # 렌더링 설정 저장
         rendering_settings = [
             ('use_opengl', self.opengl_checkbox.isChecked(), True),
             ('vsync', self.vsync_checkbox.isChecked(), True),
@@ -950,7 +962,7 @@ class SettingsDialog(QDialog):
             self.overlay_settings_changed.emit()
             debug_print(f"오버레이 설정 변경됨")
         
-        # ===== 렌더링 설정 변경 시그널 =====
+        # 렌더링 설정 변경 시그널
         if rendering_changed:
             self.rendering_settings_changed.emit()
             debug_print(f"렌더링 설정 변경됨")
@@ -970,16 +982,40 @@ class SettingsDialog(QDialog):
         super().accept()
 
 
+    def reject(self) -> None:
+        """취소 클릭 시 라이브 프리뷰로 바뀐 값을 원복"""
+        self._preview_timer.stop()
+        self.config.set("overlay.scale", self._orig_scale)
+        self.config.set_overlay_setting("opacity", self._orig_opacity)
+        # 원복 신호 → MainWindow가 즉시 재적용
+        self.overlay_settings_changed.emit()
+        super().reject()       
+
+
+    # ============================================
+    # 오버레이 실시간 프리뷰
+    # ============================================
+
+    def _on_scale_preview(self, v: int) -> None:
+        """크기 슬라이더 실시간 반영 (debounce 80ms)"""
+        self.overlay_scale_value_label.setText(f"{v}%")
+        self.config.set("overlay.scale", v) 
+        self._preview_timer.start(80)  
+
+
+    def _on_opacity_preview(self, v: int) -> None:
+        """투명도 슬라이더 실시간 반영 (debounce 80ms)"""
+        self.overlay_opacity_value_label.setText(f"{v}%")
+        self.config.set_overlay_setting("opacity", v / 100.0)
+        self._preview_timer.start(80)
+
+
+    # ============================================
+    # 캐시 용량 계산 / 표시
+    # ============================================
+
     def _calculate_folder_size(self, folder_path: Path) -> int:
-        """
-        폴더의 총 용량 계산 (바이트)
-        
-        Args:
-            folder_path: 계산할 폴더 경로
-        
-        Returns:
-            총 용량 (바이트)
-        """
+
         total_size = 0
         try:
             if not folder_path.exists():
@@ -998,15 +1034,7 @@ class SettingsDialog(QDialog):
 
 
     def _format_file_size(self, size_bytes: int) -> str:
-        """
-        파일 크기를 읽기 쉬운 형식으로 변환
-        
-        Args:
-            size_bytes: 바이트 단위 크기
-        
-        Returns:
-            변환된 문자열 (예: "1.5 GB")
-        """
+
         size = float(size_bytes)
         
         for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
@@ -1017,47 +1045,6 @@ class SettingsDialog(QDialog):
         return f"{size:.2f} PB"
 
 
-    def _open_cache_folder(self, cache_dir: Path) -> None:
-        """
-        캐시 폴더를 파일 탐색기에서 열기
-        
-        Args:
-            cache_dir: 캐시 디렉토리 경로
-        """
-        try:
-            # 폴더가 없으면 생성
-            if not cache_dir.exists():
-                cache_dir.mkdir(parents=True, exist_ok=True)
-            
-            if platform.system() == 'Windows':
-                subprocess.run(['explorer', str(cache_dir)])
-            elif platform.system() == 'Darwin':  # macOS
-                subprocess.run(['open', str(cache_dir)])
-            else:  # Linux
-                subprocess.run(['xdg-open', str(cache_dir)])
-            
-            info_print(f"캐시 폴더 열기: {cache_dir}")
-        except Exception as e:
-            error_print(f"폴더 열기 실패: {e}")
-            QMessageBox.warning(
-                self,
-                t('dialog.folder_open_error_title'),
-                t('dialog.folder_open_error_msg', error=e),
-            )
-
-
-    def _danger_btn_style(self) -> str:
-        return """
-            QPushButton {
-                background-color: #d32f2f; color: white;
-                padding: 5px 10px; border: none;
-                border-radius: 4px; font-weight: bold;
-            }
-            QPushButton:hover   { background-color: #f44336; }
-            QPushButton:pressed { background-color: #b71c1c; }
-        """
-
-    # ── 용량 표시 ────────────────────────────────────────────────
     def _refresh_cache_size(self, cache_dir: Path, label: QLabel) -> None:
         """특정 캐시 디렉토리 용량을 label 에 표시"""
 
@@ -1080,7 +1067,58 @@ class SettingsDialog(QDialog):
 
         QTimer.singleShot(0, _calc)
 
-    # ── 썸네일 캐시 삭제 ─────────────────────────────────────────
+
+    def _refresh_tile_cache_size(self) -> None:
+        """ofm_rendered/ 크기를 ofm_size_label에 표시"""
+        self.ofm_size_label.setText(t('settings.cache.calculating'))
+        self.ofm_size_label.setStyleSheet("color: #888;")
+
+        def _calc():
+            ofm_bytes = self._calculate_folder_size(self._ofm_cache_dir)
+            ofm_files = len(list(self._ofm_cache_dir.glob("*.cache"))) \
+                        if self._ofm_cache_dir.exists() else 0
+
+            size_str = self._format_file_size(ofm_bytes)
+            self.ofm_size_label.setText(f"{size_str}  ({ofm_files:,} files)")
+
+            if ofm_bytes > 400 * 1024 * 1024:
+                self.ofm_size_label.setStyleSheet("color: #ff5252; font-weight: bold;")
+            elif ofm_bytes > 100 * 1024 * 1024:
+                self.ofm_size_label.setStyleSheet("color: #ff9800; font-weight: bold;")
+            else:
+                self.ofm_size_label.setStyleSheet("color: #4caf50; font-weight: bold;")
+
+        QTimer.singleShot(0, _calc)
+
+
+    # ============================================
+    # 캐시 삭제 / 폴더 관리
+    # ============================================
+
+    def _open_cache_folder(self, cache_dir: Path) -> None:
+
+        try:
+            # 폴더가 없으면 생성
+            if not cache_dir.exists():
+                cache_dir.mkdir(parents=True, exist_ok=True)
+            
+            if platform.system() == 'Windows':
+                subprocess.run(['explorer', str(cache_dir)])
+            elif platform.system() == 'Darwin':  # macOS
+                subprocess.run(['open', str(cache_dir)])
+            else:  # Linux
+                subprocess.run(['xdg-open', str(cache_dir)])
+            
+            info_print(f"캐시 폴더 열기: {cache_dir}")
+        except Exception as e:
+            error_print(f"폴더 열기 실패: {e}")
+            QMessageBox.warning(
+                self,
+                t('dialog.folder_open_error_title'),
+                t('dialog.folder_open_error_msg', error=e),
+            )
+
+
     def _clear_thumbnail_cache(self) -> None:
         reply = QMessageBox.question(
             self,
@@ -1106,7 +1144,7 @@ class SettingsDialog(QDialog):
         self._refresh_cache_size(self._thumb_cache_dir, self.thumb_size_label)
         info_print("썸네일 캐시 삭제 완료")
 
-    # ── 지도 타일 캐시 삭제 ──────────────────────────────────────
+
     def _clear_tile_cache(self) -> None:
         reply = QMessageBox.question(
             self,
@@ -1134,30 +1172,7 @@ class SettingsDialog(QDialog):
         info_print("OFM 렌더 캐시 삭제 완료")
 
 
-    def _refresh_tile_cache_size(self) -> None:
-        """ofm_rendered/ 크기를 ofm_size_label에 표시"""
-        self.ofm_size_label.setText(t('settings.cache.calculating'))
-        self.ofm_size_label.setStyleSheet("color: #888;")
-
-        def _calc():
-            ofm_bytes = self._calculate_folder_size(self._ofm_cache_dir)
-            ofm_files = len(list(self._ofm_cache_dir.glob("*.cache"))) \
-                        if self._ofm_cache_dir.exists() else 0
-
-            size_str = self._format_file_size(ofm_bytes)
-            self.ofm_size_label.setText(f"{size_str}  ({ofm_files:,} files)")
-
-            if ofm_bytes > 400 * 1024 * 1024:
-                self.ofm_size_label.setStyleSheet("color: #ff5252; font-weight: bold;")
-            elif ofm_bytes > 100 * 1024 * 1024:
-                self.ofm_size_label.setStyleSheet("color: #ff9800; font-weight: bold;")
-            else:
-                self.ofm_size_label.setStyleSheet("color: #4caf50; font-weight: bold;")
-
-        QTimer.singleShot(0, _calc)
-
-
-    # ── 디렉토리 삭제 + 재생성 ────────────────────────────────────
+    # 디렉토리 삭제 + 재생성
     def _delete_cache_dir(self, cache_dir: Path) -> int:
         """캐시 디렉토리 내용 전체 삭제 후 빈 디렉토리 재생성. 확보된 바이트 반환."""
 
@@ -1172,26 +1187,18 @@ class SettingsDialog(QDialog):
         return deleted_bytes
 
 
-    def reject(self) -> None:
-        """취소 클릭 시 라이브 프리뷰로 바뀐 값을 원복"""
-        self._preview_timer.stop()
-        self.config.set("overlay.scale", self._orig_scale)
-        self.config.set_overlay_setting("opacity", self._orig_opacity)
-        # 원복 신호 → MainWindow가 즉시 재적용
-        self.overlay_settings_changed.emit()
-        super().reject()       
+    # ============================================
+    # 스타일 유틸리티
+    # ============================================
 
-
-    def _on_scale_preview(self, v: int) -> None:
-        """크기 슬라이더 실시간 반영 (debounce 80ms)"""
-        self.overlay_scale_value_label.setText(f"{v}%")
-        self.config.set("overlay.scale", v)          # config 임시 저장
-        self._preview_timer.start(80)                # debounce → emit
-
-
-    def _on_opacity_preview(self, v: int) -> None:
-        """투명도 슬라이더 실시간 반영 (debounce 80ms)"""
-        self.overlay_opacity_value_label.setText(f"{v}%")
-        self.config.set_overlay_setting("opacity", v / 100.0)
-        self._preview_timer.start(80)
+    def _danger_btn_style(self) -> str:
+        return """
+            QPushButton {
+                background-color: #d32f2f; color: white;
+                padding: 5px 10px; border: none;
+                border-radius: 4px; font-weight: bold;
+            }
+            QPushButton:hover   { background-color: #f44336; }
+            QPushButton:pressed { background-color: #b71c1c; }
+        """
 

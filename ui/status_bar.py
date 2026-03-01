@@ -3,16 +3,6 @@
 
 """
 상태바 모듈 - 완전 재구현 (멀티태스크 + FloatingToast + PulseGauge)
-
-구성:
-  SortMenuButton        : 파일 정렬 드롭업 버튼
-  FloatingToast         : 완료 알림 애니메이션 위젯 (fade-up-out)
-  ToastManager          : FloatingToast 생명주기·스태킹 관리
-  PulseGaugeWidget      : Pulse(불확정) + Gauge(확정) 단일 위젯
-  StatusProgressWidget  : 우측 고정 240px — TaskQueue + PulseGauge 통합
-  PerfOverlayWidget     : 성능 정보 플로팅 라벨 (타이틀바 하단 우상단)
-  AppStatusBar          : QStatusBar 래퍼 (위젯 생성·레이아웃)
-  StatusBarController   : MainWindow ↔ AppStatusBar 브릿지 (로직 전담)
 """
 
 from __future__ import annotations
@@ -42,6 +32,7 @@ from PySide6.QtWidgets import (
     QStatusBar,
     QVBoxLayout,
     QWidget,
+    QSizePolicy
 )
 
 from core.folder_navigator import SortOrder
@@ -60,9 +51,7 @@ class TaskPriority(IntEnum):
     THUMB    = 3   # 썸네일 로딩 (백그라운드)
 
 
-# 우선순위별 색상 (게이지 fill 색)
 _PRIORITY_COLORS: dict[TaskPriority, tuple[str, str]] = {
-    #                          fill_color   anim_color(pulse)
     TaskPriority.FILE_OP: ("#c0782a", "#e09040"),
     TaskPriority.SORT:    ("#2a7cc0", "#4a9eff"),
     TaskPriority.SCAN:    ("#2a9c6a", "#3ac88a"),
@@ -83,7 +72,7 @@ class TaskInfo:
     priority:  TaskPriority
     text:      str       = ""
     current:   int       = 0
-    total:     int       = 0   # 0 = 불확정
+    total:     int       = 0 
     active:    bool      = True
 
 
@@ -118,7 +107,7 @@ class StatusMessageOverlay(QLabel):
     def __init__(self, main_window: QWidget, statusbar: "QStatusBar") -> None:
         super().__init__(main_window)
         self._mw = main_window
-        self._sb = statusbar            # 위치 계산 기준 위젯
+        self._sb = statusbar 
 
         self.setStyleSheet(self._STYLE)
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
@@ -134,7 +123,6 @@ class StatusMessageOverlay(QLabel):
         self._hide_timer.setSingleShot(True)
         self._hide_timer.timeout.connect(self._start_fadeout)
 
-    # ── 공개 API ──────────────────────────────────────────────
 
     def show_message(self, text: str, duration: int = 2000) -> None:
         """임시 메시지 표시. 중복 호출 시 타이머 재시작."""
@@ -148,7 +136,6 @@ class StatusMessageOverlay(QLabel):
         self.raise_()
         self._reposition()
 
-        # fade-in
         self._fade_anim.setDuration(150)
         self._fade_anim.setStartValue(self._opacity_eff.opacity())
         self._fade_anim.setEndValue(1.0)
@@ -156,6 +143,7 @@ class StatusMessageOverlay(QLabel):
         self._fade_anim.start()
 
         self._hide_timer.start(duration)
+
 
     def hide_immediate(self) -> None:
         """즉시 숨김 (하위 호환)."""
@@ -165,7 +153,6 @@ class StatusMessageOverlay(QLabel):
         self._opacity_eff.setOpacity(0.0)
         self.setVisible(False)
 
-    # ── 내부 ──────────────────────────────────────────────────
 
     def _reposition(self) -> None:
         """상태바 바로 위, 수평 중앙에 배치."""
@@ -255,10 +242,9 @@ class SortMenuButton(QPushButton):
         }
     """
 
-    # 버튼 텍스트용 약식 레이블
     _SHORT_LABELS: dict[tuple[str, bool], str] = {
         ("highlight",    False): "⭐",
-        ("name",         False): "⇅",   # 기본값 — 원래 아이콘 유지
+        ("name",         False): "⇅", 
         ("name",         True):  "Az",
         ("created",      True):  "📅",
         ("created",      False): "📅",
@@ -271,17 +257,18 @@ class SortMenuButton(QPushButton):
         ("camera_model", False): "📷",
     }
 
+
     def __init__(self, parent=None, widget_height: int = 26) -> None:
         super().__init__("⇅", parent)
         self.setToolTip(t('statusbar.sort_btn_tooltip'))
         self.setStyleSheet(self._STYLE)
         self.setFixedSize(37, widget_height) 
 
-        # (sort_type, reverse) → QAction 참조 보관
         self._action_map: dict[tuple[str, bool], QAction] = {}
 
         self._menu = self._build_menu()
         self.clicked.connect(self._show_menu)
+
 
     def _build_menu(self) -> QMenu:
         from PySide6.QtGui import QAction  # 지역 임포트 (순환 방지)
@@ -314,6 +301,7 @@ class SortMenuButton(QPushButton):
 
         return m
 
+
     def _apply_check(self, sort_type: str, reverse: bool) -> None:
         """기존 체크 전부 해제 → 해당 항목만 체크."""
         for action in self._action_map.values():
@@ -321,6 +309,7 @@ class SortMenuButton(QPushButton):
         target = self._action_map.get((sort_type, reverse))
         if target:
             target.setChecked(True)
+
 
     def update_active_sort(self, sort_type: str, reverse: bool) -> None:
         """
@@ -330,6 +319,7 @@ class SortMenuButton(QPushButton):
         self._apply_check(sort_type, reverse)
         label = self._SHORT_LABELS.get((sort_type, reverse), "⇅")
         self.setText(label)
+
 
     def _show_menu(self) -> None:
         pos = self.mapToGlobal(QPoint(0, 0))
@@ -367,8 +357,10 @@ class ZoomMenuButton(QPushButton):
         self._menu = self._build_menu()
         self.clicked.connect(self._show_menu)
 
+
     def _apply_style(self, color: str) -> None:
         self.setStyleSheet(self._BASE_STYLE.format(color=color))
+
 
     def _build_menu(self) -> QMenu:
         m = QMenu(self)
@@ -406,10 +398,12 @@ class ZoomMenuButton(QPushButton):
         _add(t('statusbar.zoom_menu.actual'), "actual")
         return m
 
+
     def _show_menu(self) -> None:
         pos = self.mapToGlobal(QPoint(0, 0))
         mh  = self._menu.sizeHint().height()
         self._menu.exec(QPoint(pos.x(), pos.y() - mh))
+
 
     def update_zoom(self, zoom_factor: float) -> None:
         pct   = int(zoom_factor * 100)
@@ -446,13 +440,13 @@ class FloatingToast(QLabel):
         }}
     """
 
-    finished = Signal(object)   # self 전달 → ToastManager 에서 제거
+    finished = Signal(object) 
 
 
     def __init__(
         self,
         text:   str,
-        color:  str,     # 테두리·아이콘 강조색
+        color:  str, 
         parent: QWidget,
     ) -> None:
         super().__init__(text, parent)
@@ -460,13 +454,12 @@ class FloatingToast(QLabel):
         self.adjustSize()
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
 
-        # Opacity effect
         self._opacity_eff = QGraphicsOpacityEffect(self)
         self._opacity_eff.setOpacity(0.0)
         self.setGraphicsEffect(self._opacity_eff)
 
         self._color = color
-        self._start_y = 0   # ToastManager 에서 설정
+        self._start_y = 0
 
         self._run()
 
@@ -596,11 +589,6 @@ class PulseGaugeWidget(QWidget):
     확정 모드 (total > 0):
         좌→우 직선 rect 게이지 채움 (Stripe 없음)
         애니메이션 타이머 정지
-
-    공통:
-        - 테두리 없음 (활성 시 fill_color 1px 테두리)
-        - setVisible() 호출 없음 → QGraphicsOpacityEffect 로만 전환
-          (레이아웃 절대 변경 없음)
     """
 
     _PULSE_PERIOD_MS = 1200    # 맥동 주기 ms
@@ -646,7 +634,7 @@ class PulseGaugeWidget(QWidget):
         self.setFixedHeight(26)
         self.setMinimumWidth(250)
 
-    # ── 공개 API ──────────────────────────────────────────────
+    # 공개 API
 
     def set_task(
         self,
@@ -666,7 +654,7 @@ class PulseGaugeWidget(QWidget):
         if total == 0:
             # 불확정 → Pulse 시작
             self._elapsed_ms = 0
-            self._pulse_opacity = self._PULSE_MAX   # ← 추가
+            self._pulse_opacity = self._PULSE_MAX  
             if not self._pulse_timer.isActive():
                 self._pulse_timer.start()
         else:
@@ -708,16 +696,16 @@ class PulseGaugeWidget(QWidget):
         self._pulse_timer.stop()
         self._opacity_eff.setOpacity(0.0)
 
-    # ── 내부 ──────────────────────────────────────────────────
+
+    # 내부
 
     def _tick(self) -> None:
         self._elapsed_ms = (
             self._elapsed_ms + self._TIMER_INTERVAL
         ) % self._PULSE_PERIOD_MS
 
-        # 변수명 phase로 변경 — lang_manager.t 음영화 방지
-        phase = self._elapsed_ms / self._PULSE_PERIOD_MS          # 0.0 ~ 1.0
-        v = (math.sin(phase * 2 * math.pi - math.pi / 2) + 1) / 2  # 0.0 ~ 1.0
+        phase = self._elapsed_ms / self._PULSE_PERIOD_MS      
+        v = (math.sin(phase * 2 * math.pi - math.pi / 2) + 1) / 2 
         self._pulse_opacity = (
             self._PULSE_MIN + (self._PULSE_MAX - self._PULSE_MIN) * v
         )
@@ -816,12 +804,12 @@ class StatusProgressWidget(QWidget):
 
         self._queue: dict[TaskPriority, TaskInfo] = {}
         self._current_priority: Optional[TaskPriority] = None
-        self._toast_mgr: Optional[ToastManager] = None   # connect() 로 주입
+        self._toast_mgr: Optional[ToastManager] = None  
 
     def set_toast_manager(self, mgr: ToastManager) -> None:
         self._toast_mgr = mgr
 
-    # ── 태스크 시작 ───────────────────────────────────────────
+    # 태스크 시작
 
     def task_start(self, priority: TaskPriority, text: str, total: int = 0) -> None:
         """태스크 시작 등록."""
@@ -830,7 +818,7 @@ class StatusProgressWidget(QWidget):
         )
         self._refresh()
 
-    # ── 태스크 진행 ───────────────────────────────────────────
+    # 태스크 진행
 
     def task_progress(
         self, priority: TaskPriority, text: str, current: int, total: int
@@ -847,7 +835,7 @@ class StatusProgressWidget(QWidget):
         if priority == self._current_priority:
             self._gauge.update_progress(text, current, total)
 
-    # ── 태스크 완료 ───────────────────────────────────────────
+    # 태스크 완료
 
     def task_finish(
         self,
@@ -873,7 +861,7 @@ class StatusProgressWidget(QWidget):
                 self._toast_mgr.show(toast_text, priority)
             del self._queue[priority]
 
-    # ── 내부 로직 ─────────────────────────────────────────────
+    # 내부 로직
 
     def _refresh(self) -> None:
         """큐에서 가장 높은 우선순위 active 태스크를 선택해 표시."""
@@ -953,7 +941,7 @@ class PerfOverlayWidget(QLabel):
 
     def reposition(self) -> None:
         p = self.parent()
-        if not isinstance(p, QWidget):  # QObject → QWidget 타입 가드
+        if not isinstance(p, QWidget):
             return
         self.adjustSize()
         x = p.width() - self.width() - self._MARGIN_RIGHT
@@ -968,25 +956,11 @@ class PerfOverlayWidget(QLabel):
 class AppStatusBar:
     """
     QStatusBar 와 그 안의 모든 위젯을 생성·배치하는 팩토리 클래스.
-
-    Public Attributes:
-        statusbar              : QStatusBar
-        status_message_label   : 임시 메시지 라벨
-        status_message_timer   : 자동 숨김 타이머
-        progress_label         : 파일 번호 라벨
-        zoom_label             : 줌 수준 QPushButton
-        fit_btn                : 창 맞춤 QPushButton
-        sort_btn               : SortMenuButton
-        rotate_left/right/reset/apply_btn
-        open_file_btn          : 파일 열기 QPushButton
-        progress_widget        : StatusProgressWidget (우측 고정)
-        left_container         : 좌측 QWidget
     """
 
     _BAR_H    = 36 
-    _WIDGET_H = 26 
+    _WIDGET_H = 30 
 
-    # padding 에서 상하값 제거 (setFixedHeight 가 높이를 강제하므로 불필요)
     _BTN_STYLE = """
         QPushButton {
             color: #ccc;
@@ -1006,6 +980,7 @@ class AppStatusBar:
             background: rgba(74, 158, 255, 0.30);
         }
     """
+
     _LABEL_STYLE = """
         QLabel {
             color: #aaa;
@@ -1017,7 +992,9 @@ class AppStatusBar:
             border-radius: 4px;
         }
     """
+
     _SEP_STYLE = "color: rgba(255,255,255,0.12); font-size: 13px; padding: 0 2px;"
+
     _STATUSBAR_STYLE = f"""
         QStatusBar {{
             background: #252525;
@@ -1054,6 +1031,7 @@ class AppStatusBar:
         self._build_left_container()
         QTimer.singleShot(0, self._add_widgets)
         debug_print("AppStatusBar: 빌드 완료")
+
 
     def _build_left_container(self) -> None:
         self.left_container = QWidget()
@@ -1093,6 +1071,14 @@ class AppStatusBar:
         self.sort_btn = SortMenuButton()
         lay.addWidget(self.sort_btn)
 
+        # 듀얼 뷰
+        self.dual_view_btn = QPushButton("⧉")
+        self.dual_view_btn.setFixedSize(self._WIDGET_H, self._WIDGET_H)
+        self.dual_view_btn.setFixedWidth(37)
+        self.dual_view_btn.setToolTip(t('statusbar.dual_view_tooltip'))
+        self.dual_view_btn.setStyleSheet(self._BTN_STYLE)
+        lay.addWidget(self.dual_view_btn)
+
         # 편집 모드
         self.edit_mode_btn = QPushButton("🎨")
         self.edit_mode_btn.setFixedSize(self._WIDGET_H, self._WIDGET_H)
@@ -1123,7 +1109,6 @@ class AppStatusBar:
             lay.addWidget(btn)
 
         lay.addWidget(self._sep())
-
         lay.addStretch(1) 
 
 
@@ -1134,13 +1119,12 @@ class AppStatusBar:
         except Exception as e:
             error_print(f"AppStatusBar._add_widgets: {e}")
 
-
-    # ── 헬퍼 ──────────────────────────────────────────────────
-
+    # 헬퍼
     def _sep(self) -> QLabel:
         lbl = QLabel("|")
         lbl.setStyleSheet(self._SEP_STYLE)
         return lbl
+
 
     def show_message(self, message: str, duration: int = 2000) -> None:
         max_length = 50
@@ -1155,22 +1139,28 @@ class AppStatusBar:
         if self.msg_overlay:
             self.msg_overlay.show_message(message, duration)
 
+
     def update_progress(self, current: int, total: int) -> None:
         self.progress_label.setText(f"📄 {current} / 📦 {total}")
+
 
     def update_zoom(self, zoom_factor: float) -> None:
         self.zoom_btn.update_zoom(zoom_factor)
 
+
     def set_visible(self, visible: bool) -> None:
         self.statusbar.setVisible(visible)
 
+
     def is_visible(self) -> bool:
         return self.statusbar.isVisible()
+
 
     def _hide_status_message(self) -> None:
         """하위 호환: 오버레이 즉시 숨기기."""
         if hasattr(self, "msg_overlay") and self.msg_overlay:
             self.msg_overlay.hide_immediate()
+
 
     def _link_compat_timer(self) -> None:
         """
@@ -1182,6 +1172,7 @@ class AppStatusBar:
                 self.msg_overlay.hide_immediate
             )
 
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # StatusBarController  — MainWindow ↔ AppStatusBar 브릿지
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1189,31 +1180,26 @@ class AppStatusBar:
 class StatusBarController:
     """
     MainWindow 의 모든 상태바 로직을 위임받는 컨트롤러.
-
-    초기화 순서:
-        ctrl = StatusBarController(main_window, status_bar)
-        ctrl.connect_signals()
     """
-
-    # 제거 — _on_sort_requested() 에서 t() 로 직접 조회
 
     def __init__(self, main_window, status_bar: AppStatusBar) -> None:
         self._mw = main_window
         self._sb = status_bar
 
-        # ── StatusProgressWidget 생성 (상태바 우측 고정) ──────
+        # StatusProgressWidget 생성 (상태바 우측 고정)
         self.progress_widget = StatusProgressWidget(main_window, None)
 
-        # ── ToastManager ─────────────────────────────────────
+        # ToastManager
         self._toast_mgr = ToastManager(main_window, self.progress_widget)
         self.progress_widget.set_toast_manager(self._toast_mgr)
 
-        # ── PerfOverlayWidget ─────────────────────────────────
+        # PerfOverlayWidget 
         self._perf_overlay = PerfOverlayWidget(main_window)
 
         # progress_widget 을 상태바에 permanent 등록
         # (_add_widgets 보다 늦게 실행되도록 singleShot)
         QTimer.singleShot(50, self._register_permanent)
+
 
     def _register_permanent(self) -> None:
         try:
@@ -1230,13 +1216,13 @@ class StatusBarController:
         except Exception as e:
             error_print(f"StatusBarController._register_permanent: {e}")
 
-    # ── 시그널 연결 ────────────────────────────────────────────
-
+    # 시그널 연결
     def connect_signals(self) -> None:
         mw, sb = self._mw, self._sb
         sb.zoom_btn.zoom_action_requested.connect(self._on_zoom_action)
 
         sb.open_file_btn.clicked.connect(mw._open_file_dialog)
+        sb.dual_view_btn.clicked.connect(mw.dual_view_panel.toggle_dual_mode)
         sb.sort_btn.sort_requested.connect(self._on_sort_requested)
         sb.rotate_left_btn.clicked.connect(mw._on_rotate_left)
         sb.rotate_right_btn.clicked.connect(mw._on_rotate_right)
@@ -1271,10 +1257,8 @@ class StatusBarController:
                 iv.set_zoom(int(action) / 100.0)
             except (ValueError, AttributeError):
                 pass
-            
 
-    # ── 상태바 토글 ────────────────────────────────────────────
-
+    # 상태바 토글
     def toggle(self, visible: Optional[bool] = None) -> None:
         if visible is None:
             visible = not self._sb.is_visible()
@@ -1283,7 +1267,6 @@ class StatusBarController:
         self._mw.config.set_ui_visibility("status_bar", visible)
         info_print(f"상태바: {'표시' if visible else '숨김'}")
 
-    # ── 진행·줌 업데이트 ──────────────────────────────────────
 
     def update_progress(self) -> None:
         if not self._mw._current_file:
@@ -1291,11 +1274,14 @@ class StatusBarController:
         current, total = self._mw.navigator.get_progress()
         self._sb.update_progress(current, total)
 
+
     def show_message(self, message: str, duration: int = 2000) -> None:
         self._sb.show_message(message, duration)
 
+
     def on_zoom_changed(self, zoom_factor: float) -> None:
         self._sb.update_zoom(zoom_factor)
+
 
     # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     # 정렬 (SORT  P1)
@@ -1310,6 +1296,7 @@ class StatusBarController:
         "exif_date":    "EXIF_DATE",
         "camera_model": "CAMERA_MODEL",
     }
+
 
     def _on_sort_requested(self, sort_type: str, reverse: bool) -> None:
         """정렬 버튼 클릭 → 비동기 정렬 시작"""
@@ -1369,12 +1356,14 @@ class StatusBarController:
             TaskPriority.FILE_OP, f"📁 {text}", total=0
         )
 
+
     def on_file_op_progress(self, text: str, current: int, total: int) -> None:
         if total > 0:
             display = t('statusbar.file_op_progress_total', text=text, current=current, total=total)
         else:
             display = t('statusbar.file_op_progress_count', text=text, count=current)
         self.progress_widget.task_progress(TaskPriority.FILE_OP, display, current, total)
+
 
     def on_file_op_finished(self, toast: str = "") -> None:
         self.progress_widget.task_finish(
@@ -1393,6 +1382,7 @@ class StatusBarController:
             TaskPriority.SCAN, t('statusbar.scan_start'), total=0
         )
 
+
     def on_folder_scan_progress(self, current: int, total: int) -> None:
         if total > 0:
             text = t('statusbar.scan_progress_total', current=current, total=total)
@@ -1400,12 +1390,14 @@ class StatusBarController:
             text = t('statusbar.scan_progress_count', count=current)
         self.progress_widget.task_progress(TaskPriority.SCAN, text, current, total)
 
+
     def on_folder_scan_completed(self, total: int) -> None:
         self.progress_widget.task_finish(
             TaskPriority.SCAN,
             finish_text=t('statusbar.scan_done_finish', total=total),
             toast_text=t('statusbar.scan_done_toast',   total=total),
         )
+
 
     # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     # 썸네일 로딩 (THUMB  P3)
@@ -1416,6 +1408,7 @@ class StatusBarController:
             TaskPriority.THUMB, t('statusbar.thumb_start', total=total), total=total
         )
 
+
     def on_thumb_load_progress(self, done: int, total: int) -> None:
         self.progress_widget.task_progress(
             TaskPriority.THUMB,
@@ -1423,12 +1416,14 @@ class StatusBarController:
             done, total,
         )
 
+
     def on_thumb_load_finished(self, total: int) -> None:
         self.progress_widget.task_finish(
             TaskPriority.THUMB,
             finish_text=t('statusbar.thumb_done', total=total),
             toast_text=t('statusbar.thumb_done', total=total),
         )
+
 
     # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     # 성능 오버레이
@@ -1443,9 +1438,11 @@ class StatusBarController:
             self.reposition_perf_overlay()
         debug_print(f"성능 오버레이: {'ON' if visible else 'OFF'}")
 
+
     def reposition_perf_overlay(self) -> None:
         if self._perf_overlay.isVisible():
             self._perf_overlay.reposition()
+
 
     def update_performance_info(
         self,
@@ -1471,4 +1468,5 @@ class StatusBarController:
         )
         self._perf_overlay.setTextFormat(Qt.TextFormat.RichText)
         self.reposition_perf_overlay()
+        
         

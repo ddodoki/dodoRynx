@@ -530,13 +530,13 @@ class CacheManager(QObject):
     # ── 통계 ─────────────────────────────────────
 
     def get_stats(self) -> Dict[str, Any]:
-        with self._lock(self.cache_mutex):          # ← 락 추가
+        with self._lock(self.cache_mutex):  
             preview_memory = self._calculate_cache_memory(self.preview_cache)
             full_memory    = self._calculate_cache_memory(self.cache)
             cache_size     = len(self.cache)
             preview_size   = len(self.preview_cache)
 
-        with self._lock(self.loading_mutex):        # ← 락 추가
+        with self._lock(self.loading_mutex):  
             loading_count = len(self.loading_indices)
 
         total_memory   = full_memory + preview_memory

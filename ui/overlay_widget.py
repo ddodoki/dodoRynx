@@ -23,16 +23,16 @@ from utils.debug import debug_print, error_print, info_print, warning_print
 from utils.lang_manager import t
 
 
-_ZOOM_DEBOUNCE_MS = 600   # 모듈 상단 상수로 추가
+_ZOOM_DEBOUNCE_MS = 600 
 
 
 class OverlayWidget(QWidget):
     """이미지 정보 오버레이"""
     
     
-# ============================================
-# 초기화
-# ============================================
+    # ============================================
+    # 초기화
+    # ============================================
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -127,9 +127,9 @@ class OverlayWidget(QWidget):
         self.setVisible(False)
 
 
-# ============================================
-# 설정 관리
-# ============================================
+    # ============================================
+    # 설정 관리
+    # ============================================
 
     def update_settings(self, enabled: bool, show_file: bool, show_camera: bool, 
                         show_exif: bool, show_lens: bool, show_gps: bool, show_map: bool,
@@ -197,7 +197,6 @@ class OverlayWidget(QWidget):
         if new_scale == self.scale_factor: 
             return
         self.scale_factor = new_scale
-        #self.scale_factor = max(0.5, min(2.0, scale))
         
         scaled_font_size = int(13 * self.scale_factor)
         scaled_padding_h = int(15 * self.scale_factor)
@@ -236,7 +235,6 @@ class OverlayWidget(QWidget):
             )
             self.map_label.setPixmap(scaled_pixmap)
         
-        # ===== 4. 텍스트가 있으면 _refresh_display 호출 =====
         if self.file_path and self.metadata:
             debug_print(f"스케일 변경 → _refresh_display() 호출")
             self._refresh_display()
@@ -244,16 +242,15 @@ class OverlayWidget(QWidget):
         debug_print(f"오버레이 스케일 적용 완료")
 
     
-# ============================================
-# 데이터 설정 및 표시
-# ============================================
+    # ============================================
+    # 데이터 설정 및 표시
+    # ============================================
 
     def set_data(self, file_path: Optional[Path], metadata: Dict[str, Any]) -> None:
         """데이터 설정"""
 
         debug_print(f"[overlay] camera keys: {list(metadata.get('camera', {}).keys())}")
         debug_print(f"[overlay] camera values sample: {dict(list(metadata.get('camera', {}).items())[:3])}")
-
 
         # 기존 로더 완전 정리 (시그널 해제 + cancel + deleteLater)
         self.stop_map_loader()
@@ -269,10 +266,9 @@ class OverlayWidget(QWidget):
         else:
             self.current_gps = None
             debug_print(f"GPS 정보 없음")
-        
+
+        self._refresh_map()        
         self._refresh_display()
-        
-        self._refresh_map()
         
         debug_print(f"OverlayWidget.isVisible(): {self.isVisible()}")
 
@@ -294,9 +290,8 @@ class OverlayWidget(QWidget):
         
         lines = []
         
-        # ===== 파일 정보 =====
+        # 파일 정보
         if self.show_file_info:
-            # 파일명 (길면 줄바꿈)
             filename = self.file_path.name
             if len(filename) > 40:
                 lines.append(f"📄 {filename[:40]}")
@@ -318,7 +313,7 @@ class OverlayWidget(QWidget):
                 if mp >= 1:
                     lines.append(f"   {mp:.1f} MP")
         
-        # ===== 카메라 정보 =====
+        # 카메라 정보
         if self.show_camera_info and 'camera' in self.metadata:
             camera = self.metadata['camera']
             if camera:
@@ -383,14 +378,14 @@ class OverlayWidget(QWidget):
                 
                 if exif_parts:
                     exif_line = ' · '.join(exif_parts)
-                    if len(exif_line) > 35 and len(exif_parts) >= 2:  # 최소 2개 보장
-                        half = max(1, len(exif_parts) // 2)           # half >= 1 보장
+                    if len(exif_line) > 35 and len(exif_parts) >= 2: 
+                        half = max(1, len(exif_parts) // 2)    
                         lines.append(f"🔧 {' · '.join(exif_parts[:half])}")
                         lines.append(f"   {' · '.join(exif_parts[half:])}")
                     else:
                         lines.append(f"🔧 {exif_line}")
         
-        # =====  렌즈 정보 간소화 =====
+        # 렌즈 정보 간소화
         if self.show_lens_info and 'camera' in self.metadata:
             camera = self.metadata['camera']
             
@@ -418,14 +413,13 @@ class OverlayWidget(QWidget):
                 
                 lines.append(f"🔍 {lens_line}")
 
-        # =====  GPS 고도 표시 수정 =====
+        # GPS 고도 표시 수정
         if self.show_gps_info and 'gps' in self.metadata:
             gps = self.metadata['gps']
             if gps:
                 if lines and lines[-1] != "":
                     lines.append("")
                 
-                # GPS 좌표 + 고도 (한 줄로)
                 gps_line = f"📍 {gps['display']}"
                 
                 if 'altitude' in gps:
@@ -464,7 +458,6 @@ class OverlayWidget(QWidget):
             text = "\n".join(lines)
             self.info_label.setText(text)
             
-            # 높이 계산
             font = self.info_label.font()
             metrics = QFontMetrics(font)
             
@@ -496,24 +489,21 @@ class OverlayWidget(QWidget):
             content_x = scaled_margin
 
         if lines:
-            # ===== Y 좌표 계산 =====
+            # Y 좌표 계산
             if self.position in ["bottom_left", "bottom_right"]:
                 # 하단: 텍스트가 위, 지도가 아래
                 if has_map:
-                    # 텍스트 + 간격 + 지도 높이를 모두 고려
                     total_content_height = total_height + spacing + scaled_map_height
                     info_y = parent_height - total_content_height - scaled_margin
                 else:
-                    # 텍스트만 있을 때
                     info_y = parent_height - total_height - scaled_margin
             else:
-                # 상단: 기존대로
                 info_y = scaled_margin
             
             debug_print(f"  position={self.position}, info_x={content_x}, info_y={info_y}")
 
             self.info_label.setGeometry(content_x, info_y, scaled_width, total_height)
-            self.info_label.raise_()  # 부모 내에서 최상위로
+            self.info_label.raise_() 
             
             self.info_label.show()
         else:
@@ -521,7 +511,7 @@ class OverlayWidget(QWidget):
             self.info_label.hide()
         
         if has_map:
-            # ===== Y 좌표 계산 =====
+            # Y 좌표 계산
             if lines:
                 # 텍스트가 있으면 텍스트 아래에 배치
                 info_geom = self.info_label.geometry()
@@ -529,16 +519,14 @@ class OverlayWidget(QWidget):
             else:
                 # 텍스트가 없으면 위치에 따라 직접 계산
                 if self.position in ["bottom_left", "bottom_right"]:
-                    # 하단
                     map_y = parent_height - scaled_map_height - scaled_margin
                 else:
-                    # 상단
                     map_y = scaled_margin
             
             debug_print(f"  map_x={content_x}, map_y={map_y}")
             
             self.map_label.setGeometry(content_x, map_y, scaled_map_width, scaled_map_height)
-            self.map_label.raise_()  # 부모 내에서 최상위로
+            self.map_label.raise_() 
             
             debug_print(f"  map_label 위치 설정: geometry={self.map_label.geometry()}")
             
@@ -562,9 +550,9 @@ class OverlayWidget(QWidget):
             debug_print(f"  오버레이 표시됨!")
 
 
-# ============================================
-# 지도 관련
-# ============================================
+    # ============================================
+    # 지도 관련
+    # ============================================
 
     def _refresh_map(self) -> None:
         """지도 갱신 (GPS 정보 기반 재로드)"""
@@ -604,7 +592,7 @@ class OverlayWidget(QWidget):
         """
         debug_print(f"지도 로드 시작: ({latitude:.6f}, {longitude:.6f}), 줌={self.current_zoom}")
 
-        # ── 렌더 캐시 선행 확인 (로딩 텍스트 깜빡임 방지) ─────────────────
+        # 렌더 캐시 선행 확인 (로딩 텍스트 깜빡임 방지) 
         pix = OFMMapLoader.get_cached_pixmap(
             latitude, longitude, self.current_zoom, 400, 300
         )
@@ -614,7 +602,7 @@ class OverlayWidget(QWidget):
             debug_print("지도 캐시 즉시 표시")
             return
 
-        # ── 캐시 MISS → 로딩 UI + WebView 시작 ───────────────────────────
+        # 캐시 MISS → 로딩 UI + WebView 시작 
         self.stop_map_loader()
 
         self.map_label.clear()
@@ -639,7 +627,6 @@ class OverlayWidget(QWidget):
             width=400,
             height=300,
         )
-        # QueuedConnection: 캐시 HIT 경로의 동기 emit 재진입 방지
         self.map_loader.map_loaded.connect(
             self._on_map_loaded, Qt.ConnectionType.QueuedConnection
         )
@@ -676,7 +663,6 @@ class OverlayWidget(QWidget):
         if self.map_loader is None:
             return
 
-        # 완료된 로더 즉시 정리 (stop_map_loader 재사용 불가 — self.map_loader=None 후엔 loader 추적 불가)
         loader = self.map_loader
         self.map_loader = None
         try:
@@ -692,6 +678,7 @@ class OverlayWidget(QWidget):
         if pix.isNull():
             return
         self._show_map_pixmap(pix)
+        self._refresh_display()    
         
 
     def _on_map_failed(self, error):
@@ -709,7 +696,6 @@ class OverlayWidget(QWidget):
             loader.deleteLater()
 
         if self.show_map and self.enabled:
-            # 실패 메시지 표시 후 타이머로 숨길 때는 generation_id로 무효화
             self._fail_generation = getattr(self, '_fail_generation', 0) + 1
             current_gen = self._fail_generation
             self.map_label.setText(t("overlay.map_load_fail", error=str(error)[:30]))
@@ -727,9 +713,9 @@ class OverlayWidget(QWidget):
             self.map_label.hide()
 
 
-# ============================================
-# 유틸리티
-# ============================================
+    # ============================================
+    # 유틸리티
+    # ============================================
 
     def hide_overlay(self) -> None:
         """오버레이 숨김"""
@@ -739,7 +725,7 @@ class OverlayWidget(QWidget):
         self.info_label.hide()
         self.map_label.hide()
 
-    # ── show_overlay() 신규 추가 (hide_overlay 대칭) ───
+
     def show_overlay(self) -> None:
         self._externally_hidden = False 
         self._refresh_display()
@@ -779,7 +765,7 @@ class OverlayWidget(QWidget):
             return
 
         loader = self.map_loader
-        self.map_loader = None          # ① 참조 해제 → 지연 콜백 차단
+        self.map_loader = None  
 
         try:
             loader.map_loaded.disconnect(self._on_map_loaded)
@@ -790,8 +776,8 @@ class OverlayWidget(QWidget):
         except RuntimeError:
             pass
 
-        loader.cancel()                 # ② 취소 (WebView 해제 포함)
-        loader.deleteLater()            # ③ QObject C++ 메모리 이벤트 루프에서 해제
+        loader.cancel()  
+        loader.deleteLater()  
         debug_print("OFMMapLoader 취소 완료")
 
 
@@ -799,4 +785,3 @@ class OverlayWidget(QWidget):
         """부모 윈도우 닫힘 or 숨김 시 WebView 정리"""
         self.stop_map_loader()
         super().hideEvent(event)
-

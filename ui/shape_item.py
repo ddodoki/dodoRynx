@@ -25,8 +25,7 @@ class ResizableShapeItem(QGraphicsObject):
 
     HANDLE_SCREEN_PX  = 9
     MIN_SCREEN_PX     = 30
-    # 수정 1: 회전 핸들 오프셋 상수화 — boundingRect와 반드시 동기화
-    ROT_HANDLE_OFFSET_PX = 22   # 화면 픽셀 기준 (boundingRect margin보다 커야 함)
+    ROT_HANDLE_OFFSET_PX = 22 
     ROT_HANDLE_RADIUS_PX = 6
 
     HANDLE_CURSORS = [
@@ -301,9 +300,8 @@ class ResizableShapeItem(QGraphicsObject):
 
 
     def _handle_at(self, pos: QPointF) -> int:
-        # 수정 4: hit-test 영역을 렌더 크기보다 약간 넓게 설정해
-        #    고해상도/저줌에서도 핸들 클릭이 확실하게 감지되도록 함
-        hit_extra = self._screen_to_scene(2.0)  # 화면 2px 여유
+
+        hit_extra = self._screen_to_scene(2.0) 
         hs = self._handle_half() + hit_extra
         for i, (hx, hy) in enumerate(self._handle_centers()):
             if QRectF(hx - hs, hy - hs, hs * 2, hs * 2).contains(pos):
@@ -326,7 +324,7 @@ class ResizableShapeItem(QGraphicsObject):
         r   = self._rect.normalized()
         cx  = r.center().x()
         ty  = r.top() - self._screen_to_scene(self.ROT_HANDLE_OFFSET_PX)
-        cr  = self._screen_to_scene(self.ROT_HANDLE_RADIUS_PX + 4)  # 여유 4px
+        cr  = self._screen_to_scene(self.ROT_HANDLE_RADIUS_PX + 4) 
         return QRectF(cx - cr, ty - cr, cr * 2, cr * 2)
 
 
@@ -335,7 +333,6 @@ class ResizableShapeItem(QGraphicsObject):
 
 
     def hoverMoveEvent(self, event) -> None:
-        # 수정: Ctrl+Shift 대신 회전 핸들 위치에서만 CrossCursor
         if self._is_rotation_handle(event.pos()):
             self.setCursor(Qt.CursorShape.CrossCursor)
             super().hoverMoveEvent(event)
@@ -354,7 +351,6 @@ class ResizableShapeItem(QGraphicsObject):
 
         if event.button() == Qt.MouseButton.LeftButton:
 
-            # 수정: 회전 핸들 클릭 감지 — Ctrl+Shift 불필요
             if self._is_rotation_handle(event.pos()):
                 self.about_to_change.emit()
                 self._notified_this_press = True
@@ -382,7 +378,6 @@ class ResizableShapeItem(QGraphicsObject):
                 event.accept()
                 return
 
-            # 일반 이동
             mods = event.modifiers()
             ctrl = bool(mods & Qt.KeyboardModifier.ControlModifier)
             if not ctrl:

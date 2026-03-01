@@ -42,7 +42,6 @@ _RAW_EXTS: frozenset = frozenset({
 class MetadataReader:
     """이미지 메타데이터 읽기"""
 
-
     def _raw_flip_to_degrees(self, flip: int) -> int:
         """LibRaw sizes.flip → QTransform.rotate() 각도 (image_loader.py와 동일)"""
         return {0: 0, 3: 180, 5: 270, 6: 90}.get(int(flip), 0)
@@ -715,7 +714,7 @@ class MetadataReader:
                         result['altitude'] = f"{altitude_value:.1f}m"
                     else:
                         result['altitude'] = f"{int(round(altitude_value))}m"
-                        debug_print(f"GPS 고도: {result['altitude']}")
+                        #debug_print(f"GPS 고도: {result['altitude']}")
                 
                 except Exception as e:
                         error_print(f"고도 정보 파싱 실패: {e}")

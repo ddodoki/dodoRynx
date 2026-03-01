@@ -25,7 +25,7 @@ from PySide6.QtCore import (
     Signal,
     Slot,
 )
-from PySide6.QtGui import QColor, QImage, QPalette, QPixmap
+from PySide6.QtGui import QColor, QImage, QPalette, QPixmap, QGuiApplication
 from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
@@ -306,17 +306,39 @@ class MainWindow(QMainWindow):
         viewer_layout.setContentsMargins(0, 0, 0, 0)
         viewer_layout.setSpacing(0)
 
+        from ui.dual_view_panel import DualViewPanel
+
+        # 1) primary ImageViewer 생성 (기존과 동일)
         self.image_viewer = ImageViewer(
             cache_manager=self.cache_manager,
             config_manager=self.config,
-            parent=self
+            parent=self,
         )
         self.image_viewer.set_main_window(self)
-        viewer_layout.addWidget(self.image_viewer)
 
+        # 2) primary OverlayWidget (기존과 동일)
         self.overlay_widget = OverlayWidget(self.image_viewer)
         self.image_viewer.set_overlay_widget(self.overlay_widget)
         debug_print("OverlayWidget 생성 및 연결 완료")
+
+        # 3) DualViewPanel 으로 감싸기
+        self.dual_view_panel = DualViewPanel(
+            primary_viewer=self.image_viewer,
+            cache_manager=self.cache_manager,
+            config_manager=self.config,
+            parent=viewer_container,
+        )
+        viewer_layout.addWidget(self.dual_view_panel)   # ← image_viewer 대신
+
+        # 4) secondary OverlayWidget 생성 및 연결
+        self.overlay_widget_b = OverlayWidget(
+            self.dual_view_panel.secondary_viewer
+        )
+        self.dual_view_panel.secondary_viewer.set_overlay_widget(
+            self.overlay_widget_b
+        )
+        debug_print("OverlayWidget_b (secondary) 생성 및 연결 완료")
+
 
         left_layout.addWidget(viewer_container, 1)
 
@@ -427,6 +449,7 @@ class MainWindow(QMainWindow):
         self.image_viewer.zoom_changed.connect(self._on_zoom_changed)
         self.image_viewer.edit_mode_changed.connect(self._on_edit_mode_changed)
         self.image_viewer.edit_save_requested.connect(self._on_edit_save_requested)
+        self.dual_view_panel.dual_mode_changed.connect(self._on_dual_mode_changed)
 
         # ── 3. FolderWatcher → MainWindow (모두 QueuedConnection) ──
         # batch_added 연결 추가 (기존 누락 버그 수정)
@@ -794,6 +817,23 @@ class MainWindow(QMainWindow):
             QTimer.singleShot(0, lambda: self._toggle_metadata(True))
 
 
+    def _on_dual_mode_changed(self, enabled: bool) -> None:
+        if enabled:
+            sec_index = self.navigator.current_index + 1
+            self._load_secondary_deferred(sec_index)   # ← 딜레이 없이 직접 호출
+            self.thumbnail_bar.set_secondary_index(sec_index)
+        else:
+            self.thumbnail_bar.clear_secondary_index()
+            self.dual_view_panel.clear_secondary()
+
+
+    def _load_secondary_deferred(self, sec_index: int) -> None:
+        if not self.dual_view_panel.is_dual_mode:
+            return
+        self.dual_view_panel.load_secondary(self, sec_index)
+        self._update_secondary_overlay(sec_index)
+
+                
 # ============================================
 # 파일/폴더 열기
 # ============================================
@@ -1046,7 +1086,12 @@ class MainWindow(QMainWindow):
         # 하이라이트 상태
         is_highlighted = self.navigator.is_current_highlighted()
         self.image_viewer.set_highlight_state(is_highlighted)
-        
+
+        if self.dual_view_panel.is_dual_mode:
+            sec_index = self.navigator.current_index + 1
+            self._load_secondary_deferred(sec_index)       # ← QTimer 제거
+            self.thumbnail_bar.set_secondary_index(sec_index)
+                    
         # UI 업데이트
         self._update_statusbar()
         self.thumbnail_bar.set_current_index(self.navigator.current_index)
@@ -1557,7 +1602,6 @@ class MainWindow(QMainWindow):
     def _toggle_overlay(self, visible: Optional[bool] = None) -> None:
         """오버레이 토글"""
 
-        # 편집 모드 중 오버레이 활성화 차단
         if visible and self.image_viewer._edit_mode:
             warning_print("편집 모드 중에는 오버레이를 활성화할 수 없습니다.")
             return
@@ -1565,21 +1609,24 @@ class MainWindow(QMainWindow):
         if visible is None:
             visible = not self.overlay_widget.isVisible()
 
-        # 상태 저장 (단일 소스)
         self.overlay_enabled = visible
-
-        # 설정 저장
         self.config.set_overlay_setting("enabled", visible)
         self.config.save()
 
-        # 오버레이 설정 다시 로드
         self._load_overlay_settings()
 
-        # 현재 이미지 다시 업데이트
         if self._current_file:
             metadata = self.metadata_panel.get_current_metadata()
             if metadata:
                 self._update_overlay(self._current_file, metadata)
+
+        if hasattr(self, 'dual_view_panel'):
+            sec_ov = self.dual_view_panel.secondary_viewer.overlay_widget
+            if sec_ov:
+                if visible:
+                    sec_ov.show_overlay()
+                else:
+                    sec_ov.hide_overlay()
 
         info_print(f"오버레이: {'표시' if visible else '숨김'}")
 
@@ -1588,7 +1635,6 @@ class MainWindow(QMainWindow):
         """전체화면 토글"""
         if self.is_fullscreen:
             # 전체화면 종료
-
             app = QApplication.instance()
             if app:
                 app.removeEventFilter(self)
@@ -1598,35 +1644,47 @@ class MainWindow(QMainWindow):
             self.metadata_panel.setVisible(self._pre_fullscreen_meta_visible)
             self.statusbar.setVisible(self._pre_fullscreen_status_visible)
 
+            self.image_viewer.set_fullscreen_mode(False)
+            try:
+                self.dual_view_panel._secondary.set_fullscreen_mode(False)
+            except AttributeError:
+                pass
+
             if self._pre_fullscreen_overlay_visible:
-                self.overlay_widget.show_overlay() 
+                self.overlay_widget.show_overlay()
             else:
-                self.overlay_widget.hide_overlay() 
+                self.overlay_widget.hide_overlay()
+
+            self._restore_secondary_overlay_visibility()
 
             self.showNormal()
             self.is_fullscreen = False
 
-            # folder_explorer: config에 저장된 상태로 복원
             if self.config.is_folder_explorer_visible():
                 self.folder_explorer.setVisible(True)
 
-            # 타이머 정지
             if hasattr(self, 'hide_timer') and self.hide_timer.isActive():
                 self.hide_timer.stop()
-            
-            # 커서 표시
+
             self.unsetCursor()
-            
-            # ===== 미니맵 상태 업데이트 =====
+
             if hasattr(self, 'image_viewer'):
                 self.image_viewer._update_minimap()
-            
+
         else:
             # 전체화면 진입
-            self._pre_fullscreen_thumb_visible = self.thumbnail_bar.isVisible()
-            self._pre_fullscreen_meta_visible  = self.metadata_panel.isVisible()
-            self._pre_fullscreen_status_visible = self.statusbar.isVisible()
+            self._pre_fullscreen_thumb_visible   = self.thumbnail_bar.isVisible()
+            self._pre_fullscreen_meta_visible    = self.metadata_panel.isVisible()
+            self._pre_fullscreen_status_visible  = self.statusbar.isVisible()
+
+            self.image_viewer.set_fullscreen_mode(True)
+            try:
+                self.dual_view_panel._secondary.set_fullscreen_mode(True)
+            except AttributeError:
+                pass
+
             self.overlay_widget.hide_overlay()
+            self._hide_secondary_overlay()
 
             self.showFullScreen()
             self.metadata_panel.hide()
@@ -1639,13 +1697,35 @@ class MainWindow(QMainWindow):
             if app:
                 app.installEventFilter(self)
 
-            # ===== 미니맵 숨김 =====
             if hasattr(self, 'image_viewer') and hasattr(self.image_viewer, 'minimap'):
                 self.image_viewer.minimap.hide()
-            
-            # 3초 후 UI 숨김 타이머 시작
+
             if hasattr(self, 'hide_timer'):
                 self.hide_timer.start(3000)
+
+
+    def _hide_secondary_overlay(self) -> None:
+        """전체화면 진입 시 세컨드 오버레이 강제 숨김 + 상태 저장"""
+        try:
+            sec_ow = self.dual_view_panel._secondary.overlay_widget
+            if sec_ow:
+                self._pre_fullscreen_sec_overlay_visible = sec_ow.isVisible()
+                sec_ow.hide_overlay()
+        except AttributeError:
+            self._pre_fullscreen_sec_overlay_visible = False
+
+
+    def _restore_secondary_overlay_visibility(self) -> None:
+        """전체화면 종료 시 세컨드 오버레이 이전 상태 복원"""
+        try:
+            sec_ow = self.dual_view_panel._secondary.overlay_widget
+            if sec_ow:
+                if getattr(self, '_pre_fullscreen_sec_overlay_visible', False):
+                    sec_ow.show_overlay()
+                else:
+                    sec_ow.hide_overlay()
+        except AttributeError:
+            pass
 
 
     def _toggle_performance_overlay(self, visible: Optional[bool] = None) -> None:
@@ -1774,107 +1854,97 @@ class MainWindow(QMainWindow):
             show_gps, show_map, opacity, position
         )
 
-        debug_print(f"오버레이 설정 로드 완료")
+        if hasattr(self, 'dual_view_panel') and self.dual_view_panel.is_dual_mode:
+            current_idx = self.navigator.current_index
+            self._update_secondary_overlay(current_idx + 1) 
+
+
+    def _sync_secondary_overlay_settings(self, **kwargs) -> None:
+        """Secondary overlay에 primary와 동일한 설정 동기화."""
+        try:
+            sec_overlay = (
+                self.dual_view_panel
+                ._secondary
+                .overlay_widget
+            )
+            if sec_overlay:
+                sec_overlay.update_settings(**kwargs)
+        except AttributeError:
+            pass  # dual_view_panel 또는 secondary 미초기화 시 무시
+        
+    def _build_overlay_data(
+        self,
+        file_path: Path,
+        metadata: dict,
+    ) -> Optional[dict]:
+        """
+        raw MetadataReader 결과 → OverlayWidget.set_data() 형식으로 변환.
+        _update_overlay() / _update_secondary_overlay() 공용.
+        """
+        if not metadata:
+            return None
+
+        file_meta = metadata.get('file', {})
+
+        # ── 파일 크기 ──────────────────────────────────────
+        file_size = file_meta.get('size', '')
+
+        # ── 해상도 파싱 "4284 × 5712" → (4284, 5712) ──────
+        dimensions = None
+        resolution_str = file_meta.get('resolution', '')
+        try:
+            parts = [p.strip() for p in resolution_str.replace('×', 'x').split('x')]
+            if len(parts) == 2:
+                dimensions = (int(parts[0]), int(parts[1]))
+        except (ValueError, AttributeError):
+            pass
+
+        overlay_data: dict = {
+            'file_size':  file_size,
+            'dimensions': dimensions,          # None이면 오버레이가 MP 표시 생략
+            'camera':     metadata.get('camera', {}),
+            'exif':       metadata.get('exif', {}),
+            'gps':        metadata.get('gps'),
+        }
+        return overlay_data
 
 
     def _update_overlay(self, file_path: Path, metadata: dict) -> None:
         """오버레이 데이터 업데이트 (딜레이 적용)"""
-        
         debug_print(f"_update_overlay() 호출: {file_path.name}")
         debug_print(f"metadata keys: {list(metadata.keys())}")
-        
-        # overlay_widget 체크
+
         if not hasattr(self, 'image_viewer'):
-            error_print(f"self.image_viewer 없음!")
+            error_print("self.image_viewer 없음!")
             return
-        
         if not hasattr(self.image_viewer, 'overlay_timer'):
-            error_print(f"self.image_viewer.overlay_timer 없음!")
+            error_print("self.image_viewer.overlay_timer 없음!")
             return
-        
         if not hasattr(self.image_viewer, 'overlay_widget'):
-            error_print(f"self.image_viewer.overlay_widget 없음!")
+            error_print("self.image_viewer.overlay_widget 없음!")
             return
-        
         if self.image_viewer.overlay_widget is None:
-            error_print(f"self.image_viewer.overlay_widget is None!")
+            error_print("self.image_viewer.overlay_widget is None!")
             return
-        
-        # ===== 현재 이미지 ID 캡처 (ImageViewer에서) =====
+
+        overlay_data = self._build_overlay_data(file_path, metadata)
+        if not overlay_data:
+            return
+
         current_image_id = self.image_viewer.current_image_id
         debug_print(f"오버레이 업데이트 요청: ID={current_image_id}, 파일={file_path.name}")
-        
-        overlay_data = {}
-        
-        # 1. 파일 정보
-        if 'file' in metadata:
-            file_info = metadata['file']
-            
-            if file_info.get('size'):
-                overlay_data['file_size'] = file_info['size']
-            
-            if file_info.get('resolution'):
-                resolution_str = file_info['resolution']
-                try:
-                    parts = resolution_str.replace('×', 'x').replace(' ', '').split('x')
-                    if len(parts) == 2:
-                        width = int(parts[0])
-                        height = int(parts[1])
-                        overlay_data['dimensions'] = (width, height)
-                except:
-                    pass
-
-        # 3. EXIF 촬영 정보
-        if 'camera' in metadata and metadata['camera']:
-            camera = metadata['camera']
-
-            camera_info = {}
-            
-            # 식별 정보
-            if camera.get('make'):           camera_info['make']          = camera['make']
-            if camera.get('model'):          camera_info['model']         = camera['model']
-            if camera.get('date_taken'):     camera_info['date_taken']    = camera['date_taken']
-            if camera.get('orientation'):    camera_info['orientation']   = camera['orientation']
-            if camera.get('lens_make'):      camera_info['lens_make']     = camera['lens_make']
-            if camera.get('lens_model'):     camera_info['lens_model']    = camera['lens_model']
-            
-            # 노출 파라미터 (e.g. "ISO 1600", "f/2.8", "1/250s", "24mm")
-            if camera.get('iso'):            camera_info['iso']           = camera['iso']
-            if camera.get('f_stop'):         camera_info['f_stop']        = camera['f_stop']
-            if camera.get('exposure_time'):  camera_info['exposure_time'] = camera['exposure_time']
-            if camera.get('focal_length'):   camera_info['focal_length']  = camera['focal_length']
-            
-            if camera_info:
-                overlay_data['camera'] = camera_info
-
-        # 4. GPS 정보
-        if 'gps' in metadata and metadata['gps']:
-            gps = metadata['gps']
-            overlay_data['gps'] = {
-                'latitude': gps['latitude'],
-                'longitude': gps['longitude'],
-                'display': gps['display']
-            }
-            
-            if 'altitude' in gps:
-                overlay_data['gps']['altitude'] = gps['altitude']
-        
         debug_print(f"overlay_data 생성 완료: {list(overlay_data.keys())}")
-        
-        # ===== 타이머 ID와 함께 저장 (ImageViewer의 ID 사용) =====
+
         self.image_viewer.pending_overlay_data = (
-            file_path, 
+            file_path,
             overlay_data,
-            current_image_id  # ImageViewer에서 가져온 ID
+            current_image_id,
         )
         debug_print(f"pending_overlay_data 설정 완료, ID={current_image_id}")
-        
-        # 기존 타이머 중지 후 재시작
+
         if self.image_viewer.overlay_timer.isActive():
-            debug_print(f"기존 오버레이 타이머 중지")
             self.image_viewer.overlay_timer.stop()
-        
-        # 타이머 시작
+
         self.image_viewer.overlay_timer.start(100)
         debug_print(f"오버레이 타이머 시작 (100ms), 검증 ID={current_image_id}")
 
@@ -1898,6 +1968,25 @@ class MainWindow(QMainWindow):
             metadata = self.metadata_panel.get_current_metadata()
             if metadata:
                 self._update_overlay(self._current_file, metadata)
+
+
+    def _update_secondary_overlay(self, sec_index: int) -> None:
+        """
+        보조 뷰어 오버레이 갱신.
+        """
+        files = self.navigator.image_files
+        if not (0 <= sec_index < len(files)):
+            return
+
+        sec_file = files[sec_index]
+
+        meta = self.metadata_panel.metadata_reader.read(sec_file)
+        if not meta:
+            return
+
+        overlay_data = self._build_overlay_data(sec_file, meta)
+        if overlay_data:
+            self.dual_view_panel.update_secondary_overlay(sec_file, overlay_data)
 
 
 # ============================================
@@ -2036,94 +2125,116 @@ class MainWindow(QMainWindow):
 # ============================================
 
     def _capture_to_clipboard(self) -> None:
-        """미리보기 영역(오버레이 포함)을 클립보드에 복사"""
+        """미리보기 영역(오버레이 포함)을 클립보드에 복사 (듀얼 모드면 양쪽 포함)"""
         try:
-            # ===== 화면 직접 캡처 (오버레이 포함) =====
             if not self.image_viewer:
                 QMessageBox.warning(self, t('capture.fail_title'), t('capture.no_viewer'))
                 return
-            
-            # 뷰어의 화면 상 절대 좌표 가져오기
-            viewport = self.image_viewer.viewport()
-            global_pos = viewport.mapToGlobal(viewport.rect().topLeft())
-            capture_rect = QRect(global_pos, viewport.size())
-            
-            # 화면 캡처
-            screen = QApplication.primaryScreen()
-            pixmap = screen.grabWindow(0, capture_rect.x(), capture_rect.y(), 
-                                    capture_rect.width(), capture_rect.height())
-            
-            if pixmap.isNull():
+
+            def viewport_global_rect(viewer) -> QRect:
+                vp = viewer.viewport()
+                top_left = vp.mapToGlobal(vp.rect().topLeft())
+                return QRect(top_left, vp.size())
+
+            capture_rect = viewport_global_rect(self.image_viewer)
+
+            if hasattr(self, 'dual_view_panel') and self.dual_view_panel and self.dual_view_panel.is_dual_mode:
+                sec_viewer = self.dual_view_panel.secondary_viewer
+                if sec_viewer and sec_viewer.isVisible():
+                    capture_rect = capture_rect.united(viewport_global_rect(sec_viewer))
+
+            screen = QGuiApplication.screenAt(capture_rect.center()) or QApplication.primaryScreen()
+            if not screen:
                 QMessageBox.warning(self, t('capture.fail_title'), t('capture.no_capture'))
                 return
-            
-            # 클립보드에 복사
+
+            pixmap = screen.grabWindow(
+                0,
+                capture_rect.x(),
+                capture_rect.y(),
+                capture_rect.width(),
+                capture_rect.height(),
+            )
+
+            if not pixmap or pixmap.isNull():
+                QMessageBox.warning(self, t('capture.fail_title'), t('capture.no_capture'))
+                return
+
             clipboard = QApplication.clipboard()
             clipboard.setPixmap(pixmap)
-            
-            # 상태바에 메시지
+
             self._show_status_message(
-                t('msg.capture_clipboard', width=pixmap.width(), height=pixmap.height()), 3000
+                t('msg.capture_clipboard', width=pixmap.width(), height=pixmap.height()),
+                3000
             )
             info_print(f"클립보드 복사: {pixmap.width()}×{pixmap.height()}")
-        
+
         except Exception as e:
             QMessageBox.critical(self, t('capture.error_title'), t('capture.error_msg', error=e))
             error_print(f"클립보드 복사 실패: {e}")
 
 
     def _capture_and_save(self) -> None:
-        """미리보기 영역(오버레이 포함)을 파일로 저장"""
+        """미리보기 영역(오버레이 포함)을 파일로 저장 (듀얼 모드면 양쪽 포함)"""
         try:
-            # 현재 파일이 없으면 저장 불가
             if not self._current_file:
                 QMessageBox.warning(self, t('capture.no_file_title'), t('capture.no_file_msg'))
                 return
-            
-            # ===== 화면 직접 캡처 (오버레이 포함) =====
+
             if not self.image_viewer:
                 QMessageBox.warning(self, t('capture.fail_title'), t('capture.no_viewer'))
                 return
-            
-            # 뷰어의 화면 상 절대 좌표 가져오기
-            viewport = self.image_viewer.viewport()
-            global_pos = viewport.mapToGlobal(viewport.rect().topLeft())
-            capture_rect = QRect(global_pos, viewport.size())
-            
-            # 화면 캡처
-            screen = QApplication.primaryScreen()
-            pixmap = screen.grabWindow(0, capture_rect.x(), capture_rect.y(), 
-                                    capture_rect.width(), capture_rect.height())
-            
-            if pixmap.isNull():
+
+            def viewport_global_rect(viewer) -> QRect:
+                vp = viewer.viewport()
+                top_left = vp.mapToGlobal(vp.rect().topLeft())
+                return QRect(top_left, vp.size())
+
+            capture_rect = viewport_global_rect(self.image_viewer)
+
+            if hasattr(self, 'dual_view_panel') and self.dual_view_panel and self.dual_view_panel.is_dual_mode:
+                sec_viewer = self.dual_view_panel.secondary_viewer
+                if sec_viewer and sec_viewer.isVisible():
+                    capture_rect = capture_rect.united(viewport_global_rect(sec_viewer))
+
+            screen = QGuiApplication.screenAt(capture_rect.center()) or QApplication.primaryScreen()
+            if not screen:
                 QMessageBox.warning(self, t('capture.fail_title'), t('capture.no_capture'))
                 return
-            
-            # 저장 경로 생성
+
+            pixmap = screen.grabWindow(
+                0,
+                capture_rect.x(),
+                capture_rect.y(),
+                capture_rect.width(),
+                capture_rect.height(),
+            )
+
+            if not pixmap or pixmap.isNull():
+                QMessageBox.warning(self, t('capture.fail_title'), t('capture.no_capture'))
+                return
+
             original_path = self._current_file
             save_path = self._generate_capture_filename(original_path)
-            
-            # JPG로 저장
+
             if pixmap.save(str(save_path), "JPG", 95):
-                # 상태바에 메시지
                 self._show_status_message(t('msg.capture_saved', name=save_path.name), 3000)
                 info_print(f"캡쳐 저장: {save_path}")
-                
-                # ===== 비 동기식 새로고침  =====
+
                 self.navigator.reload_async()
 
-                # 성공 메시지
                 QMessageBox.information(
                     self,
                     t('capture.save_ok_title'),
-                    t('capture.save_ok_msg',
-                    name=save_path.name, width=pixmap.width(), height=pixmap.height()),
+                    t('capture.save_ok_msg', name=save_path.name, width=pixmap.width(), height=pixmap.height()),
                 )
             else:
                 QMessageBox.critical(
-                    self, t('capture.save_fail_title'), t('capture.save_fail_msg', path=save_path)
+                    self,
+                    t('capture.save_fail_title'),
+                    t('capture.save_fail_msg', path=save_path),
                 )
-        
+
         except Exception as e:
             QMessageBox.critical(self, t('capture.error_title'), t('capture.save_error_msg', error=e))
             error_print(f"캡쳐 저장 실패: {e}")
@@ -2166,11 +2277,8 @@ class MainWindow(QMainWindow):
         dialog.thumbnail_cache_clear_requested.connect(
             lambda: self.thumbnail_bar._thumb_cache.clear_memory()
         )
-        # tile_cache_clear_requested는 settings_dialog 내부에서 shutil.rmtree로 처리
-
-        # exec() 반환값 불필요 — 모든 처리는 시그널로
         dialog.exec()
-        
+
 
     def _on_overlay_settings_changed(self):
         """오버레이 설정 변경 시 즉시 적용"""
@@ -2178,8 +2286,9 @@ class MainWindow(QMainWindow):
         
         if hasattr(self, 'overlay_widget') and self.overlay_widget:
             # 설정 다시 로드
-            scale_value = self.config.get("overlay.scale", 100)
-            self.overlay_widget.set_scale(scale_value / 100.0)
+            scale_value = self.config.get_overlay_scale()
+            scale_factor = scale_value / 100.0
+            self.overlay_widget.set_scale(scale_factor)
 
             show_file = self.config.get_overlay_setting("show_file_info", True)
             show_camera = self.config.get_overlay_setting("show_camera_info", True)
@@ -2204,6 +2313,17 @@ class MainWindow(QMainWindow):
                 if metadata:
                     self._update_overlay(self._current_file, metadata)
             
+            if hasattr(self, 'dual_view_panel') and self.dual_view_panel.is_dual_mode:
+                # secondary scale도 즉시 반영
+                sec_viewer = self.dual_view_panel.secondary_viewer
+                if sec_viewer and sec_viewer.overlay_widget:
+                    sec_viewer.overlay_widget.set_scale(scale_factor)
+                    sec_viewer.overlay_widget.update()
+
+                current_idx = self.navigator.current_index
+                sec_index = current_idx + 1
+                self._update_secondary_overlay(sec_index)
+
             info_print(f"오버레이 설정 적용 완료")
 
 

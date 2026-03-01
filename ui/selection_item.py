@@ -11,11 +11,11 @@ class SelectionItem(QGraphicsRectItem):
 
     def __init__(self) -> None:
         super().__init__()
-        # 점선 파란 테두리
+
         pen = QPen(QColor(74, 158, 255), 1.5, Qt.PenStyle.DashLine)
         self.setPen(pen)
         self.setBrush(QColor(74, 158, 255, 30))   # 반투명 파랑
-        self.setZValue(100)                         # 이미지 위에 표시
+        self.setZValue(100)    
         self.setVisible(False)
 
     def set_rect(self, rect: QRectF) -> None:

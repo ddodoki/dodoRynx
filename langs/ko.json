@@ -4,6 +4,7 @@
     "zoom_btn_tooltip": "배율 조정 / 창 맞춤 (클릭)",
     "zoom_current_tooltip": "현재 배율: {pct}%  (클릭 → 배율 메뉴)",
     "open_file_tooltip": "파일 열기 (Ctrl+O)",
+    "dual_view_tooltip": "화면 분할 (Ctrl+D)",        
     "edit_mode_tooltip": "편집 모드 (E)",
     "rotate_left_tooltip":  "왼쪽 90° 회전 (Ctrl+Shift+←)",
     "rotate_right_tooltip": "오른쪽 90° 회전 (Ctrl+Shift+→)",
@@ -100,6 +101,7 @@
     "view": {
       "title":          "📟 화면 구성",
       "folder_explorer":"📂 폴더 트리",
+      "dual_view":      "⧉  듀얼 뷰",
       "overlay_info":   "🔲 오버레이 정보",
       "metadata_panel": "📊 메타데이터 패널",
       "thumbnail_bar":  "🖼️ 썸네일 바",

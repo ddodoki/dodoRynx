@@ -21,14 +21,13 @@ from utils.debug import debug_print
 class MiniMapWidget(QWidget):
     """줌 시 현재 위치를 보여주는 미니맵"""
     
-    # 미니맵 클릭 시 해당 위치로 이동 요청
     position_clicked = Signal(float, float)  # 비율 (0.0 ~ 1.0)
 
 
-# ============================================
-# 초기화
-# ============================================
-#     
+    # ============================================
+    # 초기화
+    # ============================================
+   
     def __init__(self, parent=None):
         super().__init__(parent)
         
@@ -38,22 +37,20 @@ class MiniMapWidget(QWidget):
         self.is_dragging: bool = False
         self.drag_start_pos: QPoint = QPoint()
         
-        self.max_size = 200  # 가로/세로 최대 크기
-        self.setFixedSize(self.max_size, self.max_size)  # 초기 크기
+        self.max_size = 200 
+        self.setFixedSize(self.max_size, self.max_size) 
         
         self._last_pixmap_cache_key: Optional[str] = None
         
         self.setMouseTracking(True)
 
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
-        
-        # 초기에는 숨김
         self.hide()
     
 
-# ============================================
-# 설정 (투명도, 썸네일)
-# ============================================
+    # ============================================
+    # 설정 (투명도, 썸네일)
+    # ============================================
 
     def set_opacity(self, opacity: float) -> None:
         """투명도 설정 (미구현 - 향후 개선 예정)"""
@@ -77,7 +74,7 @@ class MiniMapWidget(QWidget):
         
         if self._last_pixmap_cache_key == cache_key:
             debug_print(f"미니맵 썸네일 캐시 히트 - 재사용")
-            return  # 동일한 이미지면 재생성 생략
+            return 
         
         self._last_pixmap_cache_key = cache_key
         debug_print(f"미니맵 썸네일 생성: {cache_key}")
@@ -165,9 +162,9 @@ class MiniMapWidget(QWidget):
         self.update()
     
 
-# ============================================
-# 그리기
-# ============================================
+    # ============================================
+    # 그리기
+    # ============================================
 
     def paintEvent(self, event):
         """미니맵 그리기"""
@@ -224,9 +221,9 @@ class MiniMapWidget(QWidget):
             painter.drawRect(thumb_rect)
 
 
-# ============================================
-# 헬퍼 메소드 (내부)
-# ============================================
+    # ============================================
+    # 헬퍼 메소드 (내부)
+    # ============================================
 
     def _get_thumbnail_rect(self) -> QRect:
         """썸네일 영역 계산"""
@@ -244,7 +241,7 @@ class MiniMapWidget(QWidget):
         
         if thumb_rect.isEmpty() or thumb_rect.width() == 0 or thumb_rect.height() == 0:
             debug_print(f"[WARN] 썸네일 영역이 유효하지 않음 - 중앙 반환")
-            return 0.5, 0.5  # 안전한 기본값
+            return 0.5, 0.5 
         
         # 클릭 위치를 썸네일 기준으로 변환
         click_x = pos.x() - thumb_rect.x()
@@ -264,9 +261,9 @@ class MiniMapWidget(QWidget):
         return ratio_x, ratio_y
     
 
-# ============================================
-# 마우스 이벤트
-# ============================================
+    # ============================================
+    # 마우스 이벤트
+    # ============================================
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
         """미니맵 클릭/드래그 시작"""

@@ -4,6 +4,7 @@
     "zoom_btn_tooltip": "Zoom / Fit to window (click)",
     "zoom_current_tooltip": "Current zoom: {pct}%  (click → zoom menu)",
     "open_file_tooltip": "Open file (Ctrl+O)",
+    "dual_view_tooltip": "Dual View mode (Ctrl+D)",    
     "edit_mode_tooltip": "Edit mode (E)",
     "rotate_left_tooltip":  "Rotate 90° left (Ctrl+Shift+←)",
     "rotate_right_tooltip": "Rotate 90° right (Ctrl+Shift+→)",
@@ -100,6 +101,7 @@
     "view": {
       "title":          "📟 Layout",
       "folder_explorer":"📂 Folder Panel",
+      "dual_view":      "⧉  Dual View",      
       "overlay_info":   "🔲 Overlay Info",
       "metadata_panel": "📊 Metadata Panel",
       "thumbnail_bar":  "🖼️ Thumbnail Bar",

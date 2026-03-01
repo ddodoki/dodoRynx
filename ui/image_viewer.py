@@ -315,12 +315,12 @@ class ImageViewer(EditModeMixin, QGraphicsView):
 # 초기화 및 설정
 # ============================================
 
-    def __init__(self, cache_manager: CacheManager, config_manager: ConfigManager, parent=None) -> None:
+    def __init__(self, cache_manager: CacheManager, config_manager: ConfigManager, parent=None, use_opengl: bool = True) -> None:
         super().__init__(parent)  
 
         self._suppress_fit_in_view: bool  = False
         self._suppress_start_ms:    float = 0.0
-        self._zoom_intent_stack:    list  = []   # 줌 intent 스택
+        self._zoom_intent_stack:    list  = [] 
 
         self._init_edit_mode()
 
@@ -332,23 +332,21 @@ class ImageViewer(EditModeMixin, QGraphicsView):
         self.wheel_timer.setSingleShot(True)
         self.wheel_timer.setInterval(200)
 
-        # ===== 스레드 안전성 추가 =====
+        # 스레드 안전성 추가
         self._state_lock = RLock()
         
-        # ===== singleShot 타이머 추적 =====
         self._pending_timers: list = []
         
         # 이미지 로딩 상태
         self._loading_image = False
         self._loading_timer_id: Optional[int] = None
 
-        # ===== 이미지 전환 상태 추가 =====
+        # 이미지 전환 상태 추가
         self._transition_in_progress = False
         self._pending_image: Optional[QPixmap] = None
 
-        # ===== OpenGL 설정 적용 =====
+        # OpenGL 설정 적용
         self.config_manager = config_manager
-        self._setup_opengl()
 
         # 렌더링 품질 설정
         self.setRenderHint(QPainter.RenderHint.Antialiasing, True)
@@ -397,13 +395,17 @@ class ImageViewer(EditModeMixin, QGraphicsView):
         # View 최적화
         self.setOptimizationFlag(QGraphicsView.OptimizationFlag.DontAdjustForAntialiasing, True)
         self.setOptimizationFlag(QGraphicsView.OptimizationFlag.DontSavePainterState, True)
-        #self.setViewportUpdateMode(QGraphicsView.ViewportUpdateMode.MinimalViewportUpdate)
         self.setViewportUpdateMode(QGraphicsView.ViewportUpdateMode.FullViewportUpdate)
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorViewCenter)
         
         # 배경색
         self.setBackgroundBrush(Qt.GlobalColor.black)
+
+        if use_opengl:
+            self._setup_opengl()   # 기존 메서드 재사용
+        else:
+            debug_print("소프트웨어 렌더링 사용 (secondary viewer)")
 
         # OpenGL viewport는 autoFillBackground가 기본 False
         self.viewport().setAutoFillBackground(True)
@@ -518,7 +520,7 @@ class ImageViewer(EditModeMixin, QGraphicsView):
         self.horizontalScrollBar().valueChanged.connect(self._on_scrollbar_changed)
         self.verticalScrollBar().valueChanged.connect(self._on_scrollbar_changed)
 
-        self._webp_workers: list = []  # 리스트로 관리 → GC 방지
+        self._webp_workers: list = [] 
         self._loading_overlay = LoadingOverlay(self)
 
         self._suppress_fit_in_view = False
@@ -602,11 +604,18 @@ class ImageViewer(EditModeMixin, QGraphicsView):
             debug_print("_auto_zoom_mode: 수동 줌 상태 → manual 유지")
             return 'manual'
 
+        # 풀스크린에서는 항상 fit (큰 뷰포트 때문에 작은 이미지가 actual 오판정되는 문제 방지)
+        if getattr(self, '_fullscreen_mode', False):
+            debug_print(
+                f"_auto_zoom_mode: 이미지 {img_w}×{img_h} / "
+                f"뷰포트 {self.viewport().width()}×{self.viewport().height()} → fit (풀스크린 강제)"
+            )
+            return 'fit'
+
         vp_w = self.viewport().width()
         vp_h = self.viewport().height()
 
         if self.config_manager.get('viewer.auto_zoom_diagonal', False):
-
             # 히스테리시스 0.95 적용
             fits = math.hypot(img_w, img_h) <= math.hypot(vp_w, vp_h) * 0.95
         else:
@@ -618,10 +627,13 @@ class ImageViewer(EditModeMixin, QGraphicsView):
             f"_auto_zoom_mode: 이미지 {img_w}×{img_h} / "
             f"뷰포트 {vp_w}×{vp_h} → {mode}"
             + (" (대각선)" if self.config_manager.get('viewer.auto_zoom_diagonal', False)
-               else " (가로·세로)")
+            else " (가로·세로)")
         )
         return mode
 
+    def set_fullscreen_mode(self, enabled: bool) -> None:
+        self._fullscreen_mode = enabled
+        
 
     def _consume_zoom_intent(self) -> Optional[str]:
         """줌 intent 스택에서 꺼냄. 없으면 None 반환."""
@@ -2106,65 +2118,72 @@ class ImageViewer(EditModeMixin, QGraphicsView):
     def resizeEvent(self, event):
         """창 크기 변경 - 타이밍 개선"""
         super().resizeEvent(event)
-        
+
         # 로딩 중이면 지연
         if self._loading_image:
-            # 재귀 호출 대신 타이머 사용
-            timer = QTimer()
+            timer = QTimer(self)
             timer.setSingleShot(True)
-            timer.timeout.connect(lambda: self.resizeEvent(event))
+            timer.timeout.connect(self._on_resize_delayed)
             timer.start(50)
             self._pending_timers.append(timer)
             return
-        
+
         # 초기 표시 무시
         if not event.oldSize().isValid():
             return
-        
+
         # 크기 변경 없으면 무시
         if event.oldSize() == event.size():
             return
-        
+
         debug_print(f"[RESIZE] 크기 변경: {event.oldSize()} → {event.size()}")
-           
-        # suppress 중 리사이즈 처리 (actual 모드 보류 중)
+
+        self._apply_resize_logic()
+
+        # 미니맵/오버레이/툴바 등 위치 업데이트
+        self._post_resize_ui_update()
+
+
+    def _on_resize_delayed(self):
+        """이미지 로딩 중일 때 지연된 리사이즈 처리 (event 없이 현재 크기 기준)"""
+        if self._loading_image:
+            # 아직도 로딩 중이면 한 번 더 미룰지, 그냥 스킵할지 정책 결정
+            return
+
+        debug_print("[RESIZE] 지연 리사이즈 처리")
+        self._apply_resize_logic()
+        self._post_resize_ui_update()
+
+
+    def _apply_resize_logic(self):
+        # suppress / zoom_mode 관련 기존 로직만 떼어낸 부분
         if getattr(self, '_suppress_fit_in_view', False):
             if self.pixmap_item and not self.pixmap_item.pixmap().isNull():
                 px = self.pixmap_item.pixmap()
                 new_intent = self._auto_zoom_mode(px.width(), px.height())
                 self._zoom_intent_stack = [new_intent]
                 if new_intent != 'actual':
-                    # 창이 작아져 actual 불가 → 즉시 해제
                     self._suppress_fit_in_view = False
                     self._fit_in_view()
-            # suppress 중에는 아래 zoom 처리 건너뜀
         else:
-            # 기존 코드 (변경 없음)
-            # Fit 모드일 때만 자동 리사이즈
             if self.zoom_mode == 'fit' and self.pixmap_item:
                 self._fit_in_view()
             elif self.zoom_mode == 'width' and self.pixmap_item:
                 self._fit_width()
-        
+
         self._update_cursor()
 
-        
+
+    def _post_resize_ui_update(self):
         # 미니맵 업데이트
         if hasattr(self, 'minimap_update_timer'):
             self.minimap_update_timer.start(self.MINIMAP_UPDATE_DELAY * 2)
 
-        # 오버레이가 항상 뷰어 전체를 덮도록 동기화
+        # 오버레이/미니맵/툴바 위치 조정
         if hasattr(self, '_loading_overlay'):
             self._loading_overlay.setGeometry(self.rect())
         if hasattr(self, 'minimap'):
             self._position_minimap()
-
-        # 편집 모드
-        if hasattr(self, '_loading_overlay'):
-            self._loading_overlay.setGeometry(self.rect())
-        if hasattr(self, 'minimap'):
-            self._position_minimap()
-
         if self._edit_toolbar is not None and self._edit_toolbar.isVisible():
             self._position_edit_toolbar()
 

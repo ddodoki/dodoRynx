@@ -53,6 +53,7 @@ def _menu(title: str = "", parent: Optional[QWidget] = None) -> QMenu:
     m.setStyleSheet(_MENU_STYLE)
     return m
 
+
 # ══════════════════════════════════════════════════════════════
 # MenuBuilder
 # ══════════════════════════════════════════════════════════════
@@ -60,8 +61,10 @@ def _menu(title: str = "", parent: Optional[QWidget] = None) -> QMenu:
 class MenuBuilder:
     """MainWindow 상태를 반영한 컨텍스트 메뉴를 빌드한다."""
 
+
     def __init__(self, main_window) -> None:
         self._mw = main_window
+
 
     def build(self, parent: Optional[QWidget] = None) -> QMenu:
         mw   = self._mw
@@ -97,7 +100,7 @@ class MenuBuilder:
 
         return menu
 
-    # ── 파일 작업 ─────────────────────────────────────────────
+    # 파일 작업
 
     def _section_file(self, menu: QMenu, parent: Optional[QWidget]) -> None:
         mw       = self._mw
@@ -159,8 +162,7 @@ class MenuBuilder:
         a.triggered.connect(mw._toggle_fullscreen)
 
 
-    # ── 하이라이트 ────────────────────────────────────────────
-
+    # 하이라이트
     def _section_highlight(self, menu: QMenu, parent: Optional[QWidget]) -> None:
         mw              = self._mw
         has_file        = bool(mw._current_file)
@@ -218,11 +220,16 @@ class MenuBuilder:
             menu.addMenu(hl_sub)
 
 
-    # ── 뷰 토글 ───────────────────────────────────────────────
-
+    # 뷰 토글 
     def _section_view(self, menu: QMenu, parent: Optional[QWidget]) -> None:
         mw = self._mw
         toggle_sub = _menu(t('menu.view.title'), menu)
+
+        a = toggle_sub.addAction(t('menu.view.dual_view'))
+        a.setShortcut(QKeySequence("Ctrl+D"))
+        a.setCheckable(True)
+        a.setChecked(mw.dual_view_panel.is_dual_mode)
+        a.triggered.connect(mw.dual_view_panel.toggle_dual_mode)
 
         fe_act = toggle_sub.addAction(t("menu.view.folder_explorer"))
         fe_act.setShortcut(QKeySequence("N"))
@@ -263,8 +270,7 @@ class MenuBuilder:
         menu.addMenu(toggle_sub)
 
 
-    # ── 회전 ──────────────────────────────────────────────────
-
+    # 회전
     def _section_rotate(self, menu: QMenu, parent: Optional[QWidget]) -> None:
         mw       = self._mw
         has_file = bool(mw._current_file)
@@ -285,8 +291,7 @@ class MenuBuilder:
 
         menu.addMenu(rot_sub)
 
-    # ── 화면 캡처 ─────────────────────────────────────────────
-
+    # 화면 캡처 
     def _section_capture(self, menu: QMenu, parent: Optional[QWidget]) -> None:
         mw      = self._mw
         cap_sub = _menu(t('menu.capture.title'), menu)
@@ -301,8 +306,7 @@ class MenuBuilder:
 
         menu.addMenu(cap_sub)
 
-    # ── 인쇄 ──────────────────────────────────────────────────
-
+    # 인쇄
     def _section_print(self, menu: QMenu, parent: Optional[QWidget]) -> None:
         mw        = self._mw
         has_file  = bool(mw._current_file)
@@ -323,8 +327,7 @@ class MenuBuilder:
 
         menu.addMenu(prt_sub)
 
-    # ── 정보/설정 ─────────────────────────────────────────────
-
+    # 정보/설정
     def _section_info(self, menu: QMenu, parent: Optional[QWidget]) -> None:
         mw       = self._mw
         info_sub = _menu(t('menu.info.title'), menu)
@@ -351,18 +354,19 @@ class MenuBuilder:
 class ShortcutManager:
     """
     QShortcut 전역 단축키 등록·관리.
-    원본 setup_shortcuts() 의 메서드명·단축키를 그대로 유지.
     """
+
 
     def __init__(self, main_window) -> None:
         self._mw = main_window
         self._shortcuts: dict[str, QShortcut] = {}
 
+
     def setup(self) -> None:
         mw  = self._mw
         reg = self._reg
 
-        # ── 탐색 ──────────────────────────────────────────────
+        # 탐색
         reg("next_right",      "Right",           mw._next_image)
         reg("next_space",      "Space",           mw._next_image)
         reg("prev_left",       "Left",            mw._previous_image)
@@ -370,7 +374,7 @@ class ShortcutManager:
         reg("first",           "Home",            mw._first_image)
         reg("last",            "End",             mw._last_image)
 
-        # ── 줌 ────────────────────────────────────────────────
+        # 줌
         reg("zoom_fit",        "F",               lambda: mw.image_viewer.set_zoom_mode("fit"))
         reg("zoom_actual",     "1",               lambda: mw.image_viewer.set_zoom_mode("actual"))
         reg("zoom_width",      "W",               lambda: mw.image_viewer.set_zoom_mode("width"))
@@ -378,7 +382,7 @@ class ShortcutManager:
         reg("zoom_in2",        "Ctrl++",          lambda: mw.image_viewer.zoom_in())
         reg("zoom_out",        "Ctrl+-",          lambda: mw.image_viewer.zoom_out())
 
-        # ── 뷰 토글 ───────────────────────────────────────────
+        # 뷰 토글
         reg("fullscreen",      "F11",             mw._toggle_fullscreen)
         reg("folder_explorer", "N",               mw.toggle_folder_explorer)
         reg("overlay",         "I",               mw._toggle_overlay)
@@ -386,8 +390,9 @@ class ShortcutManager:
         reg("thumbnail",       "T",               mw._toggle_thumbnail_bar)
         reg("status_bar",       "S",              mw._toggle_status_bar)
         reg("perf",            "F12",             mw._toggle_performance_overlay)
+        reg("dual_view",       "Ctrl+D",          mw.dual_view_panel.toggle_dual_mode)
 
-        # ── 파일 작업 ─────────────────────────────────────────
+        # 파일 작업
         reg("open_file",       "Ctrl+O",          mw._open_file_dialog)
         reg("open_folder",     "Ctrl+Shift+O",    mw._open_folder_dialog)
         reg("rename",          "F2",              mw._rename_file)
@@ -399,37 +404,35 @@ class ShortcutManager:
         reg("properties",      "Alt+Return",      mw._show_file_properties)
         reg("copy_path",       "Ctrl+Shift+A",    mw._copy_file_path)
 
-        # ── 하이라이트 ────────────────────────────────────────
+        # 하이라이트
         reg("highlight",       "H",               mw._toggle_highlight)
         reg("clear_hl",        "Ctrl+Shift+H",    mw._clear_all_highlights)
         reg("del_hl",          "Ctrl+Shift+Delete", mw._delete_highlighted_files)
         reg("copy_hl",         "Ctrl+Shift+C",    mw._copy_highlighted_files)
         reg("cut_hl",          "Ctrl+Shift+X",    mw._cut_highlighted_files)
 
-        # ── 회전 ──────────────────────────────────────────────
+        # 회전
         reg("rot_left",        "Ctrl+Shift+Left",  mw._on_rotate_left)
         reg("rot_right",       "Ctrl+Shift+Right", mw._on_rotate_right)
         reg("rot_reset",       "Ctrl+Shift+Up",    mw._on_rotate_reset)
         reg("rot_apply",       "Ctrl+Shift+Down",  mw._on_rotate_apply)
 
-        # ── 캡처 ──────────────────────────────────────────────
+        # 캡처
         reg("cap_clip",        "Ctrl+Alt+C",      mw._capture_to_clipboard)
         reg("cap_save",        "Ctrl+Alt+S",      mw._capture_and_save)
 
-        # ── 인쇄 ──────────────────────────────────────────────
+        # 인쇄
         reg("print_cur",       "Ctrl+P",          mw._on_print_current)
         reg("print_all",       "Ctrl+Alt+P",      mw._on_print_all)
         reg("print_hl",        "Ctrl+Shift+P",    mw._on_print_highlighted)
 
-        # ── 기타 ──────────────────────────────────────────────
+        # 기타
         reg("gps",             "Ctrl+G",          mw._view_gps)
         reg("settings",        "Ctrl+,",          mw._open_settings)
         reg("about",           "F1",              mw._show_about_dialog)
         reg("sysinfo",         "F4",              mw._show_system_info)
         reg("reload",          "F5",              mw._reload_current_image)
-        #reg("escape",          "Escape",          self._on_escape)
         reg("E",               "E",               mw.enter_edit_mode)
-
 
         debug_print(f"ShortcutManager: {len(self._shortcuts)}개 단축키 등록 완료")
 
@@ -451,6 +454,7 @@ class ShortcutManager:
     def get(self, name: str) -> Optional[QShortcut]:
         return self._shortcuts.get(name)
 
+
     def set_enabled(self, name: str, enabled: bool) -> None:
         sc = self._shortcuts.get(name)
         if sc:
@@ -470,9 +474,6 @@ class ShortcutManager:
 class MenuShortcutController:
     """
     MainWindow ↔ MenuBuilder / ShortcutManager 브릿지.
-
-    - 반드시 UI 생성이 모두 끝난 뒤 setup() 을 호출할 것.
-      (상태바, 썸네일바 등 모든 self.* 속성이 준비된 이후)
     """
 
     def __init__(self, main_window) -> None:
@@ -498,3 +499,4 @@ class MenuShortcutController:
 
     def get_shortcut(self, name: str) -> Optional[QShortcut]:
         return self._shortcut.get(name)
+    
