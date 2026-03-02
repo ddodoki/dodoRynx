@@ -153,41 +153,41 @@ class MetadataPanel(QWidget):
         scroll_area.setWidget(self.metadata_container)
         scroll_area.setStyleSheet("""
             QScrollArea {
-                background-color: #2b2b2b;
+                background-color: #202020;
                 border: none;
+                border-top: 1px solid rgba(255, 255, 255, 0.06);
             }
-            
+
             /* 세로 스크롤바 */
             QScrollBar:vertical {
-                width: 8px;
-                background: rgba(30, 30, 30, 80);
-                border-radius: 4px;
-                margin: 2px 0px;
+                width: 6px;
+                background: transparent;
+                margin: 0px;
             }
-            
+
             QScrollBar::handle:vertical {
-                background: rgba(100, 100, 100, 100);
-                border-radius: 4px;
+                background: rgba(255, 255, 255, 0.18);
+                border-radius: 3px;
                 min-height: 30px;
             }
-            
+
             QScrollBar::handle:vertical:hover {
-                background: rgba(120, 120, 120, 160);
+                background: rgba(255, 255, 255, 0.30);
             }
-            
+
             QScrollBar::handle:vertical:pressed {
-                background: rgba(140, 140, 140, 200);
+                background: rgba(74, 158, 255, 0.60);
             }
-            
-            /* 상하 버튼 제거 */
+
+            /* 위/아래 버튼 제거 */
             QScrollBar::add-line:vertical,
             QScrollBar::sub-line:vertical {
                 height: 0px;
                 border: none;
                 background: none;
             }
-            
-            /* 페이지 영역 투명 */
+
+            /* 페이지 영역 제거 */
             QScrollBar::add-page:vertical,
             QScrollBar::sub-page:vertical {
                 background: none;

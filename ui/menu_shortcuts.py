@@ -375,12 +375,19 @@ class ShortcutManager:
         reg("last",            "End",             mw._last_image)
 
         # 줌
-        reg("zoom_fit",        "F",               lambda: mw.image_viewer.set_zoom_mode("fit"))
-        reg("zoom_actual",     "1",               lambda: mw.image_viewer.set_zoom_mode("actual"))
-        reg("zoom_width",      "W",               lambda: mw.image_viewer.set_zoom_mode("width"))
-        reg("zoom_in",         "Ctrl+=",          lambda: mw.image_viewer.zoom_in())
-        reg("zoom_in2",        "Ctrl++",          lambda: mw.image_viewer.zoom_in())
-        reg("zoom_out",        "Ctrl+-",          lambda: mw.image_viewer.zoom_out())
+        # reg("zoom_fit",        "F",               lambda: mw.image_viewer.set_zoom_mode("fit"))
+        # reg("zoom_actual",     "1",               lambda: mw.image_viewer.set_zoom_mode("actual"))
+        # reg("zoom_width",      "W",               lambda: mw.image_viewer.set_zoom_mode("width"))
+        # reg("zoom_in",         "Ctrl+=",          lambda: mw.image_viewer.zoom_in())
+        # reg("zoom_in2",        "Ctrl++",          lambda: mw.image_viewer.zoom_in())
+        # reg("zoom_out",        "Ctrl+-",          lambda: mw.image_viewer.zoom_out())
+
+        reg("zoom_fit",    "F",      lambda: mw.dual_view_panel.get_active_viewer().set_zoom_mode("fit"))
+        reg("zoom_actual", "1",      lambda: mw.dual_view_panel.get_active_viewer().set_zoom_mode("actual"))
+        reg("zoom_width",  "W",      lambda: mw.dual_view_panel.get_active_viewer().set_zoom_mode("width"))
+        reg("zoom_in",     "Ctrl+=", lambda: mw.dual_view_panel.get_active_viewer().zoom_in())
+        reg("zoom_in2",    "Ctrl++", lambda: mw.dual_view_panel.get_active_viewer().zoom_in())
+        reg("zoom_out",    "Ctrl+-", lambda: mw.dual_view_panel.get_active_viewer().zoom_out())
 
         # 뷰 토글
         reg("fullscreen",      "F11",             mw._toggle_fullscreen)

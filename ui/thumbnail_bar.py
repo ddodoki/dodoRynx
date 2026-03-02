@@ -28,7 +28,6 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
-    QMenu,
     QPushButton,
     QScrollArea,
     QVBoxLayout,
@@ -129,7 +128,7 @@ class ThumbnailLoader(QRunnable):
 
             # 디스크 캐시 저장 (emit 이후 → UI 먼저 업데이트)
             try:
-                raw_data = HybridCache.qimage_to_bytes(qimage, fmt="JPEG", quality=75)
+                raw_data = HybridCache.qimage_to_bytes(qimage, fmt="JPEG", quality=60)
                 if raw_data:
                     self.cache._db_save(cache_key, raw_data, None, None, source_mtime)
             except Exception as e:
@@ -160,7 +159,7 @@ class ThumbnailLoader(QRunnable):
                     '.orf', '.rw2', '.pef', '.srw', '.raf')
         heif_exts = ('.heic', '.heif', '.avif') 
 
-        if ext in raw_exts or ext in heif_exts:   # ← HEIF도 ImageLoader 경유
+        if ext in raw_exts or ext in heif_exts: 
             return self._generate_raw_thumbnail()
 
         return self._generate_normal_thumbnail()
@@ -236,8 +235,7 @@ class ThumbnailItem(QFrame):
     
     clicked = Signal(int)
     ctrl_clicked = Signal(int)
-    shift_clicked = Signal(int, bool)  # (index, is_ctrl_held)
-
+    shift_clicked = Signal(int, bool) 
 
     def __init__(self, index: int, file_name: str, size: int) -> None:
         super().__init__()
@@ -246,55 +244,52 @@ class ThumbnailItem(QFrame):
         self.file_name = file_name
         self.is_selected = False
         self.is_highlighted = False
-        self.is_temp_highlighted = False  # 임시 하이라이트 
-        self._is_secondary: bool = False   
+        self.is_temp_highlighted = False
+        self._is_secondary: bool = False
 
-        # 툴팁 설정
         self.setToolTip(file_name)
-        
-        # 레이아웃
+
+        # ── 레이아웃: 여백 최소화 ──────────────────────────────
         self.main_layout = QVBoxLayout(self)
-        self.main_layout.setContentsMargins(3, 3, 3, 3)
-        self.main_layout.setSpacing(2)
-        
-        # 썸네일 이미지
+        self.main_layout.setContentsMargins(2, 2, 2, 2)
+        self.main_layout.setSpacing(0)          # image + label 간격 0
+
+        # ── 이미지 레이블 ──────────────────────────────────────
         self.image_label = QLabel()
         self.image_label.setFixedSize(size, size)
         self.image_label.setScaledContents(False)
         self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.image_label.setStyleSheet("""
-            QLabel {
-                background-color: #2b2b2b;
-                border: none;
-            }
-        """)
+        # 배경 투명 → QFrame 자체가 카드 배경 역할
+        self.image_label.setStyleSheet("background: transparent; border: none;")
+        # 마우스 이벤트를 QFrame으로 통과시킴 (hover 작동)
+        self.image_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         self.main_layout.addWidget(self.image_label)
-        
-        # 파일명
-        self.name_label = QLabel(file_name)
+
+        # ── 파일명 레이블: 이미지 바로 아래 세련된 caption ──────
+        self.name_label = QLabel()
         self.name_label.setFixedWidth(size)
-        self.name_label.setMaximumHeight(18)
+        self.name_label.setFixedHeight(16)
         self.name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.name_label.setStyleSheet("""
             QLabel {
-                color: #ccc;
+                color: rgba(204, 204, 204, 0.85);
                 font-size: 9px;
-                background-color: #1e1e1e;
+                background: transparent;
                 border: none;
-                padding: 1px;
+                padding: 0px 2px;
             }
         """)
         self.name_label.setWordWrap(False)
         self.name_label.setText(self._truncate_filename(file_name, size))
+        self.name_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         self.main_layout.addWidget(self.name_label)
-        
-        # 초기 스타일
+
         self.setFrameShape(QFrame.Shape.Box)
         self.setLineWidth(0)
-        self._update_border() 
-        self.setFixedSize(size + 10, size + 28)
-    
-        # 컨텍스트 메뉴 활성화
+        self._update_border()
+        # 전체 높이: image + label + 상하 margin(2+2) = size + 20
+        self.setFixedSize(size + 6, size + 22)
+
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.DefaultContextMenu)
 
 
@@ -331,9 +326,6 @@ class ThumbnailItem(QFrame):
     def set_temp_highlighted(self, highlighted: bool) -> None:
         """
         임시 하이라이트 설정 (붙여넣기 등)
-        
-        Args:
-            highlighted: True면 임시 하이라이트
         """
         if self.is_temp_highlighted == highlighted:
             return
@@ -351,56 +343,64 @@ class ThumbnailItem(QFrame):
 
 
     def _update_border(self) -> None:
-        """테두리 스타일 업데이트 (우선순위 적용)"""
-        
+        """테두리 + 배경 tint 업데이트 (선택/하이라이트 동시 표현)"""
+        _R = "border-radius: 3px;"
+
+        # ── 테두리 (선택 계열)
         if self.is_selected:
-            # 1순위: 선택 (파란색 굵은 테두리)
-            style = """
-                QFrame {
-                    border: 3px solid #0078D4;
-                    border-radius: 4px;
-                    background-color: transparent;
-                }
-                """
+            border = "border: 2px solid #4a9eff;"    
         elif self._is_secondary:
-            # 2순위: 보조 뷰어 (주황색 테두리)
-            style = """
-                QFrame {
-                    border: 2px solid #ff9500;
-                    border-radius: 4px;
-                    background-color: transparent;
-                }
-            """
+            border = "border: 2px solid #6fcf5a;" 
+        else:
+            border = "border: 1px solid #404040;"   
+
+        # ── 배경 tint (하이라이트 계열)
+        if self.is_selected and self.is_highlighted:
+            bg = "background-color: rgba(255, 255, 0, 0.40);"      # 선택+하이라이트: 노랑 40%
+        elif self.is_selected and self.is_temp_highlighted:
+            bg = "background-color: rgba(255, 100, 100, 0.40);"    # 선택+임시: 빨강 40%
+        elif self.is_selected and self._is_secondary:
+            bg = "background-color: rgba(111, 207, 90, 0.22);"     # 선택+보조
+        elif self.is_selected:
+            bg = "background-color: rgba(74, 158, 255, 0.18);"     # 선택만
         elif self.is_highlighted:
-            # 3순위: 영구 하이라이트 (노란색 테두리)
-            style = """
-                QFrame {
-                    border: 2px solid #FFD700;
-                    border-radius: 4px;
-                    background-color: transparent;
+            bg = "background-color: rgba(255, 255, 0, 0.30);"      # 하이라이트만: 노랑 30%
+        elif self.is_temp_highlighted:
+            bg = "background-color: rgba(255, 100, 100, 0.30);"    # 임시만: 빨강 30%
+        else:
+            bg = "background-color: #252525;"                      # 기본
+
+        if self.is_selected:
+            hover = ""
+        elif self.is_highlighted:
+            hover = """
+                QFrame:hover {
+                    border: 1px solid #aaaaaa;
                 }
             """
         elif self.is_temp_highlighted:
-            # 4순위: 임시 하이라이트 (밝은 녹색 테두리)
-            style = """
-                QFrame {
-                    border: 2px solid #2cda15;
-                    border-radius: 4px;
-                    background-color: transparent;
+            hover = """
+                QFrame:hover {
+                    border: 1px solid #ff8888;
                 }
             """
         else:
-            # 5순위: 일반 상태
-            style = """
-                QFrame {
-                    border: 2px solid #3a3a3a;
-                    background-color: transparent;
-                }
+            hover = """
                 QFrame:hover {
-                    border: 2px solid #555;
+                    border: 1px solid #5a5a5a;
+                    background-color: #2e2e2e;
                 }
             """
-        self.setStyleSheet(style)
+
+        # ── 최종 스타일 적용
+        self.setStyleSheet(f"""
+            QFrame {{
+                {border}
+                {_R}
+                {bg}
+            }}
+            {hover}
+        """)
 
 
     def set_highlighted(self, highlighted: bool) -> None:
@@ -504,120 +504,97 @@ class ThumbnailBar(QWidget):
 
 
     def _init_ui(self) -> None:
-        """UI 초기화"""
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 5, 0, 5)
-        layout.setSpacing(5)
-        
-        # 왼쪽 화살표
-        self.left_btn = QPushButton("❮") 
-        self.left_btn.setFixedSize(30, 50)
-        self.left_btn.setStyleSheet("""
+        layout.setContentsMargins(0, 4, 0, 4)
+        layout.setSpacing(4)
+
+        # ── 화살표 버튼 공통 스타일
+        _ARROW_STYLE = """
             QPushButton {
-                background-color: transparent;
+                background: transparent;
                 border: none;
-                color: #888;
-                font-size: 24px;
-                font-weight: bold;
+                color: rgba(136, 136, 136, 0.8);
+                font-size: 18px;
             }
             QPushButton:hover {
                 color: #4a9eff;
-                background-color: rgba(74, 158, 255, 0.1);
+                background: rgba(74, 158, 255, 0.10);
+                border-radius: 4px;
             }
             QPushButton:pressed {
-                color: #357abd;
+                color: #2a7ed3;
+                background: rgba(74, 158, 255, 0.20);
             }
-        """)
+        """
+
+        self.left_btn = QPushButton("‹") 
+        self.left_btn.setFixedSize(24, 48)
+        self.left_btn.setStyleSheet(_ARROW_STYLE)
         self.left_btn.clicked.connect(self._scroll_left)
         layout.addWidget(self.left_btn)
-        
-        # 스크롤 영역
+
+        # ── 스크롤 영역
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)  
-        self.scroll_area.setFixedHeight(self.THUMBNAIL_SIZE + 50)
+        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.scroll_area.setFixedHeight(self.THUMBNAIL_SIZE + 40)
         self.scroll_area.setStyleSheet("""
             QScrollArea {
-                background-color: #2b2b2b;
-                border: 1px solid #555;
+                background-color: #202020;
+                border: none;
+                border-top: 1px solid rgba(255, 255, 255, 0.06);
             }
-            
-            /* 가로 스크롤바 */
             QScrollBar:horizontal {
-                height: 8px;
-                background: rgba(30, 30, 30, 80);
-                border-radius: 4px;
-                margin: 0px 2px;
+                height: 6px;
+                background: transparent;
+                margin: 0px;
             }
-            
             QScrollBar::handle:horizontal {
-                background: rgba(100, 100, 100, 100);
-                border-radius: 4px;
+                background: rgba(255, 255, 255, 0.18);
+                border-radius: 3px;
                 min-width: 30px;
             }
-            
             QScrollBar::handle:horizontal:hover {
-                background: rgba(120, 120, 120, 160);
+                background: rgba(255, 255, 255, 0.30);
             }
-            
             QScrollBar::handle:horizontal:pressed {
-                background: rgba(140, 140, 140, 200);
+                background: rgba(74, 158, 255, 0.60);
             }
-            
-            /* 좌우 버튼 제거 */
             QScrollBar::add-line:horizontal,
-            QScrollBar::sub-line:horizontal {
-                width: 0px;
-                border: none;
-                background: none;
-            }
-            
-            /* 페이지 영역 투명 */
+            QScrollBar::sub-line:horizontal { width: 0px; }
             QScrollBar::add-page:horizontal,
-            QScrollBar::sub-page:horizontal {
-                background: none;
-            }
+            QScrollBar::sub-page:horizontal { background: none; }
         """)
 
-        # 이벤트 필터 설치 (휠 이벤트 가로채기)
         self.scroll_area.installEventFilter(self)
         self.scroll_area.viewport().installEventFilter(self)
-        
-        # 썸네일 컨테이너
+
+        # ── 썸네일 컨테이너
         self.thumbnail_container = QWidget()
+        self.thumbnail_container.setStyleSheet("background: transparent;")
         self.thumbnail_layout = QHBoxLayout(self.thumbnail_container)
-        self.thumbnail_layout.setContentsMargins(5, 5, 5, 5)
-        self.thumbnail_layout.setSpacing(5)
+        self.thumbnail_layout.setContentsMargins(4, 4, 4, 4)
+        self.thumbnail_layout.setSpacing(4)
         self.thumbnail_layout.addStretch()
-        
+
         self.scroll_area.setWidget(self.thumbnail_container)
         layout.addWidget(self.scroll_area)
-        
-        # 오른쪽 화살표
-        self.right_btn = QPushButton("❯")
-        self.right_btn.setFixedSize(30, 50)
-        self.right_btn.setStyleSheet("""
-            QPushButton {
-                background-color: transparent;
-                border: none;
-                color: #888;
-                font-size: 24px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                color: #4a9eff;
-                background-color: rgba(74, 158, 255, 0.1);
-            }
-            QPushButton:pressed {
-                color: #357abd;
-            }
-        """)
+
+        self.right_btn = QPushButton("›")  # GUILLEMET
+        self.right_btn.setFixedSize(24, 48)
+        self.right_btn.setStyleSheet(_ARROW_STYLE)
         self.right_btn.clicked.connect(self._scroll_right)
         layout.addWidget(self.right_btn)
-        
-        # 고정 높이
-        self.setFixedHeight(self.THUMBNAIL_SIZE + 60)
+
+        self.setFixedHeight(self.THUMBNAIL_SIZE + 48)
+        # 바 자체 배경 (이미지 뷰어와 구분)
+        self.setStyleSheet("""
+            ThumbnailBar {
+                background-color: #1c1c1c;
+                border-top: 1px solid rgba(255, 255, 255, 0.07);
+            }
+        """)
 
 
     # ============================================
@@ -661,7 +638,7 @@ class ThumbnailBar(QWidget):
                 widget.deleteLater()
         self.thumbnail_items.clear()
 
-        # ── 빈 목록 완전 초기화 ─────────────────
+        # ── 빈 목록 완전 초기화
         if not image_list:
             self.image_list               = []
             self.current_index            = -1
@@ -847,13 +824,6 @@ class ThumbnailBar(QWidget):
     def update_file_name(self, old_path: Path, new_path: Path) -> bool:
         """
         개별 파일명 변경 반영 (썸네일 재생성 없이)
-        
-        Args:
-            old_path: 이전 경로
-            new_path: 새 경로
-        
-        Returns:
-            업데이트 성공 여부
         """
         try:
             # 파일 목록에서 찾기
@@ -997,9 +967,6 @@ class ThumbnailBar(QWidget):
     def set_temp_highlights(self, files: List[Path]) -> None:
         """
         임시 하이라이트 설정
-        
-        Args:
-            files: 임시 하이라이트할 파일 목록
         """
         self.temp_highlighted_files = set(files)
         

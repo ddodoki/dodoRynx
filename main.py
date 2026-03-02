@@ -2,7 +2,7 @@
 # main.py
 
 """
-dodoRynx - 고성능 이미지 뷰어
+dodoRynx
 진입점 및 애플리케이션 초기화
 """
 
@@ -75,6 +75,49 @@ def setup_dark_theme(app: QApplication) -> None:
 
 
 # ============================================
+# Windows 타이틀바 다크모드 강제 적용
+# ============================================
+
+def _apply_windows_dark_titlebar(hwnd: int) -> None:
+    if sys.platform != 'win32':
+        return
+    try:
+        import ctypes
+
+        dwmapi = ctypes.windll.dwmapi
+
+        # 1단계: 다크모드 활성화 (텍스트/버튼 색상을 밝게)
+        DWMWA_USE_IMMERSIVE_DARK_MODE = 20
+        dark = ctypes.c_int(1)
+        dwmapi.DwmSetWindowAttribute(
+            hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE,
+            ctypes.byref(dark), ctypes.sizeof(dark)
+        )
+
+        # 2단계: 타이틀바 배경색 고정 (Windows 11 22000+)
+        # COLORREF 형식: 0x00BBGGRR
+        DWMWA_CAPTION_COLOR = 35
+        # #1a1a1a → R=0x1a, G=0x1a, B=0x1a → COLORREF = 0x001a1a1a
+        caption_color = ctypes.c_uint(0x001a1a1a)
+        dwmapi.DwmSetWindowAttribute(
+            hwnd, DWMWA_CAPTION_COLOR,
+            ctypes.byref(caption_color), ctypes.sizeof(caption_color)
+        )
+
+        # 3단계: 타이틀 텍스트 색상 고정 (Windows 11 22000+)
+        DWMWA_TEXT_COLOR = 36
+        # #ffffff → 0x00ffffff
+        text_color = ctypes.c_uint(0x00ffffff)
+        dwmapi.DwmSetWindowAttribute(
+            hwnd, DWMWA_TEXT_COLOR,
+            ctypes.byref(text_color), ctypes.sizeof(text_color)
+        )
+
+    except Exception as e:
+        warning_print(f"타이틀바 색상 설정 실패: {e}")
+        
+
+# ============================================
 # 스레드 풀 설정
 # ============================================
 
@@ -133,7 +176,7 @@ def handle_command_line_args(window: 'MainWindow') -> None:
             if not file_path.exists():
                 warning_print(f"경로가 존재하지 않음: {file_path}")
                 return
-            # 파일은 initial_file로 이미 처리됨 → 폴더만 처리
+
             if file_path.is_dir():
                 info_print(f"폴더 열기: {file_path}")
                 window.open_folder(file_path)
@@ -179,7 +222,6 @@ def main() -> int:
         setup_dark_theme(app)
         setup_thread_pool()
 
-        # heavy import 지연 (속도 개선의 실제 원인 — 유지)
         from utils.config_manager import ConfigManager
         from ui.main_window import MainWindow
 
@@ -198,10 +240,14 @@ def main() -> int:
             config = ConfigManager(parent=app)
 
         try:
-            # 완전히 초기화된 MainWindow 생성 (깜박임 없음)
             window = MainWindow(config)
             window.show()
-            app.processEvents()  # 완성된 창이 즉시 사용자에게 표시됨
+            app.processEvents() 
+
+            if sys.platform == 'win32':
+                hwnd = int(window.winId())
+                _apply_windows_dark_titlebar(hwnd)
+
             info_print("메인 윈도우 생성 완료")
         except Exception as e:
             error_print(f"메인 윈도우 생성 실패: {e}")
@@ -212,12 +258,11 @@ def main() -> int:
             )
             return 1
 
-        # 창이 완전히 보인 후 파일/폴더 열기
         try:
             if initial_file:
-                window.open_image(initial_file)   # 파일 → 직접 처리
+                window.open_image(initial_file) 
             else:
-                handle_command_line_args(window)  # 폴더 또는 인자 없음
+                handle_command_line_args(window)  
         except Exception as e:
             error_print(f"초기 파일 열기 예외: {e}")
 

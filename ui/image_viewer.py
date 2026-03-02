@@ -371,6 +371,7 @@ class ImageViewer(EditModeMixin, QGraphicsView):
         self.zoom_factor = 1.0
         self.min_zoom = 0.1
         self.max_zoom = 10.0
+        self._user_has_zoomed: bool = False
         
         # 드래그 설정
         self.is_dragging = False
@@ -604,7 +605,7 @@ class ImageViewer(EditModeMixin, QGraphicsView):
             debug_print("_auto_zoom_mode: 수동 줌 상태 → manual 유지")
             return 'manual'
 
-        # 풀스크린에서는 항상 fit (큰 뷰포트 때문에 작은 이미지가 actual 오판정되는 문제 방지)
+        # 풀스크린에서는 항상 fit
         if getattr(self, '_fullscreen_mode', False):
             debug_print(
                 f"_auto_zoom_mode: 이미지 {img_w}×{img_h} / "
@@ -612,14 +613,21 @@ class ImageViewer(EditModeMixin, QGraphicsView):
             )
             return 'fit'
 
+        # 사용자가 아직 휠 줌을 한 적 없으면 → 무조건 fit 유지
+        # actual 모드가 자동으로 드래그를 활성화하는 문제 방지
+        if not self._user_has_zoomed:
+            debug_print(
+                f"_auto_zoom_mode: 이미지 {img_w}×{img_h} / "
+                f"뷰포트 {self.viewport().width()}×{self.viewport().height()} → fit (미줌 상태)"
+            )
+            return 'fit'
+
         vp_w = self.viewport().width()
         vp_h = self.viewport().height()
 
         if self.config_manager.get('viewer.auto_zoom_diagonal', False):
-            # 히스테리시스 0.95 적용
             fits = math.hypot(img_w, img_h) <= math.hypot(vp_w, vp_h) * 0.95
         else:
-            # 히스테리시스: 뷰포트의 95% 이하일 때만 actual
             fits = (img_w <= vp_w * 0.95 and img_h <= vp_h * 0.95)
 
         mode = 'actual' if fits else 'fit'
@@ -630,6 +638,7 @@ class ImageViewer(EditModeMixin, QGraphicsView):
             else " (가로·세로)")
         )
         return mode
+
 
     def set_fullscreen_mode(self, enabled: bool) -> None:
         self._fullscreen_mode = enabled
@@ -644,6 +653,7 @@ class ImageViewer(EditModeMixin, QGraphicsView):
 
     def _on_fit_key(self) -> None:
         """F키 — fit 모드 명시적 전환 (manual 리셋)"""
+        self._user_has_zoomed = False
         self.zoom_mode = 'fit'
         self._fit_in_view()
 
@@ -709,6 +719,7 @@ class ImageViewer(EditModeMixin, QGraphicsView):
         
         self.resetTransform()
         self.zoom_factor = 1.0
+        self._user_has_zoomed = False
         self.zoom_mode = 'fit'
 
         intent = self._auto_zoom_mode(pixmap.width(), pixmap.height())
@@ -821,7 +832,6 @@ class ImageViewer(EditModeMixin, QGraphicsView):
                 if timer.isActive():
                     timer.stop()
         
-        # singleShot 타이머는 추적 안 함 (짧은 수명)
         debug_print("타이머 중지 완료")
 
 
@@ -899,6 +909,7 @@ class ImageViewer(EditModeMixin, QGraphicsView):
             return
 
         self._transition_in_progress = True
+        self._user_has_zoomed = False
         self._stop_timers_only()
         self.pending_overlay_data = None
 
@@ -944,6 +955,18 @@ class ImageViewer(EditModeMixin, QGraphicsView):
                 self._transition_in_progress = False
                 self.set_image(first_static)
                 self._transition_in_progress = True
+
+                fw, fh = first_static.width(), first_static.height()
+                vp = self.viewport()
+                if fw <= vp.width() and fh <= vp.height():
+                    self._user_has_zoomed      = True
+                    self._suppress_fit_in_view = True
+                    self._suppress_start_ms    = time.monotonic()
+                    self.zoom_mode             = 'actual'
+                    self._zoom_intent_stack    = ['actual'] 
+                    self.resetTransform()
+                    self.zoom_factor = 1.0
+                    self._calculate_and_emit_zoom()
 
             # 2) set_image() 이후 snap_id 캡처 (current_image_id가 갱신된 이후)
             snap_id = self.current_image_id
@@ -1038,18 +1061,35 @@ class ImageViewer(EditModeMixin, QGraphicsView):
 
         fw = first_pixmap.width()  if not first_pixmap.isNull() else 0
         fh = first_pixmap.height() if not first_pixmap.isNull() else 0
-        intent = self._auto_zoom_mode(fw, fh) if fw > 0 and fh > 0 else 'fit'
+        #intent = self._auto_zoom_mode(fw, fh) if fw > 0 and fh > 0 else 'fit'
+
+
+        # ✅ _auto_zoom_mode 우회:
+        # 애니메이션 이미지는 뷰포트보다 작으면 actual(100%), 크면 fit
+        if fw > 0 and fh > 0:
+            vp = self.viewport()
+            if fw <= vp.width() and fh <= vp.height():
+                intent = 'actual'
+            else:
+                intent = 'fit'
+        else:
+            intent = 'fit'
+
+        #debug_print(f"애니메이션 zoom intent: {fw}×{fh} / {vp.width()}×{vp.height()} → {intent}")
+
 
         self.zoom_mode          = intent
         self._zoom_intent_stack = [intent]
 
         if intent == 'actual':
-            self._suppress_fit_in_view = True
+            self._user_has_zoomed      = True
+            self._suppress_fit_in_view = True            
             self._suppress_start_ms    = time.monotonic()
             self.resetTransform()
             self.zoom_factor = 1.0
             self._calculate_and_emit_zoom()
         else:
+            self._user_has_zoomed      = False
             self._suppress_fit_in_view = False
             self.resetTransform()
             self.zoom_factor = 1.0
@@ -1062,6 +1102,127 @@ class ImageViewer(EditModeMixin, QGraphicsView):
         self._transition_in_progress = False
         self.zoom_apply_timer.start(50)
         debug_print(f"QMovie 경로 완료 (is_webp={is_webp}, mode={webp_mode}), ID={new_image_id}")
+
+
+
+    def set_apng_image(self, file_path: Path) -> None:
+        """APNG 파일 Pillow 디코딩 재생.
+        set_animated_image() WebP quality 모드와 동일 패턴."""
+
+        if self._transition_in_progress:
+            warning_print("set_apng_image - transition 중 무시")
+            return
+        self._transition_in_progress = True
+
+        self._stop_timers_only()
+        self.pending_overlay_data = None
+
+        # current_image_id 설정 (워커 staleness 검사용)
+        new_image_id = id(file_path)
+        self.current_image_id = new_image_id
+
+        # 기존 movie 정리
+        if self.current_movie:
+            self.current_movie.stop()
+            try:
+                self.current_movie.frameChanged.disconnect()
+            except (RuntimeError, TypeError):
+                pass
+            self.current_movie.deleteLater()
+            self.current_movie = None
+
+        # 기존 animated item 정리
+        old_item = self.pixmap_item
+        if old_item and isinstance(old_item, AnimatedGraphicsItem):
+            old_item.cleanup()
+
+        # 첫 프레임 즉시 표시
+        # ImageLoader.load()는 APNG에 None 반환 → Pillow 직접 디코딩
+        first_pixmap = QPixmap()
+        try:
+            with PILImage.open(str(file_path)) as _img:
+                _img.seek(0)
+                _frame = _img.convert('RGBA')
+                _arr = np.ascontiguousarray(np.array(_frame))
+                _h, _w = _arr.shape[:2]
+                _qimg = QImage(_arr.tobytes(), _w, _h, _w * 4,
+                            QImage.Format.Format_RGBA8888)
+                first_pixmap = QPixmap.fromImage(_qimg)
+        except Exception as e:
+            error_print(f"APNG 첫 프레임 로드 실패: {e}")
+
+        if not first_pixmap.isNull():
+            self._transition_in_progress = False
+            self.set_image(first_pixmap)
+            self._transition_in_progress = True
+
+            fw, fh = first_pixmap.width(), first_pixmap.height()
+            vp = self.viewport()
+            if fw <= vp.width() and fh <= vp.height():
+                self._user_has_zoomed      = True
+                self._suppress_fit_in_view = True
+                self._suppress_start_ms    = time.monotonic()
+                self.zoom_mode             = 'actual'
+                self._zoom_intent_stack    = ['actual'] 
+                self.resetTransform()
+                self.zoom_factor = 1.0
+                self._calculate_and_emit_zoom()
+
+            snap_id = self.current_image_id   # set_image()가 설정한 값 그대로
+        else:
+            snap_id = new_image_id
+
+        # 로딩 오버레이 + 기존 WebP 워커 정리
+        self._loading_overlay.start()
+        for _w in self._webp_workers:
+            if _w.isRunning():
+                _w.quit()
+
+        # 백그라운드 디코딩 워커
+        worker = _ApngDecodeWorker(file_path)
+
+        def _on_done(frames: list, delays: list) -> None:
+            self._loading_overlay.stop()
+            if self.current_image_id != snap_id:
+                debug_print("APNG 워커 결과 무시 (이미지 변경됨)")
+                return
+            if not frames:
+                debug_print("APNG 디코딩 결과 없음 → 정적 첫 프레임 유지")
+                return
+
+            # WebPAnimatedItem 재사용 (프레임 + 딜레이 구조 동일)
+            item = WebPAnimatedItem(frames, delays)
+            old = self.pixmap_item
+            self.pixmap_item = item
+            self.graphics_scene.addItem(item)
+            item.setTransformationMode(Qt.TransformationMode.SmoothTransformation)
+            if old:
+                self.graphics_scene.removeItem(old)
+
+            self.current_pixmap = frames[0]
+            self.graphics_scene.setSceneRect(QRectF(frames[0].rect()))
+
+            if hasattr(self, 'minimap'):
+                self.minimap.set_thumbnail(frames[0])
+                self.minimap.hide()
+            if hasattr(self, 'minimap_update_timer'):
+                self.minimap_update_timer.start(self.MINIMAP_UPDATE_DELAY)
+
+            self.graphics_scene.update()
+            debug_print(f"APNG 재생: {len(frames)}프레임 / {file_path.name}")
+
+        def _on_failed() -> None:
+            self._loading_overlay.stop()
+            error_print(f"APNG 디코딩 실패: {file_path.name}")
+
+        worker.decode_finished.connect(_on_done)
+        worker.decode_failed.connect(_on_failed)
+        worker.finished.connect(lambda: self._cleanup_worker(worker))
+        worker.start()
+        self._webp_workers.append(worker)
+
+        self._transition_in_progress = False
+        self.zoom_apply_timer.start(50)   # set_animated_image()와 동일
 
 
     def _cleanup_worker(self, worker: QThread) -> None:
@@ -1167,11 +1328,13 @@ class ImageViewer(EditModeMixin, QGraphicsView):
 
         debug_print("replace_pixmap 완료")
 
+
     def clear(self) -> None:
         """이미지 초기화"""
         self._stop_webp_workers()
         self._transition_in_progress = False
         self._pending_image = None
+        self._user_has_zoomed = False
         self._stop_timers_only()
         
         # ===== 기존 애니메이션 정리 =====
@@ -1217,23 +1380,25 @@ class ImageViewer(EditModeMixin, QGraphicsView):
 # ============================================
 
     def set_zoom_mode(self, mode: str) -> None:
-        """줌 모드 설정"""
         debug_print(f"set_zoom_mode: {self.zoom_mode} → {mode}")
-        
+
         self.zoom_mode = mode
-        
+
         if mode == 'fit':
+            self._user_has_zoomed = False 
             self._fit_in_view()
         elif mode == 'actual':
+            self._user_has_zoomed = True  
             self._actual_size()
         elif mode == 'width':
+            self._user_has_zoomed = True
             self._fit_width()
-        
-        self._update_cursor()
 
+        self._update_cursor()
+        
 
     def zoom_in(self) -> None:
-        """확대"""
+        self._user_has_zoomed = True
         self.zoom_factor = min(self.zoom_factor * 1.2, self.max_zoom)
         self.zoom_mode = 'manual' 
         
@@ -1248,69 +1413,73 @@ class ImageViewer(EditModeMixin, QGraphicsView):
 
 
     def zoom_out(self) -> None:
-        self.zoom_factor = max(self.zoom_factor / 1.2, self.min_zoom)
+        new_factor = self.zoom_factor / 1.2
+
+        # manual 모드(줌인 이력 있음)에서만 fit 복귀 체크
+        if getattr(self, '_user_has_zoomed', False) and self.pixmap_item:
+            vp = self.viewport().rect()
+            pr = self.pixmap_item.boundingRect()
+            if pr.width() > 0 and pr.height() > 0:
+                fit_scale = min(vp.width() / pr.width(), vp.height() / pr.height())
+                already_at_floor = (self.zoom_factor <= self.min_zoom)
+                should_fit = (new_factor <= fit_scale) or already_at_floor
+
+                if should_fit:
+                    self._user_has_zoomed = False
+                    self.zoom_mode = 'fit'
+                    self._fit_in_view()
+                    self._update_cursor()
+                    debug_print(
+                        f"줌 아웃: fit 복귀 "
+                        f"(new={new_factor:.3f}, fit_scale={fit_scale:.3f}, "
+                        f"at_floor={already_at_floor})"
+                    )
+                    return
+
+        # min_zoom 클램프 제거 → 이미지가 뷰포트보다 작아도 되고,
+        # 스크롤바가 생기지 않으므로 _update_cursor가 Arrow를 반환
+        ABSOLUTE_MIN = 0.01
+        self.zoom_factor = max(new_factor, ABSOLUTE_MIN)
         self.zoom_mode = 'manual'
-        
         self.resetTransform()
         self.scale(self.zoom_factor, self.zoom_factor)
-        
-        # 한 번만 호출
         self._update_cursor()
-        
         self._calculate_and_emit_zoom()
+        debug_print(f"줌 아웃: {self.zoom_factor:.3f}, mode=manual")
 
 
     def _fit_in_view(self) -> None:
-
-        # suppress 가드 — actual 모드 보류 중 호출 차단
         if getattr(self, '_suppress_fit_in_view', False):
             elapsed = time.monotonic() - getattr(self, '_suppress_start_ms', 0.0)
-            if elapsed < 0.15:   # 150ms 이내만 차단
+            if elapsed < 0.15:
                 debug_print("_fit_in_view: suppress 중 → 건너뜀")
                 return
             else:
                 debug_print("_fit_in_view: suppress 타임아웃(150ms) → 강제 해제")
                 self._suppress_fit_in_view = False
 
-        """이미지를 뷰포트에 맞춤"""
         if not self.pixmap_item:
             return
-        
-        # 현재 뷰포트 크기
+
         viewport_rect = self.viewport().rect()
-        
-        # 이미지 크기
-        pixmap_rect = self.pixmap_item.boundingRect()
-        
+        pixmap_rect   = self.pixmap_item.boundingRect()
+
         if pixmap_rect.width() == 0 or pixmap_rect.height() == 0:
             return
-        
-        # 비율 계산
-        scale_x = viewport_rect.width() / pixmap_rect.width()
+
+        scale_x = viewport_rect.width()  / pixmap_rect.width()
         scale_y = viewport_rect.height() / pixmap_rect.height()
-        
-        # 작은 비율 선택 (이미지가 뷰포트에 완전히 들어가도록)
-        scale = min(scale_x, scale_y)
-        
-        # 최소 줌 제한
-        scale = max(scale, self.min_zoom)
-        
-        # Transform 적용
+        scale   = min(scale_x, scale_y)
+
+        if getattr(self, '_user_has_zoomed', False):
+            scale = max(scale, self.min_zoom)
+
         self.resetTransform()
         self.scale(scale, scale)
-        
-        # zoom_factor 업데이트
         self.zoom_factor = scale
-        
-        # 중앙 정렬
         self.centerOn(self.pixmap_item)
-        
-        # 커서 업데이트
         self._update_cursor()
-
-        # 줌 레벨 시그널 발생
         self._calculate_and_emit_zoom()
-
         debug_print(f"Fit: scale={scale:.2f}")
 
 
@@ -1405,6 +1574,10 @@ class ImageViewer(EditModeMixin, QGraphicsView):
         # intent 스택 우선 소비, 없으면 zoom_mode fallback
         intent = self._consume_zoom_intent() or self.zoom_mode
 
+        if intent == 'fit' and getattr(self, '_user_has_zoomed', False):
+            debug_print(f"줌 적용 스킵: _user_has_zoomed=True (actual 모드 유지)")
+            return
+    
         debug_print(f"줌 적용: intent={intent}, ID={self.current_image_id}")
 
         if intent == 'actual':
@@ -1450,12 +1623,12 @@ class ImageViewer(EditModeMixin, QGraphicsView):
 
     def _update_cursor(self) -> None:
         """줌 상태에 따라 커서 업데이트 및 캐시 모드 조정"""
-        # 스크롤바가 있으면 손 커서
+        # _user_has_zoomed 체크 제거 — 스크롤바 유무로만 판단
         has_scrollbars = (
-            self.horizontalScrollBar().isVisible() or 
+            self.horizontalScrollBar().isVisible() or
             self.verticalScrollBar().isVisible()
         )
-        
+
         if has_scrollbars:
             self.setCursor(Qt.CursorShape.OpenHandCursor)
             if self.pixmap_item:
@@ -1467,25 +1640,21 @@ class ImageViewer(EditModeMixin, QGraphicsView):
 
 
     def _update_cache_mode(self) -> None:
-        """스크롤바(드래그 가능) 여부에 따라 캐시 모드 업데이트"""
         if not self.pixmap_item:
             return
-        
-        # 스크롤바가 표시되면 드래그 가능 = 캐시 비활성화
+
         has_scrollbars = (
-            self.horizontalScrollBar().isVisible() or 
+            self.horizontalScrollBar().isVisible() or
             self.verticalScrollBar().isVisible()
         )
-        
-        if has_scrollbars:
-            # 드래그 가능 상태: 캐시 비활성화 (타일 아티팩트 방지)
-            self.pixmap_item.setCacheMode(QGraphicsItem.CacheMode.NoCache)
-            debug_print(f"[CACHE] 캐시 비활성화 (스크롤바 있음)")
-        else:
-            # 드래그 불가능 상태: 캐시 활성화 (성능 향상)
-            self.pixmap_item.setCacheMode(QGraphicsItem.CacheMode.DeviceCoordinateCache)
-            debug_print(f"[CACHE] 캐시 활성화 (스크롤바 없음)")
 
+        if has_scrollbars:
+            self.pixmap_item.setCacheMode(QGraphicsItem.CacheMode.NoCache)
+            debug_print("[CACHE] 캐시 비활성화 (스크롤바 있음)")
+        else:
+            self.pixmap_item.setCacheMode(QGraphicsItem.CacheMode.DeviceCoordinateCache)
+            debug_print("[CACHE] 캐시 활성화 (스크롤바 없음)")            
+            
 
 # ============================================
 # 이벤트 핸들러 (마우스/휠)
@@ -1943,9 +2112,9 @@ class ImageViewer(EditModeMixin, QGraphicsView):
             return
 
         # 전체화면
-        if self.main_window and getattr(self.main_window, 'is_fullscreen', False):
-            self.minimap.hide()
-            return
+        # if self.main_window and getattr(self.main_window, 'is_fullscreen', False):
+        #     self.minimap.hide()
+        #     return
 
         # 스크롤바 없음
         has_scrollbars = (
@@ -2300,110 +2469,3 @@ class ImageViewer(EditModeMixin, QGraphicsView):
                 return False
         return False
 
-
-    def set_apng_image(self, file_path: Path) -> None:
-        """APNG 파일 Pillow 디코딩 재생.
-        set_animated_image() WebP quality 모드와 동일 패턴."""
-
-        if self._transition_in_progress:
-            warning_print("set_apng_image - transition 중 무시")
-            return
-        self._transition_in_progress = True
-
-        self._stop_timers_only()
-        self.pending_overlay_data = None
-
-        # current_image_id 설정 (워커 staleness 검사용)
-        new_image_id = id(file_path)
-        self.current_image_id = new_image_id
-
-        # 기존 movie 정리
-        if self.current_movie:
-            self.current_movie.stop()
-            try:
-                self.current_movie.frameChanged.disconnect()
-            except (RuntimeError, TypeError):
-                pass
-            self.current_movie.deleteLater()
-            self.current_movie = None
-
-        # 기존 animated item 정리
-        old_item = self.pixmap_item
-        if old_item and isinstance(old_item, AnimatedGraphicsItem):
-            old_item.cleanup()
-
-        # 첫 프레임 즉시 표시
-        # ImageLoader.load()는 APNG에 None 반환 → Pillow 직접 디코딩
-        first_pixmap = QPixmap()
-        try:
-            with PILImage.open(str(file_path)) as _img:
-                _img.seek(0)
-                _frame = _img.convert('RGBA')
-                _arr = np.ascontiguousarray(np.array(_frame))
-                _h, _w = _arr.shape[:2]
-                _qimg = QImage(_arr.tobytes(), _w, _h, _w * 4,
-                            QImage.Format.Format_RGBA8888)
-                first_pixmap = QPixmap.fromImage(_qimg)
-        except Exception as e:
-            error_print(f"APNG 첫 프레임 로드 실패: {e}")
-
-        if not first_pixmap.isNull():
-            self._transition_in_progress = False
-            self.set_image(first_pixmap)
-            self._transition_in_progress = True
-            # self.current_image_id = new_image_id  ← 삭제
-            snap_id = self.current_image_id   # set_image()가 설정한 값 그대로
-        else:
-            snap_id = new_image_id
-
-        # 로딩 오버레이 + 기존 WebP 워커 정리
-        self._loading_overlay.start()
-        for _w in self._webp_workers:
-            if _w.isRunning():
-                _w.quit()
-
-        # 백그라운드 디코딩 워커
-        worker = _ApngDecodeWorker(file_path)
-
-        def _on_done(frames: list, delays: list) -> None:
-            self._loading_overlay.stop()
-            if self.current_image_id != snap_id:
-                debug_print("APNG 워커 결과 무시 (이미지 변경됨)")
-                return
-            if not frames:
-                debug_print("APNG 디코딩 결과 없음 → 정적 첫 프레임 유지")
-                return
-
-            # WebPAnimatedItem 재사용 (프레임 + 딜레이 구조 동일)
-            item = WebPAnimatedItem(frames, delays)
-            old = self.pixmap_item
-            self.pixmap_item = item
-            self.graphics_scene.addItem(item)
-            item.setTransformationMode(Qt.TransformationMode.SmoothTransformation)
-            if old:
-                self.graphics_scene.removeItem(old)
-
-            self.current_pixmap = frames[0]
-            self.graphics_scene.setSceneRect(QRectF(frames[0].rect()))
-
-            if hasattr(self, 'minimap'):
-                self.minimap.set_thumbnail(frames[0])
-                self.minimap.hide()
-            if hasattr(self, 'minimap_update_timer'):
-                self.minimap_update_timer.start(self.MINIMAP_UPDATE_DELAY)
-
-            self.graphics_scene.update()
-            debug_print(f"APNG 재생: {len(frames)}프레임 / {file_path.name}")
-
-        def _on_failed() -> None:
-            self._loading_overlay.stop()
-            error_print(f"APNG 디코딩 실패: {file_path.name}")
-
-        worker.decode_finished.connect(_on_done)
-        worker.decode_failed.connect(_on_failed)
-        worker.finished.connect(lambda: self._cleanup_worker(worker))
-        worker.start()
-        self._webp_workers.append(worker)
-
-        self._transition_in_progress = False
-        self.zoom_apply_timer.start(50)   # set_animated_image()와 동일

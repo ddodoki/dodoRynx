@@ -9,7 +9,7 @@ import os
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import List, Optional, Set
+from typing import List, Optional, Set, Dict
 
 from natsort import natsorted
 from PySide6.QtCore import QObject, QMutex, QThread, QTimer, Signal
@@ -187,9 +187,9 @@ class FolderScanThread(QThread):
     completed = Signal(list)     # 스캔 완료 (파일 리스트)
 
 
-# ============================================
-# 초기화
-# ============================================    
+    # ============================================
+    # 초기화
+    # ============================================    
 
     def __init__(self, folder: Path, supported_extensions: Set[str]):
         super().__init__()
@@ -198,9 +198,9 @@ class FolderScanThread(QThread):
         self._is_cancelled = False
     
 
-# ============================================
-# 스레드 실행
-# ============================================
+    # ============================================
+    # 스레드 실행
+    # ============================================
 
     def run(self):
         try:
@@ -274,9 +274,9 @@ class FolderNavigator(QObject):
     highlights_set          = Signal(set)          # 일괄 설정 시 (set[Path])
     
 
-# ============================================
-# 초기화
-# ============================================
+    # ============================================
+    # 초기화
+    # ============================================
 
     def __init__(self):
         super().__init__()
@@ -284,9 +284,10 @@ class FolderNavigator(QObject):
         self.image_files: List[Path] = []
         self.current_index: int = -1
         self._highlighted: Set[Path] = set()
+        self._highlights_by_folder: Dict[Path, Set[Path]] = {}
         self._temp_scan_prev_index: int = 0 
 
-        # ===== 추가: 임시 하이라이트 (1회용 선택) =====
+        # ===== 임시 하이라이트 (1회용 선택) =====
         self._temporary_highlights: Set[Path] = set()        
 
         # 비동기 스캔
@@ -297,19 +298,19 @@ class FolderNavigator(QObject):
         self.current_sort_order = SortOrder.NAME
         self._sort_reverse: bool = False
 
-        # ===== 메타데이터 리더 추가 =====
+        # ===== 메타데이터 리더 =====
         self.metadata_reader = MetadataReader(use_cache=True, max_cache_size=500)
 
         # 스캔 중복 방지 플래그
         self._scan_in_progress = False
-        self._scan_lock = QMutex()  # 추가
+        self._scan_lock = QMutex()
 
         self._pending_scan_request: Optional[tuple[Path, Optional[Path], bool]] = None
 
 
-# ============================================
-# 폴더 열기 및 인덱싱
-# ============================================
+    # ============================================
+    # 폴더 열기 및 인덱싱
+    # ============================================
 
     def open_file(self, file_path: Path) -> bool:
         """
@@ -344,22 +345,13 @@ class FolderNavigator(QObject):
     def set_folder(self, folder: Path, index: int = 0) -> List[Path]:
         """
         폴더 설정 및 인덱싱 (비동기)
-        
-        Args:
-            folder: 대상 폴더
-            index: 초기 인덱스 (사용 안 함 - 비동기이므로 initial_file로 처리)
-        
-        Returns:
-            빈 리스트 (비동기이므로 완료 전까지 파일 목록 없음)
         """
         if not folder.exists() or not folder.is_dir():
             error_print(f"유효하지 않은 폴더: {folder}")
             return []
         
-        # 비동기 스캔 시작
         self._index_folder_async(folder, initial_file=None)
-        
-        # 비동기 완료 전까지는 빈 리스트
+
         return []
 
 
@@ -369,23 +361,24 @@ class FolderNavigator(QObject):
 
 
     def set_file_list(self, files: List[Path], current_index: int = 0):
-        """
-        파일 목록 직접 설정 (폴더 DnD용)
-        
-        Args:
-            files: 이미지 파일 목록
-            current_index: 초기 인덱스
-        """
+        new_folder = files[0].parent if files else None
+        folder_changed = bool(new_folder and new_folder != self.current_folder)
+
+        if folder_changed and new_folder is not None: 
+            self._save_highlights()
+            self._restore_highlights(new_folder)   
+
         self.image_files = files
         self.current_index = current_index
-        #self._highlighted.clear()
-        self.clear_highlights()
-        
+
         if files:
             self.current_folder = files[0].parent
             self.folder_changed.emit(self.current_folder)
             self.index_changed.emit(current_index)
-    
+
+        if folder_changed and new_folder is not None:
+            self.highlights_set.emit(self._highlighted.copy())  
+
 
     def calculate_next_index_after_deletion(
         self,
@@ -394,13 +387,6 @@ class FolderNavigator(QObject):
     ) -> int:
         """
         파일 삭제 후 이동할 인덱스 계산
-        
-        Args:
-            files_to_delete: 삭제될 파일 목록
-            deletion_mode: "single" | "multi" | "auto"
-        
-        Returns:
-            삭제 후 선택할 인덱스
         """
         if not files_to_delete or not self.image_files:
             return 0
@@ -471,9 +457,9 @@ class FolderNavigator(QObject):
                 return 0
 
 
-# ============================================
-# 비동기 스캔 (내부)
-# ============================================
+    # ============================================
+    # 비동기 스캔 (내부)
+    # ============================================
 
     def _index_folder_async(self, folder: Path, initial_file: Optional[Path] = None, preserve_sort: bool = False):
         """폴더 비동기 인덱싱 - 요청 누락 방지(큐잉)"""
@@ -526,10 +512,12 @@ class FolderNavigator(QObject):
             self._temp_scan_prev_index = self.current_index
 
             if self.current_folder != folder:
-                self.clear_highlights()  
+                self._save_highlights()
+                self._restore_highlights(folder)
                 self._temporary_highlights.clear()
                 self.current_folder = folder
                 self.folder_changed.emit(folder)
+                # highlights_set.emit 제거 — _on_scan_completed 완료 후 단일 emit으로 처리
 
             from PySide6.QtCore import QCoreApplication
             QCoreApplication.processEvents()
@@ -621,6 +609,7 @@ class FolderNavigator(QObject):
 
             self.folder_scan_completed.emit(len(self.image_files))
             self.index_changed.emit(self.current_index)
+            self.highlights_set.emit(self._highlighted.copy()) 
 
             if not self.image_files:
                 info_print("폴더가 비어있음 - index_changed(-1) emit")
@@ -650,13 +639,9 @@ class FolderNavigator(QObject):
         new_files: List[Path],
         initial_file: Optional[Path] = None,
     ) -> None:
-        """
-        파일 변경(추가/삭제) 후 현재 정렬 기준으로 재정렬.
-        정렬 완료 후 folder_scan_completed / index_changed 시그널 발생.
-        """
         current_file = initial_file or self.current()
+        snapshot_folder = self.current_folder 
 
-        # 하이라이트 정리 (스캔 결과 기준)
         if self._highlighted:
             valid = set(new_files)
             self._highlighted &= valid
@@ -674,9 +659,18 @@ class FolderNavigator(QObject):
         )
 
         def _on_resort_done(sorted_files: list) -> None:
+            if self.current_folder != snapshot_folder:
+                warning_print(
+                    f"_on_resort_done: 폴더 변경됨 "
+                    f"({snapshot_folder.name if snapshot_folder else 'None'} → "  # ← 수정
+                    f"{self.current_folder.name if self.current_folder else 'None'}), 결과 무시"
+                )
+                return
+
             self.image_files = sorted_files
             self._restore_current_index(current_file)
             self.folder_scan_completed.emit(len(self.image_files))
+            self.highlights_set.emit(self._highlighted.copy())
             info_print(
                 f"파일 변경 후 재정렬 완료: "
                 f"{self.current_sort_order.value}, reverse={self._sort_reverse}, "
@@ -687,24 +681,19 @@ class FolderNavigator(QObject):
         self._sort_thread.start()
 
 
-
     def sort_files_async(
         self,
         sort_order: SortOrder,
         reverse: bool = False,
         on_completed=None,
     ) -> None:
-        """
-        비동기 정렬. 백그라운드 스레드에서 실행 후 on_completed() 호출.
-        기존 sort_files() 동기 버전을 대체.
-        """
         if not self.image_files:
             warning_print("정렬할 파일 없음")
             return
 
         current_file = self.current()
+        snapshot_folder = self.current_folder  # ← 스냅샷 캡처
 
-        # 기존 정렬 스레드 취소 (중복 요청 방지)
         if self._sort_thread and self._sort_thread.isRunning():
             self._sort_thread.cancel()
             try:
@@ -722,8 +711,15 @@ class FolderNavigator(QObject):
         )
 
         def _on_thread_completed(sorted_files: list) -> None:
+            if self.current_folder != snapshot_folder:
+                warning_print(
+                    f"sort_files_async: 폴더 변경됨 "
+                    f"({snapshot_folder.name if snapshot_folder else 'None'} → "  # ← 수정
+                    f"{self.current_folder.name if self.current_folder else 'None'}), 결과 무시"
+                )
+                return
             self.image_files = sorted_files
-            self.current_sort_order = sort_order 
+            self.current_sort_order = sort_order
             self._sort_reverse = reverse
             self._restore_current_index(current_file)
             info_print(f"정렬 완료: {sort_order.value}, reverse={reverse}")
@@ -735,9 +731,9 @@ class FolderNavigator(QObject):
         info_print(f"▶️ 정렬 스레드 시작: {sort_order.value}")
 
 
-# ============================================
-# 폴더 새로고침
-# ============================================
+    # ============================================
+    # 폴더 새로고침
+    # ============================================
 
     def reload(self) -> None:
         """파일 변경에 의한 새로고침 — 정렬 유지"""
@@ -757,17 +753,15 @@ class FolderNavigator(QObject):
         self.reload()
 
 
-# ============================================
-# 네비게이션 (이동)
-# ============================================
+    # ============================================
+    # 네비게이션 (이동)
+    # ============================================
 
     def go_to(self, index: int) -> Optional[Path]:
         """
-         [신규 추가] 특정 인덱스로 이동하는 단일 공개 API.
+        특정 인덱스로 이동하는 단일 공개 API.
         모든 외부 코드(MainWindow, ThumbnailBar 등)는 반드시 이 메서드를 통해
         current_index를 변경해야 함 → navigator 내부 상태 일관성 보장.
-
-        Returns: 해당 Path (범위 초과 시 None)
         """
         if not self.image_files:
             return None
@@ -835,9 +829,9 @@ class FolderNavigator(QObject):
         return None
 
 
-# ============================================
-# 정렬
-# ============================================
+    # ============================================
+    # 정렬
+    # ============================================
 
     def _restore_current_index(self, current_file: Optional[Path]) -> None:
         """현재 인덱스 복원 및 시그널 발생"""
@@ -857,9 +851,9 @@ class FolderNavigator(QObject):
         return self.current_sort_order
     
 
-# ============================================
-# 하이라이트 관리 - 토글
-# ============================================
+    # ============================================
+    # 하이라이트 관리 - 토글
+    # ============================================
 
     def toggle_highlight(self, file_path: Optional[Path] = None) -> bool:
         """하이라이트 토글"""
@@ -890,9 +884,32 @@ class FolderNavigator(QObject):
         return self.toggle_highlight(self.current())
 
 
-# ============================================
-# 하이라이트 관리 - 범위
-# ============================================
+    # ============================================
+    # 하이라이트 관리 - 내부
+    # ============================================
+
+    def _save_highlights(self) -> None:
+        if self.current_folder is None:
+            return
+        if self._highlighted:
+            self._highlights_by_folder[self.current_folder] = self._highlighted
+        else:
+            # 빈 세트는 저장하지 않아 메모리 절약
+            self._highlights_by_folder.pop(self.current_folder, None)
+
+
+    def _restore_highlights(self, folder: Path) -> None:
+        """
+        폴더의 저장된 하이라이트를 복원.
+        방문한 적 없는 폴더면 새 빈 Set을 생성하되, dict에 등록해
+        self._highlighted와 동일한 객체를 참조하도록 유지.
+        """
+        self._highlighted = self._highlights_by_folder.setdefault(folder, set())
+
+
+    # ============================================
+    # 하이라이트 관리 - 범위
+    # ============================================
 
     def highlight_range(self, start_index: int, end_index: int) -> int:
         """범위 내 파일들을 하이라이트"""
@@ -927,25 +944,24 @@ class FolderNavigator(QObject):
 
 
     def clear_highlights(self) -> None:
-        """모든 하이라이트 해제"""
+        """현재 폴더의 하이라이트만 해제"""
         if self._highlighted:
             self._highlighted.clear()
-            self.highlights_cleared.emit() 
-                
+            # dict의 동일 객체를 in-place clear했으므로 별도 제거 불필요
+            self.highlights_cleared.emit()
 
-    # 일괄 설정 API — Shift+클릭의 깜빡임 제거용
+
     def set_highlights(self, file_paths: set) -> None:
-        """
-        하이라이트를 file_paths 집합으로 완전 교체 (일괄 처리).
-        toggle() 반복 대신 이 메서드를 사용하면 중간 상태가 외부에 노출되지 않음.
-        """
         self._highlighted = set(file_paths)
+        # 재할당으로 dict와 참조가 끊어지므로 명시적 동기화 필요
+        if self.current_folder is not None:
+            self._highlights_by_folder[self.current_folder] = self._highlighted
         self.highlights_set.emit(self._highlighted.copy())
 
-
-# ============================================
-# 임시 하이라이트 관리
-# ============================================
+        
+    # ============================================
+    # 임시 하이라이트 관리
+    # ============================================
 
     def set_temporary_highlights(self, files: List[Path]) -> None:
         """
@@ -991,9 +1007,9 @@ class FolderNavigator(QObject):
         return file_path in self._temporary_highlights
 
 
-# ============================================
-# 하이라이트 조회
-# ============================================
+    # ============================================
+    # 하이라이트 조회
+    # ============================================
 
     def is_highlighted(self, file_path: Optional[Path] = None) -> bool:
         """하이라이트 여부 확인"""
@@ -1037,9 +1053,9 @@ class FolderNavigator(QObject):
         return len(self._highlighted)    
     
 
-# ============================================
-# 파일 목록 조회
-# ============================================
+    # ============================================
+    # 파일 목록 조회
+    # ============================================
 
     def get_image_list(self) -> List[Path]:
         """전체 이미지 목록"""
@@ -1060,9 +1076,9 @@ class FolderNavigator(QObject):
         return (self.current_index + 1, len(self.image_files))
     
 
-# ============================================
-# 파일 경로 업데이트
-# ============================================
+    # ============================================
+    # 파일 경로 업데이트
+    # ============================================
 
     def update_file_path(self, old_path: Path, new_path: Path) -> bool:
         try:
@@ -1072,18 +1088,18 @@ class FolderNavigator(QObject):
             index = self.image_files.index(old_path)
             self.image_files[index] = new_path
 
-            # ✅ NAME 정렬 상태면 새 이름에 맞는 위치로 재삽입
             if self.current_sort_order == SortOrder.NAME:
                 self.image_files.pop(index)
-                sorted_tmp = natsorted(self.image_files + [new_path],
-                                    reverse=self._sort_reverse)
+                sorted_tmp = natsorted(
+                    self.image_files + [new_path], reverse=self._sort_reverse
+                )
                 self.image_files = sorted_tmp
 
-            if old_path in self._highlighted:
-                self._highlighted.discard(old_path)
-                self._highlighted.add(new_path)
+            for hl_set in self._highlights_by_folder.values():
+                if old_path in hl_set:
+                    hl_set.discard(old_path)
+                    hl_set.add(new_path)
 
-            # 현재 인덱스 복원
             if new_path in self.image_files:
                 self.current_index = self.image_files.index(new_path)
 
@@ -1091,11 +1107,23 @@ class FolderNavigator(QObject):
         except Exception as e:
             error_print(f"update_file_path 오류: {e}")
             return False
+    
+
+    def get_all_highlighted_files(self) -> List[Path]:
+        """모든 폴더에 걸친 전체 하이라이트 파일 목록"""
+        result: List[Path] = []
+        for hl_set in self._highlights_by_folder.values():
+            result.extend(hl_set)
+        return result
+
+    def get_total_highlight_count(self) -> int:
+        """전체 폴더 합산 하이라이트 수 (상태바 표시용)"""
+        return sum(len(s) for s in self._highlights_by_folder.values())
 
 
-# ============================================
-# 상태 정보
-# ============================================
+    # ============================================
+    # 상태 정보
+    # ============================================
     
     def get_status(self) -> dict:
         """현재 상태 정보 반환"""

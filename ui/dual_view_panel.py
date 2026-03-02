@@ -75,7 +75,7 @@ class DualSplitterHandle(QSplitterHandle):
             p.end()
             return
 
-        grad = QLinearGradient(cx - 1, 0, cx + 1, 0)
+        grad = QLinearGradient(cx - 3, 0, cx + 3, 0)
         grad.setColorAt(0.0, QColor(255, 255, 255,   0))
         grad.setColorAt(0.3, QColor(100, 160, 255, 180))
         grad.setColorAt(0.5, QColor(120, 180, 255, 220))
@@ -213,6 +213,11 @@ class DualViewPanel(QWidget):
 
         self._splitter.splitterMoved.connect(self._on_splitter_moved)
 
+        self._hovered_viewer: Optional[ImageViewer] = None
+        self._primary.installEventFilter(self)
+        self._secondary.installEventFilter(self)
+
+
     @property
     def primary_viewer(self) -> ImageViewer:
         return self._primary
@@ -225,6 +230,25 @@ class DualViewPanel(QWidget):
     def is_dual_mode(self) -> bool:
         return self._is_dual
 
+
+    def eventFilter(self, obj, event) -> bool:
+        from PySide6.QtCore import QEvent
+        if event.type() == QEvent.Type.Enter:
+            if obj is self._primary:
+                self._hovered_viewer = self._primary
+            elif obj is self._secondary:
+                self._hovered_viewer = self._secondary
+        elif event.type() == QEvent.Type.Leave:
+            if obj is self._hovered_viewer:
+                self._hovered_viewer = None
+        return super().eventFilter(obj, event)
+
+    def get_active_viewer(self) -> ImageViewer:
+        """마우스가 올라있는 뷰어 반환. 없으면 primary."""
+        if self._is_dual and self._hovered_viewer is not None:
+            return self._hovered_viewer
+        return self._primary
+    
 
     # ============================================
     # 듀얼 모드 토글 / 레이아웃 제어

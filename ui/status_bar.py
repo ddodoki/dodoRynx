@@ -258,7 +258,7 @@ class SortMenuButton(QPushButton):
     }
 
 
-    def __init__(self, parent=None, widget_height: int = 26) -> None:
+    def __init__(self, parent=None, widget_height: int = 30) -> None:
         super().__init__("⇅", parent)
         self.setToolTip(t('statusbar.sort_btn_tooltip'))
         self.setStyleSheet(self._STYLE)
@@ -998,7 +998,7 @@ class AppStatusBar:
     _STATUSBAR_STYLE = f"""
         QStatusBar {{
             background: #252525;
-            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            border-top: 2px solid rgba(255, 255, 255, 0.08);
             min-height: {_BAR_H}px;
             max-height: {_BAR_H}px;
         }}

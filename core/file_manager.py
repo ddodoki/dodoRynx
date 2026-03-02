@@ -442,7 +442,8 @@ class HighlightOperations:
 
     def copy_highlighted_files(self) -> None:
         mw          = self._mw
-        highlighted = mw.navigator.get_highlighted_files()
+        #highlighted = mw.navigator.get_highlighted_files()
+        highlighted = mw.navigator.get_all_highlighted_files()
         if not highlighted:
             QMessageBox.information(mw, t('print_dialog.notice_title'), t('print_dialog.no_highlight_msg'))
             return
@@ -458,7 +459,8 @@ class HighlightOperations:
 
     def cut_highlighted_files(self) -> None:
         mw          = self._mw
-        highlighted = mw.navigator.get_highlighted_files()
+        #highlighted = mw.navigator.get_highlighted_files()
+        highlighted = mw.navigator.get_all_highlighted_files()
         if not highlighted:
             QMessageBox.information(mw, t('print_dialog.notice_title'), t('print_dialog.no_highlight_msg'))
             return

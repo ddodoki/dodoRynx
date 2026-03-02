@@ -92,7 +92,7 @@ class PerfOverlayWidget(QLabel):
 
     def reposition(self) -> None:
         p = self.parent()
-        if not isinstance(p, QWidget):  # QWidget 타입 보장
+        if not isinstance(p, QWidget): 
             return
         self.adjustSize()
         x = p.width() - self.width() - self._MARGIN_RIGHT
@@ -168,7 +168,6 @@ class MainWindow(QMainWindow):
         self._set_window_icon()
         self._setup_initial_palette()
 
-        # QTimer 없이 동기 전체 초기화 → 깜박임 완전 제거
         self._init_all()
 
         self._initialization_complete = True
@@ -210,10 +209,6 @@ class MainWindow(QMainWindow):
     def _init_core(self) -> None:
         """
         Step 1 — UI 없이 동작하는 핵심 데이터 객체 초기화.
-
-        모든 인스턴스 속성을 여기서 명시적으로 선언.
-        _init_ui() 이후 등장하는 속성은 _init_ui() 끝에 선언.
-        이렇게 하면 메서드 전체에서 hasattr() 체크가 불필요해짐.
         """
         # 설정
         self.overlay_enabled: bool = self.config.get_overlay_setting("enabled", False)
@@ -328,7 +323,7 @@ class MainWindow(QMainWindow):
             config_manager=self.config,
             parent=viewer_container,
         )
-        viewer_layout.addWidget(self.dual_view_panel)   # ← image_viewer 대신
+        viewer_layout.addWidget(self.dual_view_panel) 
 
         # 4) secondary OverlayWidget 생성 및 연결
         self.overlay_widget_b = OverlayWidget(
@@ -338,7 +333,6 @@ class MainWindow(QMainWindow):
             self.overlay_widget_b
         )
         debug_print("OverlayWidget_b (secondary) 생성 및 연결 완료")
-
 
         left_layout.addWidget(viewer_container, 1)
 
@@ -359,24 +353,24 @@ class MainWindow(QMainWindow):
         _lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._thumb_lock_label = _lbl
 
-        # [수정] addWidget 1회만 — 원본의 첫 번째 addWidget 위치에서만 호출
+        # addWidget 1회만 — 원본의 첫 번째 addWidget 위치에서만 호출
         self.h_splitter.addWidget(left_widget)            # index 1
 
         # ──────────────────────────────────────────────────────
-        # [기존 유지] ③ 오른쪽: 메타데이터 — index 2
+        # 오른쪽: 메타데이터 — index 2
         # ──────────────────────────────────────────────────────
-        # [수정] self.metadata_panel 하나만 생성, self.metadatapanel 제거
+        # self.metadata_panel 하나만 생성, self.metadatapanel 제거
         self.metadata_panel = MetadataPanel(self.config)
         self.h_splitter.addWidget(self.metadata_panel)    # index 2
 
-        # [수정] 위젯 3개이므로 setSizes 값도 3개
+        # 위젯 3개이므로 setSizes 값도 3개
         self.h_splitter.setSizes([0, 1140, 300])
 
         # splitter stretch 설정: viewer(index 1)만 늘어남
         self.h_splitter.setStretchFactor(0, 0)   # folder_explorer: 고정
         self.h_splitter.setStretchFactor(1, 1)   # image_viewer: 가변
         self.h_splitter.setStretchFactor(2, 0)   # metadata_panel: 고정
-
+        self.h_splitter.setHandleWidth(0)
         # metadata_panel 너비 고정
         self.metadata_panel.setMinimumWidth(300)
         self.metadata_panel.setMaximumWidth(300)
@@ -409,7 +403,7 @@ class MainWindow(QMainWindow):
         # 1. 위젯 팩토리 생성
         self.status_bar = AppStatusBar(self)
         self.setStatusBar(self.status_bar.statusbar)
-        self.statusbar = self.status_bar.statusbar  # 하위 호환 alias
+        self.statusbar = self.status_bar.statusbar 
 
         # 2. 컨트롤러 생성 및 시그널 연결
         self.status_ctrl = StatusBarController(self, self.status_bar)
@@ -426,13 +420,6 @@ class MainWindow(QMainWindow):
     def _connect_signals(self) -> None:
         """
         모든 시그널-슬롯 연결을 한 곳에서 관리.
-
-        연결 순서 규칙 (중요):
-        같은 시그널에 여러 슬롯을 연결할 때는 Qt가 연결 순서대로 슬롯을 호출함.
-        folder_scan_completed 의 경우:
-            1. status_ctrl.on_folder_scan_completed  → 상태바 갱신 (부작용 없음)
-            2. self._on_folder_scan_completed        → 실제 이미지 로딩 처리
-        이 순서를 유지해야 함. 절대 중간에 다른 핸들러를 삽입하지 말 것.
         """
         debug_print("_connect_signals() 시작")
 
@@ -1667,6 +1654,13 @@ class MainWindow(QMainWindow):
                 self.hide_timer.stop()
 
             self.unsetCursor()
+
+            self.image_viewer.set_zoom_mode('fit')
+            try:
+                if self.dual_view_panel.is_dual_mode:
+                    self.dual_view_panel._secondary.set_zoom_mode('fit')
+            except AttributeError:
+                pass
 
             if hasattr(self, 'image_viewer'):
                 self.image_viewer._update_minimap()

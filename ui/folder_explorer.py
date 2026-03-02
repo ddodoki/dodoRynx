@@ -301,7 +301,7 @@ class _BranchDelegate(QStyledItemDelegate):
         idx = cast(QModelIndex, index)
         tree = self.parent()
 
-        # ── ① branch 화살표 ──────────────────────────────────────
+        # ── branch 화살표 ──────────────────────────────────────
         if isinstance(tree, QTreeView):
             has_children = tree.model().hasChildren(idx)
             if has_children:
@@ -439,6 +439,7 @@ class _FolderTree(QTreeView):
         if self.selectionModel().isSelected(index):
             painter.fillRect(rect, QColor(74, 158, 255, int(255 * 0.28)))
 
+
     def _on_activated(self, proxy_idx: QModelIndex) -> None:
         src_idx = self._proxy.mapToSource(proxy_idx)
         p = self._fs_model.filePath(src_idx)
@@ -498,11 +499,10 @@ class _FolderTree(QTreeView):
         target = self._fe_pending_scroll
         loaded = Path(loaded_dir)
 
-        # loaded 가 target의 조상인지 확인
         try:
             rel = target.relative_to(loaded)
         except ValueError:
-            return  # 관계없는 디렉터리 — 무시
+            return
 
         src_idx = self._fs_model.index(str(target))
         if src_idx.isValid():
@@ -523,7 +523,7 @@ class _FolderTree(QTreeView):
             if next_src.isValid():
                 next_proxy = self._proxy.mapFromSource(next_src)
                 if next_proxy.isValid():
-                    self.expand(next_proxy)  # → 다음 directoryLoaded 트리거
+                    self.expand(next_proxy)
                     
 
     def _do_scroll(self) -> None:
@@ -659,7 +659,6 @@ class _FavTree(QTreeView):
     def drawBranches(self, painter, rect, index) -> None:
         painter.fillRect(rect, QColor("#1e1e1e"))
 
-        # 선택 상태만 처리 — hover는 스타일시트 ::item:hover 에 위임
         if self.selectionModel().isSelected(index):
             painter.fillRect(rect, QColor(74, 158, 255, int(255 * 0.28)))
 
@@ -732,14 +731,6 @@ class _FavTree(QTreeView):
 
 class FolderExplorer(QWidget):
     folder_selected = Signal(Path)
-
-    _QUICK_ENTRIES = [
-        ("🖥  내 컴퓨터",  "computer"),
-        ("🖥  바탕화면",   "desktop"),
-        ("📄  내 문서",    "documents"),
-        ("🖼  내 사진",    "pictures"),
-        ("⬇  다운로드",   "downloads"),
-    ]
 
     _QUICK_KEYS = ["computer", "desktop", "documents", "pictures", "downloads"]
 
@@ -845,9 +836,8 @@ class FolderExplorer(QWidget):
 
         _TOOL_BTN_H = 26
 
-        # ① 바로가기 드롭다운
+        # 바로가기 드롭다운
         self._quick_btn = QToolButton()
-        #self._quick_btn.setText(t("folder_explorer.toolbar.quick_access"))
         self._quick_btn.setText("📂")
         self._quick_btn.setFixedHeight(_TOOL_BTN_H)
         self._quick_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
@@ -862,9 +852,8 @@ class FolderExplorer(QWidget):
             _quick_menu.addAction(act)
         self._quick_btn.setMenu(_quick_menu)
 
-        # ② 즐겨찾기 드롭다운 버튼 (탭 대체)
+        # 즐겨찾기 드롭다운 버튼 (탭 대체)
         self._fav_btn = QToolButton()
-        #self._fav_btn.setText(t("folder_explorer.toolbar.favorites"))
         self._fav_btn.setText("⭐")
         self._fav_btn.setFixedHeight(_TOOL_BTN_H)
         self._fav_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
@@ -873,18 +862,16 @@ class FolderExplorer(QWidget):
         self._fav_menu.setStyleSheet(_QUICK_MENU_STYLE)
         self._fav_btn.setMenu(self._fav_menu)
 
-        # ③ 위로 버튼
+        # 위로 버튼
         self._up_btn = QToolButton()
-        #self._up_btn.setText(t("folder_explorer.toolbar.go_up"))
         self._up_btn.setText("↑")
         self._up_btn.setFixedHeight(_TOOL_BTN_H)
         self._up_btn.setToolTip(t("folder_explorer.toolbar.go_up_tooltip"))
         self._up_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self._up_btn.clicked.connect(self._go_up)
 
-        # ④ 새 폴더 버튼
+        # 새 폴더 버튼
         self._new_btn = QToolButton()
-        #self._new_btn.setText(t("folder_explorer.toolbar.new_folder"))
         self._new_btn.setText("+")
         self._new_btn.setFixedHeight(_TOOL_BTN_H)
         self._new_btn.setToolTip(t("folder_explorer.toolbar.new_folder_tooltip"))
@@ -1065,7 +1052,7 @@ class FolderExplorer(QWidget):
     @staticmethod
     def _resolve_quick_path(key: str) -> Optional[Path]:
         if key == "computer":
-            return None  # navigate_to_root() 로 처리 — 여기선 None
+            return None  
 
         home = Path.home()
         mapping = {
@@ -1235,7 +1222,7 @@ class FolderExplorer(QWidget):
                         shutil.copy2(str(src), str(dest))
             except Exception as e:
                 failed.append((src.name, str(e)))
-                continue   # ← 실패한 파일 건너뛰고 다음으로
+                continue 
 
         # 내부 클립보드 잘라내기: 전체 성공 시에만 초기화
         if use_internal and is_cut and not failed:
