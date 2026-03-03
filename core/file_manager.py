@@ -610,14 +610,19 @@ class FolderWatchHandler:
 
     def on_file_deleted(self, filepath: Path) -> None:
         mw = self._mw
-        if getattr(mw, '_is_deleting', False):
-            return  # FileWorkerThread가 직접 관리 중 — 이벤트 무시
 
-        sn = _short_name(filepath.name)                        
-        info_print(f"파일 삭제 감지: {filepath.name}")      
+        if getattr(mw, '_is_deleting', False):
+            # 의도적 삭제 완료 — 플래그 해제 후 reload 위임
+            mw._is_deleting = False          # ← 해제
+            mw.navigator.reload_async()      # ← 스캔 → 썸네일바 갱신
+            return
+
+        # 외부 삭제 감지 (탐색기 등) — 기존 코드 유지
+        sn = _short_name(filepath.name)
+        info_print(f"파일 삭제 감지: {filepath.name}")
 
         def on_done(count):
-            mw._clear_op_status(f"'{sn}' 삭제 감지됨", 2000) 
+            mw._clear_op_status(f"'{sn}' 삭제 감지됨", 2000)
             try:
                 mw.navigator.folder_scan_completed.disconnect(on_done)
             except Exception:
@@ -625,7 +630,7 @@ class FolderWatchHandler:
 
         mw.navigator.folder_scan_completed.connect(on_done)
         mw.navigator.reload_async()
-
+        
 
     def on_file_modified(self, filepath: Path) -> None:
         mw = self._mw
