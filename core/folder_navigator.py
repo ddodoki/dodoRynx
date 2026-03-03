@@ -36,7 +36,7 @@ class SortWorkerThread(QThread):
     메인 스레드 블로킹 없이 정렬 수행.
     completed(list) 시그널로 결과 전달.
     """
-    completed = Signal(list)  # 정렬된 파일 목록
+    completed = Signal(list) 
 
     def __init__(
         self,
@@ -54,8 +54,10 @@ class SortWorkerThread(QThread):
         self._highlighted = highlighted.copy()
         self._cancelled = False
 
+
     def cancel(self) -> None:
         self._cancelled = True
+
 
     def run(self) -> None:
         try:
@@ -65,10 +67,10 @@ class SortWorkerThread(QThread):
         except Exception as e:
             error_print(f"SortWorkerThread 실패: {e}")
             import traceback; traceback.print_exc()
-            self.completed.emit(self._files)  # 폴백: 원본 순서
+            self.completed.emit(self._files) 
+
 
     def _do_sort(self) -> List[Path]:
-        from natsort import natsorted
 
         files = self._files.copy()
         order = self._sort_order
@@ -183,8 +185,8 @@ class SortWorkerThread(QThread):
 class FolderScanThread(QThread):
     """폴더 스캔 백그라운드 스레드"""
     
-    progress = Signal(int, int)  # (현재, 전체)
-    completed = Signal(list)     # 스캔 완료 (파일 리스트)
+    progress = Signal(int, int)  
+    completed = Signal(list)    
 
 
     # ============================================
@@ -217,8 +219,7 @@ class FolderScanThread(QThread):
                     if entry.is_file() and entry.name.lower().endswith(tuple(self.supported_extensions)):
                         files.append(Path(entry.path))
                     
-                    # 진행 상황 업데이트 (빈도 감소)
-                    if i % 50 == 0:  # 10 → 50으로 변경
+                    if i % 50 == 0: 
                         if self._is_cancelled:
                             info_print(f"🛑 스캔 취소됨")
                             return
@@ -272,7 +273,7 @@ class FolderNavigator(QObject):
     highlight_changed       = Signal(Path, bool)   # (file_path, is_highlighted)
     highlights_cleared      = Signal()             # 전체 해제 시
     highlights_set          = Signal(set)          # 일괄 설정 시 (set[Path])
-    
+    sort_order_changed = Signal(object, bool)  # (SortOrder, reverse) — UI 동기화 전용
 
     # ============================================
     # 초기화
@@ -297,6 +298,7 @@ class FolderNavigator(QObject):
         # 정렬 순서
         self.current_sort_order = SortOrder.NAME
         self._sort_reverse: bool = False
+        self._sort_by_folder: Dict[Path, tuple[SortOrder, bool]] = {}
 
         # ===== 메타데이터 리더 =====
         self.metadata_reader = MetadataReader(use_cache=True, max_cache_size=500)
@@ -364,9 +366,11 @@ class FolderNavigator(QObject):
         new_folder = files[0].parent if files else None
         folder_changed = bool(new_folder and new_folder != self.current_folder)
 
-        if folder_changed and new_folder is not None: 
+        if folder_changed and new_folder is not None:
             self._save_highlights()
-            self._restore_highlights(new_folder)   
+            self._save_sort_order()      
+            self._restore_highlights(new_folder)
+            self._restore_sort_order(new_folder)  
 
         self.image_files = files
         self.current_index = current_index
@@ -377,7 +381,9 @@ class FolderNavigator(QObject):
             self.index_changed.emit(current_index)
 
         if folder_changed and new_folder is not None:
-            self.highlights_set.emit(self._highlighted.copy())  
+            self.highlights_set.emit(self._highlighted.copy())
+
+        self.folder_scan_completed.emit(len(self.image_files))     
 
 
     def calculate_next_index_after_deletion(
@@ -461,72 +467,73 @@ class FolderNavigator(QObject):
     # 비동기 스캔 (내부)
     # ============================================
 
-    def _index_folder_async(self, folder: Path, initial_file: Optional[Path] = None, preserve_sort: bool = False):
-        """폴더 비동기 인덱싱 - 요청 누락 방지(큐잉)"""
-
-        # 1) 락을 못 잡으면: 현재 스캔이 끝난 뒤 실행되도록 '대기 요청'만 저장
+    def _index_folder_async(
+        self,
+        folder: Path,
+        initial_file: Optional[Path] = None,
+        preserve_sort: bool = False
+    ):
         if not self._scan_lock.tryLock():
-            self._pending_scan_request = (folder, initial_file, preserve_sort) 
+            self._pending_scan_request = (folder, initial_file, preserve_sort)
             warning_print("⚠️ 이미 스캔 중 - 요청 큐에 저장")
             return
 
         try:
-            # 2) 스캔 진행 중이면: '대기 요청' 저장 후 종료 (무시 금지)
             if self._scan_in_progress:
                 self._pending_scan_request = (folder, initial_file, preserve_sort)
                 warning_print("⚠️ 스캔 진행 중 - 요청 큐에 저장")
                 return
 
-            # 지금부터는 이 호출이 스캔을 책임짐
             self._scan_in_progress = True
             self._pending_scan_request = None
-            self._pending_preserve_sort = preserve_sort
 
-            # ===== 2. 기존 스레드 정리 (기존 코드 유지) =====
+            # ── 기존 스레드 정리 ──────────────────────────────
             if self.scan_thread:
-                info_print("🛑 기존 스캔 스레드 정리 시작")
                 old_thread = self.scan_thread
+                self.scan_thread = None  # 참조 먼저 해제
+
+                # 시그널 연결 끊기 (completed가 재진입 유발 방지)
                 try:
                     old_thread.progress.disconnect()
                     old_thread.completed.disconnect()
                 except Exception:
                     pass
 
+                # 취소 플래그 설정
                 old_thread.cancel()
 
                 if old_thread.isRunning():
-                    info_print("   ⏳ 스레드 종료 대기 중...")
+                    # 최대 300ms 대기 — 타임아웃이면 그냥 진행
+                    # (cancel() 플래그로 스레드 내부에서 곧 종료됨)
                     if not old_thread.wait(300):
-                        warning_print("⚠️ 이전 스캔 스레드 아직 실행 중 — 계속 진행 (취소 플래그 설정됨)")
+                        warning_print("⚠️ 이전 스캔 스레드 아직 실행 중 — 계속 진행")
 
+                # deleteLater: Qt 이벤트 루프가 안전하게 해제
+                # processEvents() 호출 불필요 — Qt가 다음 사이클에 처리
                 old_thread.deleteLater()
-                self.scan_thread = None
 
-                from PySide6.QtCore import QCoreApplication
-                for _ in range(3):
-                    QCoreApplication.processEvents()
+                # ← processEvents() 3회 호출 완전 제거
 
-                info_print("✅ 기존 스레드 정리 완료")
-
-            # ===== 3. 상태/시그널/스레드 시작 (기존 코드 유지) =====
+            # ── 상태 설정 ─────────────────────────────────────
             self._temp_scan_prev_index = self.current_index
 
             if self.current_folder != folder:
                 self._save_highlights()
+                self._save_sort_order()
                 self._restore_highlights(folder)
+                self._restore_sort_order(folder)
                 self._temporary_highlights.clear()
                 self.current_folder = folder
                 self.folder_changed.emit(folder)
-                # highlights_set.emit 제거 — _on_scan_completed 완료 후 단일 emit으로 처리
-
-            from PySide6.QtCore import QCoreApplication
-            QCoreApplication.processEvents()
 
             self.folder_scan_started.emit()
 
+            # ── 새 스레드 시작 ────────────────────────────────
             self.scan_thread = FolderScanThread(folder, self.SUPPORTED_EXTENSIONS)
             self.scan_thread.progress.connect(self._on_scan_progress)
-            self.scan_thread.completed.connect(lambda files: self._on_scan_completed(files, initial_file))
+            self.scan_thread.completed.connect(
+                lambda files: self._on_scan_completed(files, initial_file)
+            )
             self.scan_thread.start()
             info_print(f"▶️ 스캔 스레드 시작: {folder}")
 
@@ -561,9 +568,7 @@ class FolderNavigator(QObject):
 
     def _on_scan_completed(self, files: List[Path], initial_file: Optional[Path] = None):
         try:
-            preserve = getattr(self, '_pending_preserve_sort', False)
 
-            # 진행 중인 정렬 취소
             if self._sort_thread and self._sort_thread.isRunning():
                 self._sort_thread.cancel()
                 try:
@@ -572,15 +577,11 @@ class FolderNavigator(QObject):
                     pass
                 debug_print("on_scan_completed: 진행 중 정렬 취소됨")
 
-            if preserve and self.current_sort_order != SortOrder.NAME:
+            if self.current_sort_order != SortOrder.NAME or self._sort_reverse:
                 self.image_files = files
                 self._reapply_sort_after_reload(files, initial_file)
-                # 시그널은 _reapply_sort_after_reload 완료 후 발생
                 return
 
-            # 기존 경로 (폴더 변경 or NAME 정렬)
-            self.current_sort_order = SortOrder.NAME
-            self._sort_reverse = False
             self.image_files = files
 
             # 하이라이트 정리
@@ -604,12 +605,12 @@ class FolderNavigator(QObject):
             if self.image_files and self.current_index < 0:
                 self.current_index = 0
 
-            if hasattr(self, '_temp_scan_prev_index'):
-                delattr(self, '_temp_scan_prev_index')
+            self._temp_scan_prev_index = 0
+            prev_index = self._temp_scan_prev_index
 
             self.folder_scan_completed.emit(len(self.image_files))
             self.index_changed.emit(self.current_index)
-            self.highlights_set.emit(self._highlighted.copy()) 
+            self.highlights_set.emit(self._highlighted.copy())
 
             if not self.image_files:
                 info_print("폴더가 비어있음 - index_changed(-1) emit")
@@ -622,18 +623,17 @@ class FolderNavigator(QObject):
         finally:
             self.scan_thread = None
             self._scan_in_progress = False
-
             req = getattr(self, "_pending_scan_request", None)
             if req:
                 self._pending_scan_request = None
-                folder, pending_initial, pending_preserve = req   
+                folder, pending_initial, pending_preserve = req
                 QTimer.singleShot(
                     0,
                     lambda f=folder, i=pending_initial, p=pending_preserve:
-                        self._index_folder_async(f, i, p)        
+                        self._index_folder_async(f, i, p)
                 )
 
-
+                
     def _reapply_sort_after_reload(
         self,
         new_files: List[Path],
@@ -692,7 +692,7 @@ class FolderNavigator(QObject):
             return
 
         current_file = self.current()
-        snapshot_folder = self.current_folder  # ← 스냅샷 캡처
+        snapshot_folder = self.current_folder
 
         if self._sort_thread and self._sort_thread.isRunning():
             self._sort_thread.cancel()
@@ -714,13 +714,15 @@ class FolderNavigator(QObject):
             if self.current_folder != snapshot_folder:
                 warning_print(
                     f"sort_files_async: 폴더 변경됨 "
-                    f"({snapshot_folder.name if snapshot_folder else 'None'} → "  # ← 수정
+                    f"({snapshot_folder.name if snapshot_folder else 'None'} → "
                     f"{self.current_folder.name if self.current_folder else 'None'}), 결과 무시"
                 )
                 return
             self.image_files = sorted_files
             self.current_sort_order = sort_order
             self._sort_reverse = reverse
+            self._save_sort_order()
+            self.sort_order_changed.emit(sort_order, reverse)
             self._restore_current_index(current_file)
             info_print(f"정렬 완료: {sort_order.value}, reverse={reverse}")
             if on_completed:
@@ -728,7 +730,6 @@ class FolderNavigator(QObject):
 
         self._sort_thread.completed.connect(_on_thread_completed)
         self._sort_thread.start()
-        info_print(f"▶️ 정렬 스레드 시작: {sort_order.value}")
 
 
     # ============================================
@@ -849,7 +850,41 @@ class FolderNavigator(QObject):
     def get_sort_order(self) -> SortOrder:
         """현재 정렬 순서"""
         return self.current_sort_order
+
+
+    def get_sort_state(self) -> tuple[SortOrder, bool]:
+        """현재 정렬 상태 반환 (외부 접근 전용 API)"""
+        return (self.current_sort_order, self._sort_reverse)
     
+
+    # ============================================
+    # 정렬 관리 - 내부
+    # ============================================
+
+    def _save_sort_order(self) -> None:
+        if self.current_folder is None:
+            return
+        # HIGHLIGHT는 reverse 무의미 — False로 강제 정규화
+        order = self.current_sort_order
+        reverse = False if order == SortOrder.HIGHLIGHT else self._sort_reverse
+        if order != SortOrder.NAME or reverse:
+            self._sort_by_folder[self.current_folder] = (order, reverse)
+            if len(self._sort_by_folder) > 100: 
+                oldest = next(iter(self._sort_by_folder))
+                del self._sort_by_folder[oldest]
+        else:
+            self._sort_by_folder.pop(self.current_folder, None)
+            
+
+    def _restore_sort_order(self, folder: Path) -> None:
+        """폴더의 저장된 정렬 기준 복원. 미방문 폴더는 NAME 기본값."""
+        order, reverse = self._sort_by_folder.get(
+            folder, (SortOrder.NAME, False)
+        )
+        self.current_sort_order = order
+        self._sort_reverse = reverse
+        self.sort_order_changed.emit(order, reverse) 
+
 
     # ============================================
     # 하이라이트 관리 - 토글
@@ -893,18 +928,22 @@ class FolderNavigator(QObject):
             return
         if self._highlighted:
             self._highlights_by_folder[self.current_folder] = self._highlighted
+            if len(self._highlights_by_folder) > 200:     # ← 제한 추가
+                # 하이라이트 없는 폴더부터 제거
+                empty = [k for k, v in self._highlights_by_folder.items() if not v]
+                for k in empty[:50]:
+                    del self._highlights_by_folder[k]
         else:
-            # 빈 세트는 저장하지 않아 메모리 절약
             self._highlights_by_folder.pop(self.current_folder, None)
 
 
     def _restore_highlights(self, folder: Path) -> None:
-        """
-        폴더의 저장된 하이라이트를 복원.
-        방문한 적 없는 폴더면 새 빈 Set을 생성하되, dict에 등록해
-        self._highlighted와 동일한 객체를 참조하도록 유지.
-        """
-        self._highlighted = self._highlights_by_folder.setdefault(folder, set())
+        # 이미 하이라이트가 있는 폴더면 복원, 없으면 새 빈 set (dict 미등록)
+        if folder in self._highlights_by_folder:
+            self._highlighted = self._highlights_by_folder[folder]
+        else:
+            self._highlighted = set()
+            # dict 등록은 실제 하이라이트가 생길 때 _save_highlights에서 처리
 
 
     # ============================================
@@ -922,6 +961,7 @@ class FolderNavigator(QObject):
                 file_path = self.image_files[i]
                 if file_path not in self._highlighted:
                     self._highlighted.add(file_path)
+                    self.highlight_changed.emit(file_path, True) 
                     count += 1
 
         return count
@@ -938,6 +978,7 @@ class FolderNavigator(QObject):
                 file_path = self.image_files[i]
                 if file_path in self._highlighted:
                     self._highlighted.remove(file_path)
+                    self.highlight_changed.emit(file_path, False)
                     count += 1
         
         return count
@@ -967,9 +1008,6 @@ class FolderNavigator(QObject):
         """
         임시 하이라이트 설정 (붙여넣기 등)
         기존 임시 하이라이트는 자동으로 제거됨
-        
-        Args:
-            files: 임시 하이라이트할 파일 목록
         """
         self._temporary_highlights = set(files)
         info_print(f"임시 하이라이트 설정: {len(files)}개")
@@ -991,12 +1029,6 @@ class FolderNavigator(QObject):
     def is_temporarily_highlighted(self, file_path: Optional[Path] = None) -> bool:
         """
         임시 하이라이트 여부 확인
-        
-        Args:
-            file_path: 확인할 파일 (None이면 현재 파일)
-        
-        Returns:
-            True if 임시 하이라이트됨
         """
         if file_path is None:
             file_path = self.current()
@@ -1065,11 +1097,9 @@ class FolderNavigator(QObject):
     def get_current_folder(self) -> Optional[Path]:
         """
         현재 열린 폴더 경로 반환
-        
-        Returns:
-            현재 폴더 Path 또는 None
         """
         return self.current_folder
+
 
     def get_progress(self) -> tuple[int, int]:
         """진행 상황 (현재 인덱스, 전체 개수)"""
@@ -1086,15 +1116,16 @@ class FolderNavigator(QObject):
                 return False
 
             index = self.image_files.index(old_path)
-            self.image_files[index] = new_path
 
             if self.current_sort_order == SortOrder.NAME:
-                self.image_files.pop(index)
-                sorted_tmp = natsorted(
+                self.image_files.pop(index)     
+                self.image_files = natsorted(
                     self.image_files + [new_path], reverse=self._sort_reverse
                 )
-                self.image_files = sorted_tmp
+            else:
+                self.image_files[index] = new_path  
 
+            # 하이라이트 갱신 (공통)
             for hl_set in self._highlights_by_folder.values():
                 if old_path in hl_set:
                     hl_set.discard(old_path)
@@ -1109,12 +1140,15 @@ class FolderNavigator(QObject):
             return False
     
 
-    def get_all_highlighted_files(self) -> List[Path]:
-        """모든 폴더에 걸친 전체 하이라이트 파일 목록"""
-        result: List[Path] = []
+    def get_all_highlighted_files(self, check_exists: bool = False) -> List[Path]:
+        result = []
         for hl_set in self._highlights_by_folder.values():
-            result.extend(hl_set)
+            if check_exists:
+                result.extend(f for f in hl_set if f.exists())
+            else:
+                result.extend(hl_set)
         return result
+
 
     def get_total_highlight_count(self) -> int:
         """전체 폴더 합산 하이라이트 수 (상태바 표시용)"""

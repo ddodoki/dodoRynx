@@ -6,6 +6,7 @@
 파일명 포함 + 고정 높이 + EXIF 회전 + 하이라이트
 """
 
+import os
 from pathlib import Path
 from typing import List, Optional
 
@@ -431,6 +432,9 @@ class ThumbnailItem(QFrame):
                 self.clicked.emit(self.index)
 
 
+cpu_count = os.cpu_count() or 4
+thumb_threads = max(1, min(cpu_count - 2, 4))
+
 # ============================================
 # 썸네일 바 (메인 위젯)
 # ============================================
@@ -448,14 +452,12 @@ class ThumbnailBar(QWidget):
     # Ctrl+클릭 / Shift+클릭 이벤트를 시그널로 전달
     # main_window가 수신하여 navigator를 직접 조작
     highlight_toggle_requested      = Signal(Path)          # Ctrl+클릭
-    highlight_range_requested       = Signal(int, int, bool) # Shift+클릭 (start, end, is_ctrl)
+    highlight_range_requested       = Signal(int, int, bool, object)
     temp_highlights_clear_requested = Signal()              # 임시 해제 요청
     status_message_requested        = Signal(str, int)      # 상태바 메시지 요청 (msg, ms)
     context_menu_requested          = Signal(QPoint)        # 우클릭 컨텍스트 메뉴 위치
 
     THUMBNAIL_SIZE = 72 # 80 -> 72
-    MAX_CONCURRENT_LOADS = 8   # 스레드 풀 최대 동시 작업 수
-
 
     # ============================================
     # 초기화
@@ -476,9 +478,11 @@ class ThumbnailBar(QWidget):
         self.highlighted_files: set = set()
         self.temp_highlighted_files: set = set()
         self.last_clicked_index = -1
+        self._prev_shift_range: Optional[tuple[int, int]] = None
 
         self.thread_pool = QThreadPool()
-        self.thread_pool.setMaxThreadCount(8)
+        self.thread_pool.setMaxThreadCount(thumb_threads)
+        info_print(f"썸네일 스레드 풀: {thumb_threads}개 (CPU: {cpu_count}코어)")
 
         self._generation_id: int = 0
 
@@ -871,7 +875,7 @@ class ThumbnailBar(QWidget):
     ) -> None:
         current  = self.current_index
         distance = abs(index - current)
-        delay    = 0 if distance <= 10 else 30 if distance <= 30 else 80
+        delay    = 0 if distance <= 3 else 20 if distance <= 15 else 50 if distance <= 40 else 100
 
         def _do_start():
             loader = ThumbnailLoader(
@@ -1089,6 +1093,7 @@ class ThumbnailBar(QWidget):
         self.clear_temp_highlights()
         self.temp_highlights_clear_requested.emit()
         self.last_clicked_index = index
+        self._prev_shift_range = None
         self.thumbnail_clicked.emit(index)
 
 
@@ -1098,6 +1103,7 @@ class ThumbnailBar(QWidget):
         if 0 <= index < len(self.image_list):
             self.highlight_toggle_requested.emit(self.image_list[index])
             self.last_clicked_index = index
+            self._prev_shift_range = None
 
 
     @Slot(Path, bool)
@@ -1114,6 +1120,7 @@ class ThumbnailBar(QWidget):
         except ValueError:
             pass
 
+
     @Slot(set)
     def on_highlights_set(self, highlighted: set) -> None:
         """일괄 하이라이트 교체 (Shift+클릭 결과 수신)"""
@@ -1125,19 +1132,20 @@ class ThumbnailBar(QWidget):
 
     @Slot(int, bool)
     def _on_thumbnail_shift_click(self, index: int, is_ctrl_held: bool) -> None:
-        """
-        Shift+클릭 — 범위 하이라이트 처리.
-        """
         if self.last_clicked_index == -1:
-            # 처음 클릭 → Ctrl+클릭처럼 처리
             self._on_thumbnail_ctrl_click(index)
             return
 
         start = min(self.last_clicked_index, index)
         end   = max(self.last_clicked_index, index)
 
-        # 시그널만 emit — 로직은 MainWindow에서 처리
-        self.highlight_range_requested.emit(start, end, is_ctrl_held)
+        self.highlight_range_requested.emit(start, end, is_ctrl_held, self._prev_shift_range)
+
+        # Ctrl+Shift(해제)가 아닐 때만 범위 저장
+        if not is_ctrl_held:
+            self._prev_shift_range = (start, end)
+        else:
+            self._prev_shift_range = None
 
         
     # ============================================
@@ -1273,3 +1281,9 @@ class ThumbnailBar(QWidget):
         """캐시 전체 삭제 (설정 화면 버튼용)"""
         self._thumb_cache.clear()
         info_print("썸네일 캐시 전체 삭제 완료")
+
+
+    def reset_loading_state(self) -> None:
+        """로딩 상태 강제 초기화 (외부 호출용)."""
+        self._thumb_active = False
+        self.thumbnail_load_finished.emit(0)        

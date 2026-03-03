@@ -38,7 +38,6 @@ _ZOOM_DEBOUNCE_MS = 600
 class ClickableLabel(QLabel):
     """
     클릭 가능한 라벨.
-    클릭 시 copy_value를 클립보드에 복사하고 녹색 피드백을 표시한다.
     """
 
     def __init__(
@@ -91,15 +90,13 @@ class ClickableLabel(QLabel):
 class MetadataPanel(QWidget):
     """메타데이터 패널"""
 
-    # 줌 레벨 상수
     MIN_ZOOM = 1
     MAX_ZOOM = 18
     DEFAULT_ZOOM = 15
 
-    gps_clicked = Signal(float, float)  # (lat, lon)
+    gps_clicked = Signal(float, float) 
     map_zoom_changed = Signal(int) 
     
-
     # ============================================
     # 초기화
     # ============================================
@@ -855,7 +852,6 @@ class MetadataPanel(QWidget):
             warning_print(f"map_label 이미 삭제됨 (_on_map_failed): {e}")
 
 
-
     def _on_map_progress(self, current: int, total: int) -> None:
         if self.map_loader is None:
             return
@@ -869,10 +865,10 @@ class MetadataPanel(QWidget):
         if total > 0:
             percentage = int((current / total) * 100)
             self.map_progress.setValue(percentage)
-            # current < total → 진행 중, current >= total → 완료
+
             if current < total:
                 self.map_progress.setFormat(
-                    t('metadata_panel.map_progress_format')  # "렌더링 중..."
+                    t('metadata_panel.map_progress_format') 
                 )
             else:
                 self.map_progress.setFormat("완료")

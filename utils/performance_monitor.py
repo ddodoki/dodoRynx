@@ -19,8 +19,6 @@ from utils.debug import debug_print, error_print, info_print, warning_print
 # ============================================
 
 class PerformanceMonitor:
-    """성능 측정 도구"""
-    
 
 # ============================================
 # 초기화
@@ -32,10 +30,10 @@ class PerformanceMonitor:
         self.load_end_time: Optional[float] = None
         self.last_load_time: float = 0.0
         
-        self.load_times: List[float] = []  # 로딩 시간 기록
-        self.max_load_count = 100  # 최대 100개까지 저장
+        self.load_times: List[float] = [] 
+        self.max_load_count = 100 
 
-        self._timer_stack: Dict[str, float] = {}  # 중첩 타이머 지원
+        self._timer_stack: Dict[str, float] = {} 
         
         # psutil Process
         try:

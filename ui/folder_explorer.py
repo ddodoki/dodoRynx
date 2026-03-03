@@ -46,7 +46,10 @@ from PySide6.QtWidgets import (
     QStyle
 )
 
+from utils.debug import debug_print, error_print, info_print
 from utils.lang_manager import t
+from PySide6.QtGui import QFont as _QF
+from PySide6.QtGui import QFont as _QF2
 
 if TYPE_CHECKING:
     from main_window import MainWindow
@@ -312,8 +315,7 @@ class _BranchDelegate(QStyledItemDelegate):
                 r = option.rect
                 branch_rect = QRect(r.x() - self.BRANCH_W, r.y(), self.BRANCH_W, r.height())
 
-                from PySide6.QtGui import QFont as _QF
-                f = _QF(painter.font())
+                f = _QF()
                 f.setPointSize(7)
                 painter.setFont(f)
 
@@ -355,10 +357,11 @@ class _BranchDelegate(QStyledItemDelegate):
         badge_x = r.x() + icon_w + text_w + 6
         badge_rect = QRect(badge_x, r.y(), 18, r.height())
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        from PySide6.QtGui import QFont as _QF2
-        f2 = _QF2(painter.font())
-        f2.setPointSize(max(7, f2.pointSize() - 1))
+
+        f2 = _QF2()
+        f2.setPointSize(7)
         f2.setBold(True)
+
         painter.setFont(f2)
         painter.setPen(QColor(210, 70, 70))
         painter.drawText(
@@ -374,17 +377,31 @@ class _BranchDelegate(QStyledItemDelegate):
 # ─────────────────────────────────────────────────────────────────────────────
 
 class _FolderTree(QTreeView):
+
     path_activated = Signal(Path)
+
+    _SCROLL_RETRY_DELAYS  = (100, 200, 350, 550, 850, 1300, 2000)   # src_invalid 재시도
+    _RENDER_RETRY_DELAYS  = (100, 150, 200, 300, 500, 800, 1200, 1500)  # visualRect 빈 재시도
 
     def __init__(self, empty_set: set, parent=None) -> None:
         super().__init__(parent)
         self._empty_set = empty_set
         self._fe_pending_scroll = None
-        
+
+        self._scroll_retry: int = 0          
+        self._is_first_show: bool = True      
+        self._last_scroll_target: Optional[Path] = None  
+                
         self._scroll_timer = QTimer(self)  
         self._scroll_timer.setSingleShot(True)
         self._scroll_timer.setInterval(80)  
         self._scroll_timer.timeout.connect(self._do_scroll)
+
+        self._settle_timer = QTimer(self)
+        self._settle_timer.setSingleShot(True)
+        self._settle_timer.setInterval(250)   # 마지막 rowsInserted 후 250ms 대기
+        self._settle_timer.timeout.connect(self._on_settle_complete)
+        self._settle_persistent_idx = QPersistentModelIndex()
 
         self._fs_model = QFileSystemModel(self)
         self._fs_model.setRootPath("")
@@ -448,16 +465,20 @@ class _FolderTree(QTreeView):
 
 
     def _on_rows_inserted(self, parent: QModelIndex, first: int, last: int) -> None:
-        """새 행이 삽입될 때마다 호출 — 대기 경로가 있으면 타이머 리셋."""
-        if self._fe_pending_scroll is None:
-            return
-
-        self._scroll_timer.start()  
+        if self._fe_pending_scroll is not None:
+            self._scroll_timer.start()
+        # settle 대기 중이면 타이머 리셋 (행 삽입이 계속되는 동안 계속 연장)
+        if self._settle_persistent_idx.isValid():
+            self._settle_timer.start()
 
 
     def navigate_to(self, path: Path) -> None:
+        # 새 탐색 시작 시 이전 settle 취소
+        self._settle_timer.stop()
+        self._settle_persistent_idx = QPersistentModelIndex()
         self._fe_pending_scroll = path
         self._scroll_retry = 0
+        self._last_scroll_target = path
 
         src_idx = self._fs_model.index(str(path))
         if src_idx.isValid():
@@ -524,17 +545,54 @@ class _FolderTree(QTreeView):
                 next_proxy = self._proxy.mapFromSource(next_src)
                 if next_proxy.isValid():
                     self.expand(next_proxy)
-                    
+
+
+    def showEvent(self, event) -> None:
+        """위젯이 최초로 화면에 표시될 때 스크롤 위치를 재보장."""
+        super().showEvent(event)
+        if not self._is_first_show:
+            return
+        self._is_first_show = False
+
+        # Case A: 아직 pending — 넉넉한 딜레이로 재시도
+        if self._fe_pending_scroll is not None:
+            self._scroll_timer.stop()
+            QTimer.singleShot(200, self._do_scroll)
+            return
+
+        # Case B: pending은 이미 소진됐지만 위젯이 미표시 상태에서
+        #         scrollTo가 호출된 경우 → 마지막 대상으로 재스크롤
+        if self._last_scroll_target is not None:
+            _t = self._last_scroll_target
+            QTimer.singleShot(50,  lambda: self._scroll_to_path(_t))
+            QTimer.singleShot(300, lambda: self._scroll_to_path(_t))
+                                
+
+    def _scroll_to_path(self, path: Optional[Path]) -> None:
+        if path is None:
+            return
+        src_idx = self._fs_model.index(str(path))
+        if not src_idx.isValid():
+            return
+        proxy_idx = self._proxy.mapFromSource(src_idx)
+        if not proxy_idx.isValid():
+            return
+        rect = self.visualRect(proxy_idx)
+        in_view = self.viewport().rect().intersects(rect)
+        if rect.isEmpty() or not in_view:
+            self.scrollTo(proxy_idx, QAbstractItemView.ScrollHint.PositionAtCenter)
+
 
     def _do_scroll(self) -> None:
         if self._fe_pending_scroll is None:
             return
 
         src_idx = self._fs_model.index(str(self._fe_pending_scroll))
+
+        # ── Case 1: 모델 미로드 ──────────────────────────────────────────────────
         if not src_idx.isValid():
-            self._scroll_retry = getattr(self, '_scroll_retry', 0) + 1
-            if self._scroll_retry > 5:
-                # 5회 초과 시 포기 — pending + 연결 모두 정리
+            self._scroll_retry += 1
+            if self._scroll_retry > len(self._SCROLL_RETRY_DELAYS):
                 self._fe_pending_scroll = None
                 self._scroll_retry = 0
                 try:
@@ -542,7 +600,24 @@ class _FolderTree(QTreeView):
                 except (RuntimeError, TypeError):
                     pass
                 return
+            try:
+                self._fs_model.directoryLoaded.disconnect(self._on_directory_loaded)
+            except (RuntimeError, TypeError):
+                pass
+            try:
+                self._fs_model.directoryLoaded.connect(self._on_directory_loaded)
+            except Exception:
+                pass
+            delay = self._SCROLL_RETRY_DELAYS[
+                min(self._scroll_retry - 1, len(self._SCROLL_RETRY_DELAYS) - 1)
+            ]
+            QTimer.singleShot(delay, self._do_scroll)
+            return
 
+        # ── Case 2: proxy 미로드 ────────────────────────────────────────────────
+        proxy_idx = self._proxy.mapFromSource(src_idx)
+
+        if not proxy_idx.isValid():
             try:
                 self._fs_model.directoryLoaded.disconnect(self._on_directory_loaded)
             except (RuntimeError, TypeError):
@@ -553,9 +628,30 @@ class _FolderTree(QTreeView):
                 pass
             return
 
-        # 성공 시 카운터 + pending 초기화
+        # expand + setCurrentIndex + scrollTo
+        self.expand(proxy_idx)
+        self.setCurrentIndex(proxy_idx)
+        self.scrollTo(proxy_idx, QAbstractItemView.ScrollHint.PositionAtCenter)
+
+        rect = self.visualRect(proxy_idx)
+
+        # ── Case 3: 렌더링 미완료 (핵심 수정) ───────────────────────────────────
+        if rect.isEmpty():
+            # pending 유지 — 렌더링 완료 후 재시도
+            if self._scroll_retry < len(self._RENDER_RETRY_DELAYS):
+                delay = self._RENDER_RETRY_DELAYS[self._scroll_retry]
+                self._scroll_retry += 1
+                QTimer.singleShot(delay, self._do_scroll)
+            else:
+                self._fe_pending_scroll = None
+                self._scroll_retry = 0
+            return
+
+        # ── Case 4: 성공 ────────────────────────────────────────────────────────
+        target = self._fe_pending_scroll
         self._scroll_retry = 0
         self._fe_pending_scroll = None
+        self._last_scroll_target = target
 
         proxy_idx = self._proxy.mapFromSource(src_idx)
         if not proxy_idx.isValid():
@@ -564,6 +660,37 @@ class _FolderTree(QTreeView):
         self.expand(proxy_idx)
         self.setCurrentIndex(proxy_idx)
         self.scrollTo(proxy_idx, QAbstractItemView.ScrollHint.PositionAtCenter)
+
+        # ↓ 기존 _verify_scroll / _center_after_settle 호출 제거하고 아래로 교체
+        # rowsInserted가 멈출 때까지 대기 후 최종 센터 확정
+        self._settle_persistent_idx = QPersistentModelIndex(proxy_idx)
+        self._settle_timer.start()
+
+
+    def _on_settle_complete(self) -> None:
+        """rowsInserted가 250ms 동안 없으면 호출 — 모델 안정화 후 최종 센터 보정."""
+        idx = self._settle_persistent_idx
+        self._settle_persistent_idx = QPersistentModelIndex()
+
+        if not idx.isValid():
+            return
+        if self._fe_pending_scroll is not None:
+            return
+
+        rect = self.visualRect(idx)
+        viewport_rect = self.viewport().rect()
+        viewport_h = viewport_rect.height()
+
+        # 뷰포트에서 완전히 벗어난 경우
+        if rect.isEmpty() or not viewport_rect.intersects(rect):
+            self.scrollTo(idx, QAbstractItemView.ScrollHint.PositionAtCenter)
+            return
+
+        # 뷰포트에 있지만 중앙에서 크게 벗어난 경우
+        if viewport_h > 0:
+            ideal_y = (viewport_h - rect.height()) // 2
+            if abs(rect.y() - ideal_y) > 80:
+                self.scrollTo(idx, QAbstractItemView.ScrollHint.PositionAtCenter)
 
 
     def current_path(self) -> Optional[Path]:
@@ -585,12 +712,15 @@ class _FolderTree(QTreeView):
 
     def navigate_to_root(self) -> None:
         """내 컴퓨터 — 모든 펼침 닫기 → 드라이브 목록만 표시."""
+        self._settle_timer.stop()
+        self._settle_persistent_idx = QPersistentModelIndex()
         self._fe_pending_scroll = None
         self._scroll_timer.stop()
         self.collapseAll()
         self.clearSelection()
         self.setCurrentIndex(QModelIndex())
         self.scrollToTop()
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 즐겨찾기 탭 트리
@@ -661,6 +791,7 @@ class _FavTree(QTreeView):
 
         if self.selectionModel().isSelected(index):
             painter.fillRect(rect, QColor(74, 158, 255, int(255 * 0.28)))
+
 
     def _on_activated(self, idx: QModelIndex) -> None:
         item = self._model.itemFromIndex(idx)
@@ -763,6 +894,18 @@ class FolderExplorer(QWidget):
                 target = Path(last)
         if target:
             self._normal_tree.navigate_to(target)
+            # 최초 실행 safety net: 로딩 지연으로 스크롤 실패 시 재시도
+            for _delay in (600, 1200, 2000):
+                QTimer.singleShot(_delay, lambda p=target: self._ensure_scroll(p))
+                
+
+    def _ensure_scroll(self, path: Path) -> None:
+        cur = self._normal_tree.current_path()
+        if self._normal_tree._fe_pending_scroll is not None:
+            return
+        if cur != path:
+            return
+        self._normal_tree._scroll_to_path(path)
 
 
     def deactivate(self) -> None:
@@ -817,7 +960,6 @@ class FolderExplorer(QWidget):
         except Exception:
             pass
 
-
     # ── UI 빌드 ───────────────────────────────────────────────────────────────
 
     def _build_ui(self) -> None:
@@ -836,7 +978,6 @@ class FolderExplorer(QWidget):
 
         _TOOL_BTN_H = 26
 
-        # 바로가기 드롭다운
         self._quick_btn = QToolButton()
         self._quick_btn.setText("📂")
         self._quick_btn.setFixedHeight(_TOOL_BTN_H)
@@ -852,7 +993,6 @@ class FolderExplorer(QWidget):
             _quick_menu.addAction(act)
         self._quick_btn.setMenu(_quick_menu)
 
-        # 즐겨찾기 드롭다운 버튼 (탭 대체)
         self._fav_btn = QToolButton()
         self._fav_btn.setText("⭐")
         self._fav_btn.setFixedHeight(_TOOL_BTN_H)
@@ -862,7 +1002,6 @@ class FolderExplorer(QWidget):
         self._fav_menu.setStyleSheet(_QUICK_MENU_STYLE)
         self._fav_btn.setMenu(self._fav_menu)
 
-        # 위로 버튼
         self._up_btn = QToolButton()
         self._up_btn.setText("↑")
         self._up_btn.setFixedHeight(_TOOL_BTN_H)
@@ -870,7 +1009,6 @@ class FolderExplorer(QWidget):
         self._up_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self._up_btn.clicked.connect(self._go_up)
 
-        # 새 폴더 버튼
         self._new_btn = QToolButton()
         self._new_btn.setText("+")
         self._new_btn.setFixedHeight(_TOOL_BTN_H)
@@ -899,13 +1037,12 @@ class FolderExplorer(QWidget):
         self._fav_tree = _FavTree(self._empty_set, self)
         self._fav_tree.setVisible(False)
 
-
     # ── 컨텍스트 메뉴 ─────────────────────────────────────────────────────────
 
     def _rebuild_fav_menu(self) -> None:
         """즐겨찾기 드롭다운 메뉴를 현재 목록으로 재구성."""
         self._fav_menu.clear()
-        favs = self._get_favorites()  # 이미 str 필터링된 목록
+        favs = self._get_favorites() 
 
         # 실제로 존재하는 폴더만 표시
         valid_favs = [f for f in favs if Path(f).is_dir()]
@@ -1028,7 +1165,6 @@ class FolderExplorer(QWidget):
 
         if not menu.isEmpty():
             menu.exec(tree.viewport().mapToGlobal(pos))
-
 
     # ── 빠른 접근 ─────────────────────────────────────────────────────────────
 
@@ -1255,7 +1391,6 @@ class FolderExplorer(QWidget):
             pass
         return False  # 기본값: Copy
 
-
     # ── 삭제 ──────────────────────────────────────────────────────────────────
 
     def _delete_folder(self, path: Path) -> None:
@@ -1289,7 +1424,6 @@ class FolderExplorer(QWidget):
                 t("folder_explorer.dialog.error_title"),
                 t("folder_explorer.dialog.delete_fail") + str(e),
             )
-
 
     # ── 탐색기로 열기 ─────────────────────────────────────────────────────────
 
@@ -1352,9 +1486,7 @@ class FolderExplorer(QWidget):
 
             ctypes.windll.shell32.ShellExecuteExW(ctypes.byref(sei))  # type: ignore[attr-defined]
         except Exception:
-            # 여기서 pass만 하면 디버깅이 불가능하니, 최소한 stderr라도 남기는 걸 권장
             traceback.print_exc()
-
 
     # ── 즐겨찾기 ──────────────────────────────────────────────────────────────
 
@@ -1395,7 +1527,6 @@ class FolderExplorer(QWidget):
         self._save_favorites(favs)
         self._fav_tree.remove_favorite(path)
         self._rebuild_fav_menu()
-
 
     # ── 설정 저장/로드 ────────────────────────────────────────────────────────
 
@@ -1446,3 +1577,4 @@ class FolderExplorer(QWidget):
 
         # 2) 트리 위젯의 현재 선택 fallback
         return self._normal_tree.current_path()
+    

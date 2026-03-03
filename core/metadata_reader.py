@@ -191,13 +191,6 @@ class MetadataReader:
     ) -> Dict[str, Any]:
         """
         오류 메타데이터 생성 (캐시하지 않음)
-        
-        Args:
-            file_path: 파일 경로
-            error_msg: 오류 메시지
-        
-        Returns:
-            오류 메타데이터
         """
         return {
             'file': {
@@ -213,12 +206,6 @@ class MetadataReader:
     def _read_metadata_unsafe(self, file_path: Path) -> Dict[str, Any]:
         """
         실제 메타데이터 읽기 (캐시 락 없이)
-        
-        Args:
-            file_path: 파일 경로
-        
-        Returns:
-            메타데이터 딕셔너리
         """
         metadata: Dict[str, Any] = {
             'file': {},
@@ -914,7 +901,7 @@ class MetadataReader:
     ) -> Tuple[int, int, dict, dict, Any]:
         from winrt.windows.storage import StorageFile, FileAccessMode
         from winrt.windows.graphics.imaging import BitmapDecoder
-        from winrt.windows.foundation import IPropertyValue   # ← 핵심 추가
+        from winrt.windows.foundation import IPropertyValue
 
         abs_path = str(file_path.resolve())
         storage  = await StorageFile.get_file_from_path_async(abs_path)

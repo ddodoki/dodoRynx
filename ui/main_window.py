@@ -233,6 +233,7 @@ class MainWindow(QMainWindow):
         self._print_manager = None
         self._edit_locked:            bool           = False
         self.pending_rotation_for:    Optional[Path] = None
+        self._is_deleting: bool = False
 
         # open_image/open_folder 상태 (hasattr 제거용)
         self._pending_file_to_open:   Optional[Path] = None
@@ -467,6 +468,7 @@ class MainWindow(QMainWindow):
 
             self.thumbnail_bar.highlight_toggle_requested.connect(self._on_highlight_toggle_requested)
             self.thumbnail_bar.highlight_range_requested.connect(self._on_highlight_range_requested)
+
             self.thumbnail_bar.temp_highlights_clear_requested.connect(
                 self.navigator.clear_temporary_highlights
             )
@@ -1000,6 +1002,10 @@ class MainWindow(QMainWindow):
     def _load_current_image(self) -> None:
         """현재 이미지 로드"""
 
+        # ← 삭제 진행 중이면 이미지 로딩 완전 스킵
+        if getattr(self, '_is_deleting', False):
+            return
+
         # 편집 모드 활성 상태에서 이미지 이동 시 자동 취소 종료
         # - 저장하지 않고 종료 (이동 = 명시적 포기 의사)
         # - 적용 후 저장은 사용자가 ✔ 버튼으로 명시적으로 해야 함
@@ -1187,27 +1193,30 @@ class MainWindow(QMainWindow):
         self._show_status_message(t('status.highlight_count', count=count), 1500)
 
 
-    @Slot(int, int, bool)
-    def _on_highlight_range_requested(self, start: int, end: int, is_ctrl: bool) -> None:
+    @Slot(int, int, bool, object)
+    def _on_highlight_range_requested(
+        self, start: int, end: int,
+        is_ctrl: bool,
+        prev_range: Optional[tuple[int, int]]
+    ) -> None:
         image_list = self.navigator.image_files
 
         if is_ctrl:
-            # Ctrl+Shift: 범위 내 하이라이트 해제
-            # toggle() 반복이지만 해제만 하므로 highlight_changed가 실제 변경 시에만 emit
+            # Ctrl+Shift: 범위 내 하이라이트 해제 (기존 유지)
             for i in range(start, end + 1):
                 if i < len(image_list):
                     fp = image_list[i]
                     if self.navigator.is_highlighted(fp):
-                        self.navigator.toggle_highlight(fp)   # highlight_changed emit
+                        self.navigator.toggle_highlight(fp)
         else:
-            # 일반 Shift: set_highlights() 1회 호출 → highlights_set 1회 emit
-            # → ThumbnailBar.on_highlights_set() 1회 일괄 UI 갱신
-            new_set = {
-                image_list[i]
-                for i in range(start, end + 1)
-                if i < len(image_list)
-            }
-            self.navigator.set_highlights(new_set)  # highlights_set.emit(new_set) 1회
+            # Shift: 이전 범위만 해제 → 새 범위 추가 (개별 Ctrl 항목 유지)
+            if prev_range is not None:
+                prev_start, prev_end = prev_range
+                self.navigator.unhighlight_range(prev_start, prev_end)
+
+            self.navigator.highlight_range(start, end)
+            # UI 일괄 동기화 (highlight_range는 시그널 없으므로 1회 emit)
+            self.navigator.highlights_set.emit(self.navigator._highlighted.copy())
 
         count = self.navigator.get_highlight_count()
         action = "해제" if is_ctrl else "선택"
@@ -1423,15 +1432,6 @@ class MainWindow(QMainWindow):
     def _on_folder_selected_from_explorer(self, folder_path: Path) -> None:
         """
         FolderExplorer에서 폴더를 선택했을 때 호출.
-
-        open_folder()와의 차이:
-        - 동일 폴더 재선택 시: 재스캔 없이 현재 인덱스 유지
-        - 다른 폴더 선택 시: 정상적으로 open_folder() 위임
-
-        이렇게 분리하는 이유:
-        open_folder()는 항상 _open_first_on_scan=True를 설정하므로
-        폴더 탐색기에서 현재 폴더를 다시 클릭해도 index=0으로 초기화됨.
-        탐색기는 '탐색'이 목적이므로 현재 위치를 유지하는 것이 자연스러움.
         """
         if not folder_path or not folder_path.is_dir():
             warning_print(f"folder_selected: 유효하지 않은 경로 — {folder_path}")
@@ -1458,6 +1458,10 @@ class MainWindow(QMainWindow):
 
     def _clear_all_highlights(self):      
         self.file_manager.clear_all_highlights()
+
+
+    def _clear_all_highlights_all_folders(self):      
+        self.file_manager.clear_all_highlights_all_folders()
 
 
     def _delete_highlighted_files(self):  

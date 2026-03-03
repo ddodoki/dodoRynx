@@ -10,6 +10,7 @@
     "rotate_right_tooltip": "Rotate 90° right (Ctrl+Shift+→)",
     "rotate_reset_tooltip": "Reset rotation (Ctrl+Shift+↑)",
     "rotate_apply_tooltip": "Apply rotation (Ctrl+Shift+↓)",
+    "sort_btn_dirty_tooltip": "Sort again",        
 
     "task": {
       "file_op": "File Operation",
@@ -95,7 +96,12 @@
       "task":      "📝 Highlight Task ({count})",      
       "delete":    "🗑️ Delete Highlights",
       "cut":       "✂️ Cut Highlights",
-      "copy":      "📋 Copy Highlights"      
+      "copy":      "📋 Copy Highlights",
+      "folder_header": "[ Folder  /  Files ]",
+      "folder_nav":  "📁 HL Folders  ({folder_count} / {total})",
+      "folder_item": "📁 {name}  /  ( 📝 {count} )",
+      "folder_current": "★📂 {name}  /  ( 📝 {count} )",
+      "clear_all_folders": "⚠ Clear All Folders  ( 📝 {total} )"      
     },
 
     "view": {

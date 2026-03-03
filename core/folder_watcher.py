@@ -29,7 +29,6 @@ class FolderWatcherHandler(FileSystemEventHandler):
         super().__init__()
         self.supported_extensions = supported_extensions
         
-        # 타입 힌트도 변경
         self.file_added_signal: SignalInstance = file_added_signal
         self.file_deleted_signal: SignalInstance = file_deleted_signal
         self.file_modified_signal: SignalInstance = file_modified_signal
@@ -410,6 +409,7 @@ class FolderWatcher(QObject):
         
         if not self.event_timer.isActive():
             self.event_timer.start(300)
+
 
     @Slot(Path, Path)
     def _on_file_moved(self, src_path: Path, dest_path: Path) -> None:

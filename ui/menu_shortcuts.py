@@ -15,7 +15,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Optional
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QGuiApplication, QKeySequence, QShortcut
+from PySide6.QtGui import QGuiApplication, QKeySequence, QShortcut, QFont, QColor
 from PySide6.QtWidgets import QMenu, QWidget
 
 from utils.debug import debug_print, error_print
@@ -219,6 +219,83 @@ class MenuBuilder:
 
             menu.addMenu(hl_sub)
 
+        self._section_highlight_folders(menu, parent)
+
+
+    def _section_highlight_folders(self, menu: QMenu, parent: Optional[QWidget]) -> None:
+        mw = self._mw
+
+        all_files = mw.navigator.get_all_highlighted_files(check_exists=False)
+        if not all_files:
+            return
+
+        from collections import defaultdict
+        folder_map: dict = defaultdict(list)
+        for f in all_files:
+            folder_map[f.parent].append(f)
+
+        if not folder_map:
+            return
+
+        total         = sum(len(v) for v in folder_map.values())
+        submenu_title = t(
+            'menu.highlight.folder_nav',
+            folder_count=len(folder_map),
+            total=total,
+        )
+        hl_folder_sub = _menu(submenu_title, parent)
+
+        # ── 컬럼 헤더 ──────────────────────────────────────
+        header = hl_folder_sub.addAction(
+            t('menu.highlight.folder_header')   # "  폴더명  /  파일 수"
+        )
+        header.setEnabled(False)
+
+        hfont = QFont()
+        hfont.setPointSize(8)
+        header.setFont(hfont)
+
+        hl_folder_sub.addSeparator()
+        # ───────────────────────────────────────────────────
+
+        for folder in sorted(folder_map.keys()):
+            files      = folder_map[folder]
+            is_current = (folder == mw.navigator.current_folder)
+
+            if is_current:
+                label = t(
+                    'menu.highlight.folder_current',
+                    name=folder.name,
+                    count=len(files),
+                )
+            else:
+                label = t(
+                    'menu.highlight.folder_item',
+                    name=folder.name,
+                    count=len(files),
+                )
+
+            action = hl_folder_sub.addAction(label)
+            action.setToolTip(str(folder))
+
+            if is_current:
+                action.setEnabled(False)
+            else:
+                action.triggered.connect(
+                    lambda checked=False, f=folder: mw.open_folder(f)
+                )
+
+        # ── 전체 해제 ──────────────────────────────────────
+        hl_folder_sub.addSeparator()
+
+        clear_all_act = hl_folder_sub.addAction(
+            t('menu.highlight.clear_all_folders', total=total)
+        )
+        clear_all_act.triggered.connect(mw._clear_all_highlights_all_folders)
+
+        menu.addSeparator()
+        menu.addMenu(hl_folder_sub)
+
 
     # 뷰 토글 
     def _section_view(self, menu: QMenu, parent: Optional[QWidget]) -> None:
@@ -373,14 +450,6 @@ class ShortcutManager:
         reg("prev_backspace",  "Backspace",        mw._previous_image)
         reg("first",           "Home",            mw._first_image)
         reg("last",            "End",             mw._last_image)
-
-        # 줌
-        # reg("zoom_fit",        "F",               lambda: mw.image_viewer.set_zoom_mode("fit"))
-        # reg("zoom_actual",     "1",               lambda: mw.image_viewer.set_zoom_mode("actual"))
-        # reg("zoom_width",      "W",               lambda: mw.image_viewer.set_zoom_mode("width"))
-        # reg("zoom_in",         "Ctrl+=",          lambda: mw.image_viewer.zoom_in())
-        # reg("zoom_in2",        "Ctrl++",          lambda: mw.image_viewer.zoom_in())
-        # reg("zoom_out",        "Ctrl+-",          lambda: mw.image_viewer.zoom_out())
 
         reg("zoom_fit",    "F",      lambda: mw.dual_view_panel.get_active_viewer().set_zoom_mode("fit"))
         reg("zoom_actual", "1",      lambda: mw.dual_view_panel.get_active_viewer().set_zoom_mode("actual"))

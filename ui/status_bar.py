@@ -32,7 +32,6 @@ from PySide6.QtWidgets import (
     QStatusBar,
     QVBoxLayout,
     QWidget,
-    QSizePolicy
 )
 
 from core.folder_navigator import SortOrder
@@ -260,6 +259,7 @@ class SortMenuButton(QPushButton):
 
     def __init__(self, parent=None, widget_height: int = 30) -> None:
         super().__init__("⇅", parent)
+        self._dirty: bool = False        
         self.setToolTip(t('statusbar.sort_btn_tooltip'))
         self.setStyleSheet(self._STYLE)
         self.setFixedSize(37, widget_height) 
@@ -319,12 +319,38 @@ class SortMenuButton(QPushButton):
         self._apply_check(sort_type, reverse)
         label = self._SHORT_LABELS.get((sort_type, reverse), "⇅")
         self.setText(label)
+        self.clear_dirty() 
 
 
     def _show_menu(self) -> None:
         pos = self.mapToGlobal(QPoint(0, 0))
         mh  = self._menu.sizeHint().height()
         self._menu.exec(QPoint(pos.x(), pos.y() - mh))
+
+
+    def mark_dirty(self) -> None:
+        if not self._dirty:
+            self._dirty = True
+            self.update() 
+
+
+    def clear_dirty(self) -> None:
+        if self._dirty:
+            self._dirty = False
+            self.update()
+
+
+    def paintEvent(self, event) -> None:
+        super().paintEvent(event)  
+        if not self._dirty:
+            return
+        # 우상단 코너에 점만 추가
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor("#ffaa00")) 
+        painter.drawEllipse(self.width() - 9, 3, 6, 6)
+        painter.end()
 
 
 class ZoomMenuButton(QPushButton):
@@ -474,7 +500,6 @@ class FloatingToast(QLabel):
         self._anim_in.start()
 
         # Phase 2: 대기 후 Phase 3
-        # parent=self 로 설정 → deleteLater() 시 Qt가 자동 취소
         self._wait_timer = QTimer(self)
         self._wait_timer.setSingleShot(True)
         self._wait_timer.timeout.connect(self._start_fadeout)
@@ -635,7 +660,6 @@ class PulseGaugeWidget(QWidget):
         self.setMinimumWidth(250)
 
     # 공개 API
-
     def set_task(
         self,
         text:     str,
@@ -644,7 +668,7 @@ class PulseGaugeWidget(QWidget):
         priority: TaskPriority,
     ) -> None:
         """작업 정보 설정 및 위젯 활성화."""
-        self._fadeout_timer.stop()   # 추가: 잔존 fade-out 예약 취소
+        self._fadeout_timer.stop()  
         self._text    = text
         self._current = current
         self._total   = total
@@ -696,9 +720,7 @@ class PulseGaugeWidget(QWidget):
         self._pulse_timer.stop()
         self._opacity_eff.setOpacity(0.0)
 
-
     # 내부
-
     def _tick(self) -> None:
         self._elapsed_ms = (
             self._elapsed_ms + self._TIMER_INTERVAL
@@ -728,7 +750,7 @@ class PulseGaugeWidget(QWidget):
         self._fade_anim.start()
 
 
-    def paintEvent(self, event) -> None:  # noqa: N802
+    def paintEvent(self, event) -> None:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
         w, h = self.width(), self.height()
@@ -806,10 +828,10 @@ class StatusProgressWidget(QWidget):
         self._current_priority: Optional[TaskPriority] = None
         self._toast_mgr: Optional[ToastManager] = None  
 
+
     def set_toast_manager(self, mgr: ToastManager) -> None:
         self._toast_mgr = mgr
 
-    # 태스크 시작
 
     def task_start(self, priority: TaskPriority, text: str, total: int = 0) -> None:
         """태스크 시작 등록."""
@@ -818,7 +840,6 @@ class StatusProgressWidget(QWidget):
         )
         self._refresh()
 
-    # 태스크 진행
 
     def task_progress(
         self, priority: TaskPriority, text: str, current: int, total: int
@@ -835,7 +856,6 @@ class StatusProgressWidget(QWidget):
         if priority == self._current_priority:
             self._gauge.update_progress(text, current, total)
 
-    # 태스크 완료
 
     def task_finish(
         self,
@@ -862,7 +882,6 @@ class StatusProgressWidget(QWidget):
             del self._queue[priority]
 
     # 내부 로직
-
     def _refresh(self) -> None:
         """큐에서 가장 높은 우선순위 active 태스크를 선택해 표시."""
         best = self._best_active()
@@ -926,6 +945,7 @@ class PerfOverlayWidget(QLabel):
     _MARGIN_RIGHT = 8
     _MARGIN_TOP   = 4
 
+
     def __init__(self, parent: QWidget) -> None:
         super().__init__(parent)
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
@@ -938,6 +958,7 @@ class PerfOverlayWidget(QLabel):
             }
         """)
         self.setVisible(False)
+
 
     def reposition(self) -> None:
         p = self.parent()
@@ -1119,7 +1140,7 @@ class AppStatusBar:
         except Exception as e:
             error_print(f"AppStatusBar._add_widgets: {e}")
 
-    # 헬퍼
+
     def _sep(self) -> QLabel:
         lbl = QLabel("|")
         lbl.setStyleSheet(self._SEP_STYLE)
@@ -1230,19 +1251,40 @@ class StatusBarController:
         sb.rotate_apply_btn.clicked.connect(mw._on_rotate_apply)
         sb.edit_mode_btn.clicked.connect(mw.enter_edit_mode)
 
-        # 폴더 변경 시 정렬 버튼 기본값으로 리셋
-        mw.navigator.folder_changed.connect(self._on_folder_changed)
+        mw.navigator.sort_order_changed.connect(self._on_sort_order_changed)
 
         # 오버레이 스케일 초기값 적용
         saved_scale = mw.config.get_overlay_scale()
         mw.overlay_widget.set_scale(saved_scale / 100.0)
 
+        mw.navigator.highlight_changed.connect(self._on_highlight_changed)
+        mw.navigator.highlights_set.connect(self._on_highlights_set)
+        mw.navigator.highlights_cleared.connect(self._on_highlights_cleared)
+
         debug_print("StatusBarController: 시그널 연결 완료")
 
 
-    def _on_folder_changed(self, folder) -> None:
-        """폴더 변경 → 정렬 표시 기본값(이름순)으로 리셋."""
-        self._sb.sort_btn.update_active_sort("name", False)
+    def _on_sort_order_changed(self, sort_order: SortOrder, reverse: bool) -> None:
+        """폴더 이동 후 복원된 정렬 기준 → 버튼 UI 동기화 (folder_changed 대체)"""
+        self._sb.sort_btn.update_active_sort(sort_order.value, reverse)
+        # update_active_sort 내부에서 clear_dirty() 이미 호출됨
+
+
+    def _on_highlight_changed(self, file_path, is_highlighted) -> None:
+        """하이라이트 변경 → 하이라이트 정렬 중이면 dirty 표시"""
+        if self._mw.navigator.current_sort_order == SortOrder.HIGHLIGHT:
+            self._sb.sort_btn.mark_dirty()
+
+
+    def _on_highlights_set(self, highlighted: set) -> None:
+        """폴더 복원/스캔 완료 후 UI 동기화용 — dirty 표시 안 함.
+        유저 변경은 highlight_changed에서만 처리."""
+        pass 
+
+
+    def _on_highlights_cleared(self) -> None:
+        """전체 해제 → dirty 해제 (정렬 결과가 비어있음 = 최신)"""
+        self._sb.sort_btn.clear_dirty()
 
 
     def _on_zoom_action(self, action: str) -> None:
@@ -1303,6 +1345,12 @@ class StatusBarController:
         if not self._mw.navigator.image_files:
             return
 
+        # ← 가드를 여기서: task_start 이전에 체크
+        if self._mw.navigator._scan_in_progress:
+            self._sb.sort_btn.update_active_sort(sort_type, reverse)
+            self.show_message(t('statusbar.sort_scan_busy'), 1500)
+            return
+    
         sort_order = SortOrder(sort_type)
         sort_name  = t(f'statusbar.sort_name.{sort_type}') or sort_type
         direction  = t('statusbar.sort_desc') if reverse else t('statusbar.sort_asc')
@@ -1334,6 +1382,7 @@ class StatusBarController:
                 )
                 # 정렬 완료 후 버튼 활성 표시 갱신
                 self._sb.sort_btn.update_active_sort(sort_type, reverse)
+                self._sb.sort_btn.clear_dirty()
 
             except Exception as e:
                 error_print(f"on_sort_done 오류: {e}")

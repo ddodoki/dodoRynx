@@ -10,6 +10,7 @@
     "rotate_right_tooltip": "오른쪽 90° 회전 (Ctrl+Shift+→)",
     "rotate_reset_tooltip": "회전 리셋 (Ctrl+Shift+↑)",
     "rotate_apply_tooltip": "회전 적용 (Ctrl+Shift+↓)",
+    "sort_btn_dirty_tooltip": "정렬 재적용 필요",    
 
     "task": {
       "file_op": "파일 작업",
@@ -95,7 +96,12 @@
       "task":      "📝 하이라이트 작업 ({count}개)",      
       "delete":    "🗑️ 하이라이트 파일 삭제",
       "cut":       "✂️ 하이라이트 파일 잘라내기",
-      "copy":      "📋 하이라이트 파일 복사"     
+      "copy":      "📋 하이라이트 파일 복사",
+      "folder_header": "[ 폴더명  /  파일 수 ]",     
+      "folder_nav":  "📁 HL 폴더 이동  ({folder_count}곳 · {total}개)",
+      "folder_item": "📁 {name}  /  ( 📝 {count}개 )",
+      "folder_current": "★📂 {name}  /  ( 📝 {count}개 )",
+      "clear_all_folders": "⚠ 전체 폴더 해제 ( 📝 {total}개 )"      
     },
 
     "view": {
