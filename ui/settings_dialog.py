@@ -49,7 +49,6 @@ class ClickableLabel(QLabel):
         super().mousePressEvent(event)
 
 
-
 class SettingsDialog(QDialog):
     """설정 다이얼로그"""
 
@@ -65,7 +64,6 @@ class SettingsDialog(QDialog):
     rendering_settings_changed = Signal() 
     thumbnail_cache_clear_requested = Signal()
     tile_cache_clear_requested = Signal()
-
 
     # ============================================
     # 초기화 / UI 구성
@@ -86,7 +84,7 @@ class SettingsDialog(QDialog):
         # 라이브 프리뷰 취소 복원을 위해 원본 값 저장
         self._orig_scale   = int(config.get("overlay.scale", 100))
         self._orig_opacity = float(config.get_overlay_setting("opacity", 0.8))
-        # debounce 타이머
+
         self._preview_timer = QTimer(self)
         self._preview_timer.setSingleShot(True)
         self._preview_timer.timeout.connect(self.overlay_settings_changed.emit)
@@ -124,7 +122,6 @@ class SettingsDialog(QDialog):
         button_box.accepted.connect(self.accept)
         button_box.rejected.connect(self.reject)
         layout.addWidget(button_box)
-
 
     # ============================================
     # 탭 생성
@@ -652,7 +649,6 @@ class SettingsDialog(QDialog):
                 self.lang_combo.setCurrentIndex(i)
                 break
 
-
     # ============================================
     # 렌더링 설정 관련
     # ============================================    
@@ -671,7 +667,6 @@ class SettingsDialog(QDialog):
         else:
             self.vsync_checkbox.setStyleSheet("")
             self.msaa_combo.setStyleSheet("")
-
 
     # ============================================
     # 브라우저 관련
@@ -723,7 +718,6 @@ class SettingsDialog(QDialog):
             return reply == QMessageBox.StandardButton.Yes
         
         return True
-
 
     # ============================================
     # 설정 로드/저장
@@ -991,7 +985,6 @@ class SettingsDialog(QDialog):
         self.overlay_settings_changed.emit()
         super().reject()       
 
-
     # ============================================
     # 오버레이 실시간 프리뷰
     # ============================================
@@ -1008,7 +1001,6 @@ class SettingsDialog(QDialog):
         self.overlay_opacity_value_label.setText(f"{v}%")
         self.config.set_overlay_setting("opacity", v / 100.0)
         self._preview_timer.start(80)
-
 
     # ============================================
     # 캐시 용량 계산 / 표시
@@ -1090,7 +1082,6 @@ class SettingsDialog(QDialog):
 
         QTimer.singleShot(0, _calc)
 
-
     # ============================================
     # 캐시 삭제 / 폴더 관리
     # ============================================
@@ -1159,7 +1150,7 @@ class SettingsDialog(QDialog):
         _render_cache.clear()
         self.tile_cache_clear_requested.emit()
 
-        deleted = self._delete_cache_dir(self._ofm_cache_dir)   # ← _tile_cache_dir 제거
+        deleted = self._delete_cache_dir(self._ofm_cache_dir)  
 
         _render_cache._ensure_db()
 
@@ -1185,7 +1176,6 @@ class SettingsDialog(QDialog):
             error_print(f"캐시 디렉토리 삭제 실패: {e}")
             QMessageBox.critical(self, t('dialog.cache_delete_error_title'), t('dialog.cache_delete_error_msg', error=e),)
         return deleted_bytes
-
 
     # ============================================
     # 스타일 유틸리티

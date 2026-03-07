@@ -101,7 +101,6 @@ class MenuBuilder:
         return menu
 
     # 파일 작업
-
     def _section_file(self, menu: QMenu, parent: Optional[QWidget]) -> None:
         mw       = self._mw
         has_file = bool(mw._current_file)
@@ -161,7 +160,6 @@ class MenuBuilder:
         a.setChecked(getattr(mw, "is_fullscreen", False))
         a.triggered.connect(mw._toggle_fullscreen)
 
-
     # 하이라이트
     def _section_highlight(self, menu: QMenu, parent: Optional[QWidget]) -> None:
         mw              = self._mw
@@ -184,7 +182,7 @@ class MenuBuilder:
                 and gps_val[1] is not None
             )
 
-            gps_act.setEnabled(has_gps)   # ← 반드시 bool
+            gps_act.setEnabled(has_gps)
             if has_gps:
                 gps_act.triggered.connect(mw._view_gps)
             menu.addSeparator()
@@ -296,7 +294,6 @@ class MenuBuilder:
         menu.addSeparator()
         menu.addMenu(hl_folder_sub)
 
-
     # 뷰 토글 
     def _section_view(self, menu: QMenu, parent: Optional[QWidget]) -> None:
         mw = self._mw
@@ -345,7 +342,6 @@ class MenuBuilder:
         a.triggered.connect(mw._toggle_performance_overlay)
        
         menu.addMenu(toggle_sub)
-
 
     # 회전
     def _section_rotate(self, menu: QMenu, parent: Optional[QWidget]) -> None:
@@ -432,7 +428,6 @@ class ShortcutManager:
     """
     QShortcut 전역 단축키 등록·관리.
     """
-
 
     def __init__(self, main_window) -> None:
         self._mw = main_window
@@ -575,4 +570,5 @@ class MenuShortcutController:
 
     def get_shortcut(self, name: str) -> Optional[QShortcut]:
         return self._shortcut.get(name)
+    
     

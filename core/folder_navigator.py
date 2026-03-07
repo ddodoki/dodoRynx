@@ -53,6 +53,7 @@ class SortWorkerThread(QThread):
         self._reverse = reverse
         self._highlighted = highlighted.copy()
         self._cancelled = False
+        self._metadata_reader = metadata_reader
 
 
     def cancel(self) -> None:
@@ -75,7 +76,6 @@ class SortWorkerThread(QThread):
         files = self._files.copy()
         order = self._sort_order
 
-        # ── 빠른 정렬 (I/O 없음) ─────────────────────────────
         if order == SortOrder.HIGHLIGHT:
             files.sort(
                 key=lambda f: (f not in self._highlighted, f.name),
@@ -86,7 +86,6 @@ class SortWorkerThread(QThread):
         if order == SortOrder.NAME:
             return natsorted(files, reverse=self._reverse)
 
-        # ── 파일 시스템 정렬 ──────────────────────────────────
         if order in (SortOrder.CREATED, SortOrder.MODIFIED, SortOrder.SIZE):
             stat_cache: dict = {}
             for f in files:
@@ -106,80 +105,143 @@ class SortWorkerThread(QThread):
                 files.sort(key=lambda f: stat_cache[f].st_size, reverse=self._reverse)
             return files
 
-        # ── EXIF 날짜 정렬 (느림 — 스레드에서 실행되므로 OK) ──
-
         if order == SortOrder.EXIF_DATE:
-            import piexif
-
             exif_cache: dict = {}
             for filepath in files:
                 if self._cancelled:
                     return self._files
-                try:
-                    exif_dict = piexif.load(str(filepath))
-                    exif_ifd = exif_dict.get("Exif", {})
-
-                    # DateTimeOriginal만 읽음 (GPS IFD 완전 무시)
-                    date_bytes = exif_ifd.get(piexif.ExifIFD.DateTimeOriginal, b"")
-                    if not date_bytes:
-                        # 폴백: IFD0 DateTime
-                        ifd0 = exif_dict.get("0th", {})
-                        date_bytes = ifd0.get(piexif.ImageIFD.DateTime, b"")
-
-                    if isinstance(date_bytes, bytes):
-                        date_str = date_bytes.decode("ascii", errors="ignore").strip("\x00").strip()
-                    else:
-                        date_str = ""
-
-                    if date_str:
-                        # piexif 원시 포맷: "YYYY:MM:DD HH:MM:SS" (하이픈 아님)
-                        dt = datetime.strptime(date_str, "%Y:%m:%d %H:%M:%S")
-                        exif_cache[filepath] = (False, dt, filepath.name)
-                    else:
-                        exif_cache[filepath] = (True, datetime.max, filepath.name)
-
-                except Exception:
-                    # piexif 미지원 포맷 (RAW, PNG 등) → 맨 뒤로
-                    exif_cache[filepath] = (True, datetime.max, filepath.name)
-
+                dt = self._get_exif_date(filepath)
+                exif_cache[filepath] = (
+                    dt is None,
+                    dt or datetime.max,
+                    filepath.name
+                )
             files.sort(key=lambda f: exif_cache[f], reverse=self._reverse)
             return files
 
-        # ── 카메라 기종 정렬 ──────────────────────────────────
         if order == SortOrder.CAMERA_MODEL:
-            import piexif
-
             cam_cache: dict = {}
             for filepath in files:
                 if self._cancelled:
                     return self._files
-                try:
-                    # metadata_reader 대신 piexif로 Make/Model만 직접 읽기
-                    exif_dict = piexif.load(str(filepath))
-                    ifd = exif_dict.get("0th", {})
-
-                    make = ifd.get(piexif.ImageIFD.Make, b"")
-                    if isinstance(make, bytes):
-                        make = make.decode("utf-8", errors="ignore").strip("\x00").strip()
-
-                    model = ifd.get(piexif.ImageIFD.Model, b"")
-                    if isinstance(model, bytes):
-                        model = model.decode("utf-8", errors="ignore").strip("\x00").strip()
-
-                    if model:
-                        full = f"{make} {model}".strip() if make else model
-                        cam_cache[filepath] = (False, full.lower(), filepath.name)
-                    else:
-                        cam_cache[filepath] = (True, "", filepath.name)
-
-                except Exception:
-                    # piexif 미지원 포맷 (PNG, BMP 등) → 맨 뒤로
-                    cam_cache[filepath] = (True, "", filepath.name)
-
+                model = self._get_camera_model(filepath)
+                cam_cache[filepath] = (
+                    model is None,
+                    (model or "").lower(),
+                    filepath.name
+                )
             files.sort(key=lambda f: cam_cache[f], reverse=self._reverse)
             return files
-    
-        return self._files
+
+        return self._files 
+
+
+    def _get_exif_date(self, filepath: Path) -> Optional[datetime]:
+        """3단계 폴백: MetadataReader 캐시 → piexif → MetadataReader 전체 읽기"""
+
+        # 1단계: 캐시 히트
+        if self._metadata_reader:
+            cached = self._metadata_reader.get_from_cache(filepath)
+            if cached and 'camera' in cached:
+                dt = self._parse_date_str(cached['camera'].get('date_taken', ''))
+                if dt:
+                    return dt
+
+        # 2단계: piexif 직접 (JPEG/TIFF)
+        ext = filepath.suffix.lower()
+        if ext in ('.jpg', '.jpeg', '.tiff', '.tif'):
+            try:
+                import piexif
+                exif_dict  = piexif.load(str(filepath))
+                exif_ifd   = exif_dict.get("Exif", {})
+                date_bytes = exif_ifd.get(piexif.ExifIFD.DateTimeOriginal, b"")
+                if not date_bytes:
+                    ifd0 = exif_dict.get("0th", {})
+                    date_bytes = ifd0.get(piexif.ImageIFD.DateTime, b"")
+                if date_bytes:
+                    date_str = date_bytes.decode("ascii", errors="ignore").strip("\x00").strip()
+                    dt = self._parse_date_str(date_str)
+                    if dt:
+                        return dt
+            except Exception:
+                pass
+
+        # 3단계: MetadataReader 전체 읽기 (RAW/HEIC)
+        if self._metadata_reader and ext in (
+            '.nef', '.cr2', '.cr3', '.arw', '.dng',
+            '.raf', '.orf', '.rw2', '.heic', '.heif', '.avif'
+        ):
+            try:
+                meta = self._metadata_reader.read(filepath)
+                if meta and 'camera' in meta:
+                    return self._parse_date_str(meta['camera'].get('date_taken', ''))
+            except Exception:
+                pass
+
+        return None
+
+
+    def _get_camera_model(self, filepath: Path) -> Optional[str]: 
+        """3단계 폴백: MetadataReader 캐시 → piexif → MetadataReader 전체 읽기"""
+
+        # 1단계: 캐시 히트
+        if self._metadata_reader:
+            cached = self._metadata_reader.get_from_cache(filepath)
+            if cached and 'camera' in cached:
+                model = cached['camera'].get('model', '').strip()
+                make  = cached['camera'].get('make', '').strip()
+                if model:
+                    return f"{make} {model}".strip() if make else model
+
+        # 2단계: piexif 직접 (JPEG/TIFF)
+        ext = filepath.suffix.lower()
+        if ext in ('.jpg', '.jpeg', '.tiff', '.tif'):
+            try:
+                import piexif
+                exif_dict = piexif.load(str(filepath))
+                ifd       = exif_dict.get("0th", {})
+
+                make  = ifd.get(piexif.ImageIFD.Make, b"")
+                model = ifd.get(piexif.ImageIFD.Model, b"")
+
+                if isinstance(make, bytes):
+                    make  = make.decode("utf-8", errors="ignore").strip("\x00").strip()
+                if isinstance(model, bytes):
+                    model = model.decode("utf-8", errors="ignore").strip("\x00").strip()
+
+                if model:
+                    return f"{make} {model}".strip() if make else model
+            except Exception:
+                pass
+
+        # 3단계: MetadataReader 전체 읽기 (RAW/HEIC)
+        if self._metadata_reader and ext in (
+            '.nef', '.cr2', '.cr3', '.arw', '.dng',
+            '.raf', '.orf', '.rw2', '.heic', '.heif', '.avif'
+        ):
+            try:
+                meta = self._metadata_reader.read(filepath)
+                if meta and 'camera' in meta:
+                    model = meta['camera'].get('model', '').strip()
+                    make  = meta['camera'].get('make', '').strip()
+                    if model:
+                        return f"{make} {model}".strip() if make else model
+            except Exception:
+                pass
+
+        return None
+
+
+    def _parse_date_str(self, date_str: str) -> Optional[datetime]:
+        """piexif 포맷(콜론)과 MetadataReader 포맷(하이픈) 모두 처리"""
+        if not date_str:
+            return None
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y:%m:%d %H:%M:%S"):
+            try:
+                return datetime.strptime(date_str, fmt)
+            except ValueError:
+                continue
+        return None
 
 
 class FolderScanThread(QThread):
@@ -187,7 +249,6 @@ class FolderScanThread(QThread):
     
     progress = Signal(int, int)  
     completed = Signal(list)    
-
 
     # ============================================
     # 초기화
@@ -199,7 +260,6 @@ class FolderScanThread(QThread):
         self.supported_extensions = supported_extensions
         self._is_cancelled = False
     
-
     # ============================================
     # 스레드 실행
     # ============================================
@@ -308,6 +368,7 @@ class FolderNavigator(QObject):
         self._scan_lock = QMutex()
 
         self._pending_scan_request: Optional[tuple[Path, Optional[Path], bool]] = None
+        self._bulk_deleting: bool = False
 
 
     # ============================================
@@ -317,9 +378,6 @@ class FolderNavigator(QObject):
     def open_file(self, file_path: Path) -> bool:
         """
         파일 열기 및 같은 폴더 내 이미지 인덱싱 (비동기)
-        
-        Returns:
-            성공 여부
         """
         if not file_path.exists() or not file_path.is_file():
             return False
@@ -430,11 +488,16 @@ class FolderNavigator(QObject):
             try:
                 # 삭제할 파일들의 인덱스 찾기
                 indices_to_delete = []
-                for file_path in files_to_delete:
-                    if file_path in self.image_files:
-                        idx = self.image_files.index(file_path)
-                        indices_to_delete.append(idx)
-                
+                # for file_path in files_to_delete:
+                #     if file_path in self.image_files:
+                #         idx = self.image_files.index(file_path)
+                #         indices_to_delete.append(idx)
+
+                index_map = {path: i for i, path in enumerate(self.image_files)}
+                indices_to_delete = [
+                    index_map[p] for p in files_to_delete if p in index_map
+                ]
+
                 if not indices_to_delete:
                     return 0
                 
@@ -490,16 +553,14 @@ class FolderNavigator(QObject):
             # ── 기존 스레드 정리 ──────────────────────────────
             if self.scan_thread:
                 old_thread = self.scan_thread
-                self.scan_thread = None  # 참조 먼저 해제
+                self.scan_thread = None
 
-                # 시그널 연결 끊기 (completed가 재진입 유발 방지)
                 try:
                     old_thread.progress.disconnect()
                     old_thread.completed.disconnect()
                 except Exception:
                     pass
 
-                # 취소 플래그 설정
                 old_thread.cancel()
 
                 if old_thread.isRunning():
@@ -508,11 +569,7 @@ class FolderNavigator(QObject):
                     if not old_thread.wait(300):
                         warning_print("⚠️ 이전 스캔 스레드 아직 실행 중 — 계속 진행")
 
-                # deleteLater: Qt 이벤트 루프가 안전하게 해제
-                # processEvents() 호출 불필요 — Qt가 다음 사이클에 처리
                 old_thread.deleteLater()
-
-                # ← processEvents() 3회 호출 완전 제거
 
             # ── 상태 설정 ─────────────────────────────────────
             self._temp_scan_prev_index = self.current_index
@@ -584,7 +641,6 @@ class FolderNavigator(QObject):
 
             self.image_files = files
 
-            # 하이라이트 정리
             if self._highlighted:
                 valid_files = set(self.image_files)
                 self._highlighted &= valid_files
@@ -639,7 +695,7 @@ class FolderNavigator(QObject):
         new_files: List[Path],
         initial_file: Optional[Path] = None,
     ) -> None:
-        current_file = initial_file or self.current()
+        current_file = initial_file
         snapshot_folder = self.current_folder 
 
         if self._highlighted:
@@ -731,7 +787,6 @@ class FolderNavigator(QObject):
         self._sort_thread.completed.connect(_on_thread_completed)
         self._sort_thread.start()
 
-
     # ============================================
     # 폴더 새로고침
     # ============================================
@@ -754,6 +809,38 @@ class FolderNavigator(QObject):
         self.reload()
 
 
+    def reload_after_deletion(self) -> None:
+        """삭제 후 전용 reload — _temp_scan_prev_index(next_index) 우선 사용"""
+        if not self.current_folder:
+            return
+
+        # 다중 삭제 진행 중이면 즉시 reload 하지 않음
+        if self._bulk_deleting:
+            info_print("⏸️ reload_after_deletion: 다중 삭제 중 — 스킵")
+            return
+
+        saved_index = self._temp_scan_prev_index
+        self._index_folder_async(
+            self.current_folder,
+            initial_file=None,
+            preserve_sort=True,
+        )
+        self._temp_scan_prev_index = saved_index
+
+
+    def bulk_delete_start(self) -> None:
+        """다중 삭제 시작 알림 — reload 억제 모드 진입"""
+        self._bulk_deleting = True
+        info_print("🗑️ bulk_delete_start: reload 억제 시작")
+
+
+    def bulk_delete_end(self, next_index: int = 0) -> None:
+        """다중 삭제 완료 — 플래그 해제 및 인덱스 저장만.
+        실제 reload는 resume_events() → on_batch_deleted에서 1회 처리."""
+        self._bulk_deleting = False
+        self._temp_scan_prev_index = next_index
+        info_print(f"✅ bulk_delete_end: bulk 모드 해제 (next_index={next_index})")
+        
     # ============================================
     # 네비게이션 (이동)
     # ============================================
@@ -823,12 +910,12 @@ class FolderNavigator(QObject):
             return None
         return self.go_to(len(self.image_files) - 1) 
 
+
     def current(self) -> Optional[Path]:
         """현재 이미지"""
         if 0 <= self.current_index < len(self.image_files):
             return self.image_files[self.current_index]
         return None
-
 
     # ============================================
     # 정렬
@@ -837,12 +924,15 @@ class FolderNavigator(QObject):
     def _restore_current_index(self, current_file: Optional[Path]) -> None:
         """현재 인덱스 복원 및 시그널 발생"""
         if current_file and current_file in self.image_files:
+            # 파일이 존재하면 해당 위치로
             self.current_index = self.image_files.index(current_file)
         elif self.image_files:
-            self.current_index = 0
+            # 파일이 없음 (삭제된 경우) → _temp_scan_prev_index 사용
+            fallback = min(self._temp_scan_prev_index, len(self.image_files) - 1)
+            self.current_index = max(0, fallback)
         else:
             self.current_index = -1
-        
+
         self._temp_scan_prev_index = self.current_index
         self.index_changed.emit(self.current_index)
 
@@ -856,7 +946,6 @@ class FolderNavigator(QObject):
         """현재 정렬 상태 반환 (외부 접근 전용 API)"""
         return (self.current_sort_order, self._sort_reverse)
     
-
     # ============================================
     # 정렬 관리 - 내부
     # ============================================
@@ -884,7 +973,6 @@ class FolderNavigator(QObject):
         self.current_sort_order = order
         self._sort_reverse = reverse
         self.sort_order_changed.emit(order, reverse) 
-
 
     # ============================================
     # 하이라이트 관리 - 토글
@@ -918,7 +1006,6 @@ class FolderNavigator(QObject):
         """현재 파일의 하이라이트 토글"""
         return self.toggle_highlight(self.current())
 
-
     # ============================================
     # 하이라이트 관리 - 내부
     # ============================================
@@ -928,7 +1015,7 @@ class FolderNavigator(QObject):
             return
         if self._highlighted:
             self._highlights_by_folder[self.current_folder] = self._highlighted
-            if len(self._highlights_by_folder) > 200:     # ← 제한 추가
+            if len(self._highlights_by_folder) > 200: 
                 # 하이라이트 없는 폴더부터 제거
                 empty = [k for k, v in self._highlights_by_folder.items() if not v]
                 for k in empty[:50]:
@@ -943,8 +1030,6 @@ class FolderNavigator(QObject):
             self._highlighted = self._highlights_by_folder[folder]
         else:
             self._highlighted = set()
-            # dict 등록은 실제 하이라이트가 생길 때 _save_highlights에서 처리
-
 
     # ============================================
     # 하이라이트 관리 - 범위
@@ -988,18 +1073,23 @@ class FolderNavigator(QObject):
         """현재 폴더의 하이라이트만 해제"""
         if self._highlighted:
             self._highlighted.clear()
-            # dict의 동일 객체를 in-place clear했으므로 별도 제거 불필요
             self.highlights_cleared.emit()
+
+
+    def clear_all_highlights_all_folders(self) -> int:
+        total = self.get_total_highlight_count()
+        self._highlights_by_folder.clear()
+        self._highlighted.clear()
+        self.highlights_cleared.emit()  # ThumbnailBar 동기화
+        return total
 
 
     def set_highlights(self, file_paths: set) -> None:
         self._highlighted = set(file_paths)
-        # 재할당으로 dict와 참조가 끊어지므로 명시적 동기화 필요
         if self.current_folder is not None:
             self._highlights_by_folder[self.current_folder] = self._highlighted
         self.highlights_set.emit(self._highlighted.copy())
 
-        
     # ============================================
     # 임시 하이라이트 관리
     # ============================================
@@ -1037,7 +1127,6 @@ class FolderNavigator(QObject):
             return False
         
         return file_path in self._temporary_highlights
-
 
     # ============================================
     # 하이라이트 조회
@@ -1084,7 +1173,6 @@ class FolderNavigator(QObject):
         """하이라이트된 파일 수"""
         return len(self._highlighted)    
     
-
     # ============================================
     # 파일 목록 조회
     # ============================================
@@ -1105,7 +1193,6 @@ class FolderNavigator(QObject):
         """진행 상황 (현재 인덱스, 전체 개수)"""
         return (self.current_index + 1, len(self.image_files))
     
-
     # ============================================
     # 파일 경로 업데이트
     # ============================================
@@ -1125,7 +1212,6 @@ class FolderNavigator(QObject):
             else:
                 self.image_files[index] = new_path  
 
-            # 하이라이트 갱신 (공통)
             for hl_set in self._highlights_by_folder.values():
                 if old_path in hl_set:
                     hl_set.discard(old_path)

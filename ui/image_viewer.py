@@ -3,16 +3,15 @@
 
 import math
 import time
-from dataclasses import dataclass, field as _dc_field
 from pathlib import Path
 from threading import RLock
-from typing import TYPE_CHECKING, Any, Dict, List as _List, Optional, Tuple, cast
+from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
 import numpy as np
-from PIL import Image
 from PIL import Image as PILImage
 
 from PySide6.QtCore import (
+    QEvent,
     QPoint,
     QRect,
     QRectF,
@@ -20,259 +19,54 @@ from PySide6.QtCore import (
     QThread,
     QTimer,
     Signal,
-    Signal as QSignal,
 )
+
 from PySide6.QtGui import (
     QColor,
     QContextMenuEvent,
     QDragEnterEvent,
     QDragMoveEvent,
     QDropEvent,
-    QFont,
     QImage,
     QMouseEvent,
     QMovie,
     QPainter,
-    QPen,
+    QPalette,
     QPixmap,
     QSurfaceFormat,
-    QWheelEvent, QPalette
+    QWheelEvent,
 )
+
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
+
 from PySide6.QtWidgets import (
     QGraphicsItem,
     QGraphicsPixmapItem,
     QGraphicsScene,
     QGraphicsView,
-    QWidget,
 )
 
 from core.cache_manager import CacheManager
+from ui.animated_items import (
+    AnimatedGraphicsItem,
+    ApngDecodeWorker,
+    LoadingOverlay,
+    WebPAnimatedItem,
+    WebPDecodeWorker,
+)
 from ui.edit_mode_mixin import EditModeMixin, _ClipboardImageItem
 from ui.shape_item import ResizableShapeItem
 from ui.text_item import TextShapeItem
+from ui.minimap_widget import MiniMapWidget
+
 from utils.config_manager import ConfigManager
 from utils.debug import debug_print, error_print, info_print, warning_print
+from utils.lang_manager import t
 
 if TYPE_CHECKING:
     from main_window import MainWindow
     from ui.overlay_widget import OverlayWidget
     from ui.minimap_widget import MiniMapWidget
-
-
-class WebPDecodeWorker(QThread):
-    """WebP 프레임 백그라운드 디코딩 워커"""
-    decode_finished = QSignal(list, list)  # finished → decode_finished (충돌 방지)
-    decode_failed   = QSignal()
-
-
-    def __init__(self, file_path: Path) -> None:
-        super().__init__()
-        self._file_path = file_path
-
-
-    def run(self) -> None:
-        try:
-            from core.image_loader import ImageLoader
-            result = ImageLoader().load_webp_frames(self._file_path)
-            if result and result[0]:
-                self.decode_finished.emit(result[0], result[1])
-            else:
-                self.decode_failed.emit()
-        except Exception as e:
-            error_print(f"WebP 워커 오류: {e}")
-            self.decode_failed.emit()
-
-
-class _ApngDecodeWorker(QThread):
-    """APNG 프레임 백그라운드 디코딩 워커"""
-    decode_finished = Signal(list, list)   # frames, delays
-    decode_failed   = Signal()
-
-
-    def __init__(self, file_path: Path) -> None:
-        super().__init__()
-        self._file_path = file_path
-
-
-    def run(self) -> None:
-        try:
-            from core.image_loader import ImageLoader
-            frames, delays = ImageLoader().load_apng_frames(self._file_path) # type: ignore[misc]
-            if frames:
-                self.decode_finished.emit(frames, delays)
-            else:
-                self.decode_failed.emit()
-        except Exception as e:
-            error_print(f"APNG 워커 오류: {e}")
-            self.decode_failed.emit()
-
-
-class LoadingOverlay(QWidget):
-    """WebP 백그라운드 디코딩 중 표시되는 스피너 오버레이"""
-
-
-    def __init__(self, parent: QWidget) -> None:
-        super().__init__(parent)
-        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-        self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground)
-        self.setVisible(False)
-
-        self._angle: int = 0
-        self._spin_timer = QTimer(self)
-        self._spin_timer.setInterval(40)   # 25fps 스피너
-        self._spin_timer.timeout.connect(self._tick)
-
-
-    # ── 공개 API ─────────────────────────────────────────
-    def start(self) -> None:
-        """오버레이 표시 + 스피너 시작"""
-        self._angle = 0
-        parent = self.parentWidget()
-        if parent:
-            self.setGeometry(parent.rect())
-        self.setVisible(True)
-        self.raise_()
-        self._spin_timer.start()
-
-
-    def stop(self) -> None:
-        """오버레이 숨김 + 스피너 정지"""
-        self._spin_timer.stop()
-        self.setVisible(False)
-
-
-    # ── 내부 ─────────────────────────────────────────────
-    def _tick(self) -> None:
-        self._angle = (self._angle + 15) % 360
-        self.update()
-
-
-    def paintEvent(self, event) -> None:  # type: ignore[override]
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-
-        # 반투명 배경
-        painter.fillRect(self.rect(), QColor(0, 0, 0, 110))
-
-        cx = self.width()  / 2.0
-        cy = self.height() / 2.0
-        R_OUTER = 28
-        R_INNER = 18
-        SPOKES   = 12
-
-        # 스피너 스포크
-        for i in range(SPOKES):
-            angle_deg = (self._angle + i * (360 // SPOKES)) % 360
-            alpha = int(255 * (i + 1) / SPOKES)
-            color = QColor(74, 158, 255, alpha)
-            pen = QPen(color, 3.5)
-            pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-            painter.setPen(pen)
-            rad = math.radians(angle_deg)
-            x1 = cx + R_INNER * math.cos(rad)
-            y1 = cy + R_INNER * math.sin(rad)
-            x2 = cx + R_OUTER * math.cos(rad)
-            y2 = cy + R_OUTER * math.sin(rad)
-            painter.drawLine(int(x1), int(y1), int(x2), int(y2))
-
-        # 텍스트
-        font = QFont()
-        font.setPointSize(10)
-        font.setBold(True)
-        painter.setFont(font)
-        painter.setPen(QColor(255, 255, 255, 210))
-        painter.drawText(
-            QRectF(cx - 100, cy + R_OUTER + 14, 200, 26),
-            Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop,
-            "애니메이션 로딩 중..."
-        )
-        painter.end()
-
-
-class AnimatedGraphicsItem(QGraphicsPixmapItem):
-    """애니메이션 지원 그래픽 아이템"""
-
-    def __init__(self, movie: QMovie) -> None:
-        super().__init__()
-        self.movie: Optional[QMovie] = movie  # Single assignment with type hint
-        if self.movie:  # Check before using
-            self.movie.frameChanged.connect(self._update_frame)
-            self.movie.start()
-        self._loading_image = False
-
-
-# ============================================
-# 애니메이션 처리
-# ============================================
-
-    def _update_frame(self) -> None:
-        """프레임 업데이트 — cacheKey 비교 제거 (불필요한 오버헤드 차단)"""
-        if self.movie:
-            self.setPixmap(self.movie.currentPixmap())
-
-
-    def cleanup(self) -> None:
-        """리소스 정리 (movie를 None으로 설정하기 전에 호출)"""
-        if self.movie:
-            self.movie.stop()
-
-            try:
-                self.movie.frameChanged.disconnect(self._update_frame)
-            except (RuntimeError, TypeError):
-                pass
-
-            self.movie.deleteLater()
-            self.movie = None 
-
-
-class WebPAnimatedItem(QGraphicsPixmapItem):
-    """Pillow 사전 디코딩 기반 애니메이션 아이템
-    
-    QMovie WebP 타이밍 버그를 완전히 우회.
-    프레임별 정확한 delay를 QTimer로 직접 제어하여 끊김 제거.
-    """
-
-    def __init__(self, frames: list, delays: list) -> None:
-        super().__init__()
-        self._frames: list = frames
-        self._delays: list = delays
-        self._idx: int = 0
-
-        # singleShot 타이머: 각 프레임마다 정확한 delay 적용
-        self._timer: QTimer = QTimer()
-        self._timer.setSingleShot(True)
-        self._timer.timeout.connect(self._next_frame)
-
-        if self._frames:
-            self.setPixmap(self._frames[0])
-            if len(self._frames) > 1:
-                self._timer.start(self._delays[0])
-
-
-    def _next_frame(self) -> None:
-        """다음 프레임 표시 및 다음 타이머 설정"""
-        self._idx = (self._idx + 1) % len(self._frames)
-        self.setPixmap(self._frames[self._idx])
-        self._timer.start(self._delays[self._idx])
-
-
-    def pause(self) -> None:
-        """재생 일시정지"""
-        self._timer.stop()
-
-
-    def resume(self) -> None:
-        """재생 재개"""
-        if self._frames and not self._timer.isActive():
-            self._timer.start(self._delays[self._idx])
-
-
-    def cleanup(self) -> None:
-        """리소스 완전 해제"""
-        self._timer.stop()
-        self._frames.clear()
-        self._delays.clear()
 
 
 class ImageViewer(EditModeMixin, QGraphicsView):
@@ -283,7 +77,6 @@ class ImageViewer(EditModeMixin, QGraphicsView):
     wheel_navigation = Signal(int)
     edit_mode_changed   = Signal(bool) 
 
-    # 편집 완료 시그널 — main_window에서 저장 처리
     edit_save_requested = Signal(QPixmap)
 
     toggle_metadata_requested = Signal(bool)
@@ -309,7 +102,7 @@ class ImageViewer(EditModeMixin, QGraphicsView):
     clear_highlights_requested = Signal()
 
     MINIMAP_UPDATE_DELAY = 50  # ms
-
+    overlay_refresh_requested = Signal()
 
 # ============================================
 # 초기화 및 설정
@@ -404,7 +197,7 @@ class ImageViewer(EditModeMixin, QGraphicsView):
         self.setBackgroundBrush(Qt.GlobalColor.black)
 
         if use_opengl:
-            self._setup_opengl()   # 기존 메서드 재사용
+            self._setup_opengl() 
         else:
             debug_print("소프트웨어 렌더링 사용 (secondary viewer)")
 
@@ -506,7 +299,6 @@ class ImageViewer(EditModeMixin, QGraphicsView):
         self.auto_scroll_timer.timeout.connect(self._auto_scroll)
         self.auto_scroll_timer.setInterval(16)  # ~60 FPS
 
-        from ui.minimap_widget import MiniMapWidget
         self.minimap = MiniMapWidget(self)
         self.minimap.position_clicked.connect(self._on_minimap_clicked)
         self._position_minimap()  # 우측 하단 배치
@@ -521,8 +313,6 @@ class ImageViewer(EditModeMixin, QGraphicsView):
 
         self._webp_workers: list = [] 
         self._loading_overlay = LoadingOverlay(self)
-
-        self._suppress_fit_in_view = False
 
 
     # 히스토리
@@ -542,7 +332,6 @@ class ImageViewer(EditModeMixin, QGraphicsView):
         if self._selection and self._selection.isVisible():
             self._selection.setVisible(False)
 
-        #self._fit_in_view()
         self.graphics_scene.update()
 
 
@@ -655,7 +444,7 @@ class ImageViewer(EditModeMixin, QGraphicsView):
         self.zoom_mode = 'fit'
         self._fit_in_view()
 
-                
+
     def set_image(self, pixmap: QPixmap) -> None:
         """정적 이미지 설정 - 깜빡임 없는 전환"""
         
@@ -720,17 +509,25 @@ class ImageViewer(EditModeMixin, QGraphicsView):
         self._user_has_zoomed = False
         self.zoom_mode = 'fit'
 
-        intent = self._auto_zoom_mode(pixmap.width(), pixmap.height())
-        self.zoom_mode = intent
+        fw, fh = pixmap.width(), pixmap.height()
+        vp     = self.viewport()
+        if fw > 0 and fh > 0 and fw <= vp.width() and fh <= vp.height():
+            intent = 'actual'
+        else:
+            intent = 'fit'
+
+        self.zoom_mode          = intent
         self._zoom_intent_stack = [intent]
 
         if intent == 'actual':
+            self._user_has_zoomed      = True  
             self._suppress_fit_in_view = True
-            self._suppress_start_ms = time.monotonic()
+            self._suppress_start_ms    = time.monotonic()
             self.resetTransform()
             self.zoom_factor = 1.0
             self._calculate_and_emit_zoom()
         else:
+            self._user_has_zoomed      = False
             self._suppress_fit_in_view = False
             self._fit_in_view()
 
@@ -811,87 +608,24 @@ class ImageViewer(EditModeMixin, QGraphicsView):
         if hasattr(self, '_webp_workers'):
             for w in self._webp_workers:
                 if w.isRunning():
-                    w.quit()  # 결과가 와도 snap_id 불일치로 자동 폐기됨
+                    w.quit() 
 
 
     def _stop_timers_only(self) -> None:
-        """타이머만 중지 (이미지는 건드리지 않음)"""
-        timers_to_stop = [
-            'zoom_apply_timer',
-            'overlay_timer',
-            'minimap_update_timer',
-            'wheel_timer',
-            'auto_scroll_timer'
-        ]
-        
-        for timer_name in timers_to_stop:
-            if hasattr(self, timer_name):
-                timer = getattr(self, timer_name)
-                if timer.isActive():
-                    timer.stop()
-        
-        debug_print("타이머 중지 완료")
-
+        for name in ['zoom_apply_timer', 'overlay_timer',
+                    'minimap_update_timer', 'wheel_timer', 'auto_scroll_timer']:
+            timer = getattr(self, name, None)
+            if timer and timer.isActive():
+                timer.stop()
 
     def _cleanup_all_timers(self) -> None:
-        """모든 타이머 즉시 정리"""
-        # 1. 반복 타이머
-        timers_to_stop = [
-            'zoom_apply_timer',
-            'overlay_timer',
-            'minimap_update_timer',
-            'wheel_timer',
-            'auto_scroll_timer'
-        ]
-        
-        for timer_name in timers_to_stop:
-            if hasattr(self, timer_name):
-                timer = getattr(self, timer_name)
-                if timer.isActive():
-                    timer.stop()
-        
-        # 2. singleShot 타이머 (추적된 것만)
+        self._stop_timers_only()  
         for timer in self._pending_timers:
             if timer and timer.isActive():
                 timer.stop()
-            try:
-                timer.deleteLater()
-            except:
-                pass
-        
+            try: timer.deleteLater()
+            except: pass
         self._pending_timers.clear()
-        
-        info_print("모든 타이머 정리 완료")
-    
-
-    def _cleanup_current_image(self) -> None:
-        """현재 이미지 리소스 완전 정리"""
-        # 1. 애니메이션 정리
-        if self.current_movie:
-            self.current_movie.stop()
-            
-            try:
-                self.current_movie.frameChanged.disconnect()
-            except (RuntimeError, TypeError):
-                pass
-            
-            self.current_movie.deleteLater()
-            self.current_movie = None
-        
-        # 2. 아이템 제거
-        if self.pixmap_item:
-            if isinstance(self.pixmap_item, AnimatedGraphicsItem):
-                self.pixmap_item.cleanup()
-            
-            self.graphics_scene.removeItem(self.pixmap_item)
-            self.pixmap_item = None
-        
-        # 3. 이벤트 루프 처리 (중요!)
-        from PySide6.QtCore import QCoreApplication
-        for _ in range(3):
-            QCoreApplication.processEvents()
-        
-        info_print("이미지 리소스 정리 완료")
 
 
     def set_animated_image(self, movie: QMovie, file_path: Optional[Path] = None) -> None:
@@ -1059,11 +793,7 @@ class ImageViewer(EditModeMixin, QGraphicsView):
 
         fw = first_pixmap.width()  if not first_pixmap.isNull() else 0
         fh = first_pixmap.height() if not first_pixmap.isNull() else 0
-        #intent = self._auto_zoom_mode(fw, fh) if fw > 0 and fh > 0 else 'fit'
 
-
-        # ✅ _auto_zoom_mode 우회:
-        # 애니메이션 이미지는 뷰포트보다 작으면 actual(100%), 크면 fit
         if fw > 0 and fh > 0:
             vp = self.viewport()
             if fw <= vp.width() and fh <= vp.height():
@@ -1072,9 +802,6 @@ class ImageViewer(EditModeMixin, QGraphicsView):
                 intent = 'fit'
         else:
             intent = 'fit'
-
-        #debug_print(f"애니메이션 zoom intent: {fw}×{fh} / {vp.width()}×{vp.height()} → {intent}")
-
 
         self.zoom_mode          = intent
         self._zoom_intent_stack = [intent]
@@ -1100,7 +827,6 @@ class ImageViewer(EditModeMixin, QGraphicsView):
         self._transition_in_progress = False
         self.zoom_apply_timer.start(50)
         debug_print(f"QMovie 경로 완료 (is_webp={is_webp}, mode={webp_mode}), ID={new_image_id}")
-
 
 
     def set_apng_image(self, file_path: Path) -> None:
@@ -1131,7 +857,7 @@ class ImageViewer(EditModeMixin, QGraphicsView):
 
         # 기존 animated item 정리
         old_item = self.pixmap_item
-        if old_item and isinstance(old_item, AnimatedGraphicsItem):
+        if old_item and isinstance(old_item, (AnimatedGraphicsItem, WebPAnimatedItem)):
             old_item.cleanup()
 
         # 첫 프레임 즉시 표시
@@ -1166,7 +892,7 @@ class ImageViewer(EditModeMixin, QGraphicsView):
                 self.zoom_factor = 1.0
                 self._calculate_and_emit_zoom()
 
-            snap_id = self.current_image_id   # set_image()가 설정한 값 그대로
+            snap_id = self.current_image_id
         else:
             snap_id = new_image_id
 
@@ -1177,7 +903,7 @@ class ImageViewer(EditModeMixin, QGraphicsView):
                 _w.quit()
 
         # 백그라운드 디코딩 워커
-        worker = _ApngDecodeWorker(file_path)
+        worker = ApngDecodeWorker(file_path)
 
         def _on_done(frames: list, delays: list) -> None:
             self._loading_overlay.stop()
@@ -1269,7 +995,6 @@ class ImageViewer(EditModeMixin, QGraphicsView):
                         f"replace_pixmap: 고해상도 업그레이드 허용 "
                         f"({new_w}×{new_h} ← {cur_w}×{cur_h})"
                     )
-                    #self.origin_pixmap_size = (new_w, new_h)   # ← 원본 크기도 갱신
                     self.original_pixmap_size = (new_w, new_h) 
                 else:
                     warning_print(
@@ -1322,7 +1047,7 @@ class ImageViewer(EditModeMixin, QGraphicsView):
         self._update_cursor()
 
         self.graphics_scene.update()
-        self.viewport().update()  # ← 추가
+        self.viewport().update() 
 
         debug_print("replace_pixmap 완료")
 
@@ -1402,8 +1127,6 @@ class ImageViewer(EditModeMixin, QGraphicsView):
         
         self.resetTransform()
         self.scale(self.zoom_factor, self.zoom_factor)
-        
-        # 커서 및 캐시 모드 업데이트 (통합)
         self._update_cursor()
         
         self._calculate_and_emit_zoom()
@@ -1495,7 +1218,8 @@ class ImageViewer(EditModeMixin, QGraphicsView):
         # 커서 업데이트
         self._update_cursor()
 
-        self.zoom_changed.emit(1.0)
+        #self.zoom_changed.emit(1.0)
+        self._calculate_and_emit_zoom()
         
         debug_print(f"Actual Size: 1.0")
 
@@ -1543,9 +1267,7 @@ class ImageViewer(EditModeMixin, QGraphicsView):
         elif self.zoom_mode == 'width':
             self._fit_width()
         
-        # 커서 업데이트
         self._update_cursor()
-        
         debug_print(f"줌 모드 즉시 적용: {self.zoom_mode}, zoom_factor={self.zoom_factor:.2f}")
 
 
@@ -1606,12 +1328,8 @@ class ImageViewer(EditModeMixin, QGraphicsView):
         # 평균 스케일 (보통 x, y가 동일)
         actual_zoom = (scale_x + scale_y) / 2.0
         
-        # zoom_factor 업데이트
         self.zoom_factor = actual_zoom
-        
-        # 시그널 발생
         self.zoom_changed.emit(actual_zoom)
-        
         debug_print(f"줌 레벨: {actual_zoom:.3f}x ({actual_zoom*100:.1f}%)")
 
 
@@ -1620,13 +1338,28 @@ class ImageViewer(EditModeMixin, QGraphicsView):
 # ============================================
 
     def _update_cursor(self) -> None:
-        """줌 상태에 따라 커서 업데이트 및 캐시 모드 조정"""
-        # _user_has_zoomed 체크 제거 — 스크롤바 유무로만 판단
+        if getattr(self, '_edit_mode', False):
+            if getattr(self, 'is_dragging', False):
+                return
+            has_scrollbars = (
+                self.horizontalScrollBar().isVisible() or
+                self.verticalScrollBar().isVisible()
+            )
+            if self._edit_tool and (
+                self._edit_tool.startswith('shape:') or self._edit_tool == 'text'
+            ):
+                self.viewport().setCursor(Qt.CursorShape.CrossCursor)
+            elif has_scrollbars:
+                self.setCursor(Qt.CursorShape.OpenHandCursor)
+            else:
+                self.setCursor(Qt.CursorShape.ArrowCursor)
+            return
+
+        # 일반 모드 (기존 코드 그대로)
         has_scrollbars = (
             self.horizontalScrollBar().isVisible() or
             self.verticalScrollBar().isVisible()
         )
-
         if has_scrollbars:
             self.setCursor(Qt.CursorShape.OpenHandCursor)
             if self.pixmap_item:
@@ -1634,7 +1367,9 @@ class ImageViewer(EditModeMixin, QGraphicsView):
         else:
             self.setCursor(Qt.CursorShape.ArrowCursor)
             if self.pixmap_item:
-                self.pixmap_item.setCacheMode(QGraphicsItem.CacheMode.DeviceCoordinateCache)
+                self.pixmap_item.setCacheMode(
+                    QGraphicsItem.CacheMode.DeviceCoordinateCache
+                )
 
 
     def _update_cache_mode(self) -> None:
@@ -1744,7 +1479,20 @@ class ImageViewer(EditModeMixin, QGraphicsView):
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
         if self._edit_mode:
+
+            if self._edit_tool == 'ai_erase':
+                if self._mask_item is not None:
+                    self._mask_item.reset_stroke()      # type: ignore[attr-defined]
+                    sp = self.mapToScene(event.pos())
+                    if event.button() == Qt.MouseButton.LeftButton:
+                        self._mask_item.draw_at(sp)     # type: ignore[attr-defined]
+                    elif event.button() == Qt.MouseButton.RightButton:
+                        self._mask_item.erase_at(sp)        # type: ignore[attr-defined]
+                event.accept()
+                return
+
             if event.button() == Qt.MouseButton.LeftButton:
+
                 if self._edit_tool in ('crop_select', 'copy_select', 'mosaic_select'):
                     if self._selection:
                         self._selection.setVisible(False)
@@ -1754,30 +1502,41 @@ class ImageViewer(EditModeMixin, QGraphicsView):
 
                 elif self._edit_tool == 'select':
                     hit      = self.itemAt(event.pos())
-                    is_shape = isinstance(hit, (ResizableShapeItem, TextShapeItem, _ClipboardImageItem))
+                    is_shape = isinstance(
+                        hit, (ResizableShapeItem, TextShapeItem, _ClipboardImageItem)
+                    )
                     if is_shape:
                         super().mousePressEvent(event)
                     else:
                         self.graphics_scene.clearSelection()
+                        has_scrollbars = (
+                            self.horizontalScrollBar().isVisible() or
+                            self.verticalScrollBar().isVisible()
+                        )
+                        if has_scrollbars:
+                            self.is_dragging    = True
+                            self.last_mouse_pos = event.pos()
+                            self.setCursor(Qt.CursorShape.ClosedHandCursor)
+                            event.accept()
 
-                elif self._edit_tool == 'text':
-                    # 텍스트는 클릭 위치에 즉시 삽입
-                    self._drag_start_scene = self.mapToScene(event.pos())
-                    event.accept()
-
-                elif self._edit_tool.startswith('shape:'):
-                    # 도형 드래그 시작 — 미리보기 아이템 생성
-                    self._drag_start_scene = self.mapToScene(event.pos())
-                    self._begin_shape_preview(self._drag_start_scene)
-                    event.accept()
+                elif self._edit_tool == 'shapes':
+                    handled = self._handle_shape_text_event(event, QEvent.Type.MouseButtonPress)
+                    if not handled: 
+                        hit = self.itemAt(event.pos())
+                        is_shape = isinstance(hit, (ResizableShapeItem, TextShapeItem, _ClipboardImageItem))
+                        if is_shape:
+                            super().mousePressEvent(event)
+                        else:
+                            self.graphics_scene.clearSelection()
+                            event.accept()
+                    else:
+                        event.accept()
 
                 else:
                     super().mousePressEvent(event)
             return
 
-        # ── 일반 모드 ────────────────────────────────────────
-        #super().mousePressEvent(event)
-
+        # ── 일반 모드 ──────────────────────────────────────────────────
         if event.button() == Qt.MouseButton.MiddleButton:
             has_scrollbars = (
                 self.horizontalScrollBar().isVisible() or
@@ -1789,7 +1548,6 @@ class ImageViewer(EditModeMixin, QGraphicsView):
                     self.auto_scroll_origin = event.pos()
                     self.setCursor(Qt.CursorShape.SizeAllCursor)
                     self.auto_scroll_timer.start()
-                    debug_print(f"[DEBUG] 자동 스크롤 시작")
                 else:
                     self._stop_auto_scroll()
                 event.accept()
@@ -1804,7 +1562,7 @@ class ImageViewer(EditModeMixin, QGraphicsView):
                 self.verticalScrollBar().isVisible()
             )
             if has_scrollbars:
-                self.is_dragging = True
+                self.is_dragging    = True
                 self.last_mouse_pos = event.pos()
                 self.setCursor(Qt.CursorShape.ClosedHandCursor)
                 event.accept()
@@ -1816,6 +1574,21 @@ class ImageViewer(EditModeMixin, QGraphicsView):
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
         if self._edit_mode:
+
+            if self.is_dragging and self.last_mouse_pos is not None:
+                delta = event.pos() - self.last_mouse_pos
+                self.horizontalScrollBar().setValue(
+                    self.horizontalScrollBar().value() - delta.x()
+                )
+                self.verticalScrollBar().setValue(
+                    self.verticalScrollBar().value() - delta.y()
+                )
+                self.last_mouse_pos = event.pos()
+                if hasattr(self, 'minimap_update_timer'):
+                    self.minimap_update_timer.start(self.MINIMAP_UPDATE_DELAY)
+                event.accept()
+                return
+
             if (self._edit_tool in ('crop_select', 'copy_select', 'mosaic_select')
                     and self._drag_start_scene is not None):
                 cur  = self.mapToScene(event.pos())
@@ -1831,25 +1604,29 @@ class ImageViewer(EditModeMixin, QGraphicsView):
                 event.accept()
                 return
 
-            elif (self._edit_tool.startswith('shape:')
-                and self._drag_start_scene is not None
-                and self._shape_preview_item is not None):
-                # 도형 드래그 중 — 미리보기 크기 실시간 업데이트
-                cur  = self.mapToScene(event.pos())
-                rect = QRectF(self._drag_start_scene, cur).normalized()
-                
-                preview = cast(ResizableShapeItem, self._shape_preview_item)
-                preview.update_rect(rect)
-                
-                event.accept()
+            elif self._edit_tool == 'shapes':
+                handled = self._handle_shape_text_event(event, QEvent.Type.MouseMove)
+                if not handled:
+                    super().mouseMoveEvent(event) 
+                else:
+                    event.accept()
                 return
+
+            elif self._edit_tool == 'ai_erase' and self._mask_item is not None:
+                if event.buttons() & Qt.MouseButton.LeftButton:
+                    self._mask_item.draw_at(self.mapToScene(event.pos()))       # type: ignore[attr-defined]
+                    event.accept()
+                    return
+                elif event.buttons() & Qt.MouseButton.RightButton:
+                    self._mask_item.erase_at(self.mapToScene(event.pos()))      # type: ignore[attr-defined]
+                    event.accept()
+                    return
+                self._mask_item.reset_stroke()      # type: ignore[attr-defined]
 
             super().mouseMoveEvent(event)
             return
 
-        # ── 일반 모드 ────────────────────────────────────────
-        super().mouseMoveEvent(event)
-
+        # ── 일반 모드 ──────────────────────────────────────────────────
         if self.auto_scroll_active:
             event.accept()
             return
@@ -1872,65 +1649,61 @@ class ImageViewer(EditModeMixin, QGraphicsView):
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         if self._edit_mode:
+
+            if self._edit_tool == 'ai_erase':
+                if self._mask_item is not None:
+                    self._mask_item.reset_stroke()      # type: ignore[attr-defined]
+                event.accept()
+                return
+
+            if (event.button() == Qt.MouseButton.LeftButton
+                    and self.is_dragging):
+                self.is_dragging    = False
+                self.last_mouse_pos = None
+                has_scrollbars = (
+                    self.horizontalScrollBar().isVisible() or
+                    self.verticalScrollBar().isVisible()
+                )
+                self.setCursor(
+                    Qt.CursorShape.OpenHandCursor
+                    if has_scrollbars else Qt.CursorShape.ArrowCursor
+                )
+                event.accept()
+                return
+
             if (self._edit_tool in ('crop_select', 'copy_select', 'mosaic_select')
                     and self._drag_start_scene is not None):
                 self._drag_start_scene = None
                 tool = self._edit_tool
                 super().mouseReleaseEvent(event)
-                if tool == 'crop_select':    self._edit_crop()
-                elif tool == 'copy_select':  self._edit_copy()
-                elif tool == 'mosaic_select':self._edit_mosaic()
+                if tool == 'crop_select':     self._edit_crop()
+                elif tool == 'copy_select':   self._edit_copy()
+                elif tool == 'mosaic_select': self._edit_mosaic()
                 self._on_edit_tool_changed('select')
                 if self._edit_toolbar:
                     self._edit_toolbar.reset_area_buttons()
                 return
 
-            elif (self._edit_tool.startswith('shape:')
-                and self._drag_start_scene is not None):
-                cur  = self.mapToScene(event.pos())
-                rect = QRectF(self._drag_start_scene, cur).normalized()
-
-                MIN_PX = 10.0
-                if rect.width() >= MIN_PX and rect.height() >= MIN_PX:
-                    self._commit_shape_from_drag(rect)
+            elif self._edit_tool == 'shapes':
+                handled = self._handle_shape_text_event(event, QEvent.Type.MouseButtonRelease)
+                if not handled:
+                    super().mouseReleaseEvent(event)
                 else:
-                    # 클릭 수준의 드래그 → 기본 크기로 삽입
-                    self._commit_shape_from_drag(self._default_shape_rect())
-
-                self._cancel_shape_preview()
-                self._drag_start_scene = None
-
-                # 1회성 — 삽입 완료 후 즉시 select 모드로 복귀
-                self._on_edit_tool_changed('select')        # type: ignore[attr-defined]
-                if self._edit_toolbar:                      # type: ignore[attr-defined]
-                    self._edit_toolbar.reset_area_buttons() # type: ignore[attr-defined]
-                event.accept()
-                return
-
-            elif (self._edit_tool == 'text'
-                and self._drag_start_scene is not None):
-                # 텍스트: 클릭 위치에 즉시 삽입
-                self._edit_add_text_at(self._drag_start_scene)
-                self._drag_start_scene = None
-                event.accept()
+                    event.accept()
                 return
 
             super().mouseReleaseEvent(event)
             return
 
-        # ── 일반 모드 ────────────────────────────────────────
-        super().mouseReleaseEvent(event)
-
+        # ── 일반 모드 ──
         if event.button() in (Qt.MouseButton.LeftButton, Qt.MouseButton.MiddleButton):
             if self.is_dragging:
                 self.is_dragging = False
                 self.last_mouse_pos = None
                 self._update_cursor()
                 event.accept()
-            else:
-                super().mouseReleaseEvent(event)
-        else:
-            super().mouseReleaseEvent(event)
+                return
+        super().mouseReleaseEvent(event) 
 
 
     def contextMenuEvent(self, event: QContextMenuEvent) -> None:
@@ -1948,13 +1721,13 @@ class ImageViewer(EditModeMixin, QGraphicsView):
 
     def _default_shape_rect(self) -> QRectF:
         """클릭만 했을 때 기본 도형 크기 — 뷰포트 기준 20%"""
-        pi   = self.pixmap_item  # type: ignore[attr-defined]
+        pi   = self.pixmap_item
         base = (
             max(200.0, min(*pi.boundingRect().size().toTuple()) * 0.20)
             if pi is not None else 200.0
         )
-        vp = self.viewport()                                # type: ignore[attr-defined]
-        sc = self.mapToScene(int(vp.width() / 2), int(vp.height() / 2))  # type: ignore[attr-defined]
+        vp = self.viewport()
+        sc = self.mapToScene(int(vp.width() / 2), int(vp.height() / 2))
         return QRectF(sc.x() - base / 2.0, sc.y() - base * 0.375, base, base * 0.75)
 
 
@@ -2149,12 +1922,11 @@ class ImageViewer(EditModeMixin, QGraphicsView):
 
 
     def _on_minimap_clicked(self, ratio_x: float, ratio_y: float) -> None:
-        """미니맵 클릭 시 해당 위치로 이동"""
-        if not self.current_pixmap:
+        px = self.get_current_pixmap()
+        if not px or px.isNull():
             return
-        
-        image_width = self.current_pixmap.width()
-        image_height = self.current_pixmap.height()
+        image_width = px.width()
+        image_height = px.height()
         
         # 클릭한 위치를 scene 좌표로 변환
         scene_x = ratio_x * image_width
@@ -2178,8 +1950,12 @@ class ImageViewer(EditModeMixin, QGraphicsView):
 
     def _on_scrollbar_changed(self, value: int) -> None:
         """스크롤바 값 변경 시 미니맵 업데이트"""
-        if hasattr(self, 'minimap_update_timer'):
-            self.minimap_update_timer.start(self.MINIMAP_UPDATE_DELAY)
+        try:
+            if hasattr(self, 'minimap_update_timer'):
+                self.minimap_update_timer.start(self.MINIMAP_UPDATE_DELAY)
+        except RuntimeError:
+            # Qt 종료 시퀀스 중 C++ QTimer 객체가 이미 소멸된 경우
+            pass
 
 
 # ============================================
@@ -2196,11 +1972,6 @@ class ImageViewer(EditModeMixin, QGraphicsView):
         
         if not self.overlay_widget:
             warning_print(f"overlay_widget 연결 안됨")
-            return
-        
-        # 타입 가드 및 ID 검증
-        if self.pending_overlay_data is None:
-            warning_print(f"overlay_data_tuple is None")
             return
         
         file_path, overlay_data, image_id = self.pending_overlay_data
@@ -2221,39 +1992,8 @@ class ImageViewer(EditModeMixin, QGraphicsView):
 
 
     def update_overlay(self) -> None:
-        """
-        오버레이 업데이트 (파일 정보 갱신)
-        현재 파일의 메타데이터를 다시 읽어서 오버레이 표시
-        """
-        if not self.main_window:
-            return
+        self.overlay_refresh_requested.emit()  # MainWindow가 처리
         
-        # 오버레이가 비활성화되어 있으면 무시
-        if not getattr(self.main_window, 'overlay_enabled', False):
-            debug_print(f"오버레이 비활성화 상태 - 업데이트 생략")
-            return
-        
-        # 현재 파일 확인
-        if not self.main_window._current_file:
-            debug_print(f"현재 파일 없음 - 오버레이 업데이트 생략")
-            return
-        
-        # 메타데이터 가져오기
-        if not hasattr(self.main_window, 'metadata_panel'):
-            return
-        
-        metadata = self.main_window.metadata_panel.get_current_metadata()
-        
-        if metadata:
-            # MainWindow의 _update_overlay 호출
-            if hasattr(self.main_window, '_update_overlay'):
-                self.main_window._update_overlay(self.main_window._current_file, metadata)
-                debug_print(f"오버레이 업데이트 완료")
-            else:
-                warning_print(f"_update_overlay 메서드 없음")
-        else:
-            debug_print(f"메타데이터 없음 - 오버레이 업데이트 생략")
-
 
 # ============================================
 # 스크롤 위치 복원
@@ -2286,6 +2026,9 @@ class ImageViewer(EditModeMixin, QGraphicsView):
         """창 크기 변경 - 타이밍 개선"""
         super().resizeEvent(event)
 
+        if getattr(self, '_edit_mode', False):
+            self._position_ai_panel()
+
         # 로딩 중이면 지연
         if self._loading_image:
             timer = QTimer(self)
@@ -2310,6 +2053,8 @@ class ImageViewer(EditModeMixin, QGraphicsView):
         # 미니맵/오버레이/툴바 등 위치 업데이트
         self._post_resize_ui_update()
 
+        self._reposition_eraser_overlay()
+        
 
     def _on_resize_delayed(self):
         """이미지 로딩 중일 때 지연된 리사이즈 처리 (event 없이 현재 크기 기준)"""
@@ -2388,21 +2133,6 @@ class ImageViewer(EditModeMixin, QGraphicsView):
         return QRect(top_left, bottom_right)
 
 
-    def _get_main_window(self) -> Optional['MainWindow']:
-        """메인 윈도우 찾기"""
-        
-        parent = self.parent()
-        while parent is not None:
-            if isinstance(parent, MainWindow):
-                return parent
-            # Type-safe: only continue if parent is QWidget
-            if isinstance(parent, QWidget):
-                parent = parent.parent()
-            else:
-                break
-        return None   
-
-
     def _setup_opengl(self) -> None:
         """OpenGL 렌더링 설정"""
         use_opengl = self.config_manager.get_rendering_setting('use_opengl', True)
@@ -2419,13 +2149,9 @@ class ImageViewer(EditModeMixin, QGraphicsView):
                 if msaa_samples > 0:
                     fmt.setSamples(msaa_samples)
 
-                # [핵심 수정 1] QOpenGLWidget 생성 전에 전역 기본 포맷 설정 (필수)
                 QSurfaceFormat.setDefaultFormat(fmt)
 
                 gl_widget = QOpenGLWidget()
-                # [핵심 수정 2] old.deleteLater() 완전 제거
-                #   setViewport()가 Qt 내부에서 기존 viewport를 자동 삭제함
-                #   중복 삭제 시 "Internal C++ object already deleted" 크래시 발생
                 self.setViewport(gl_widget)
 
                 info_print(f"[INFO] OpenGL 렌더링 활성화 (MSAA: {msaa_samples}x, V-Sync: {vsync})")
@@ -2461,7 +2187,7 @@ class ImageViewer(EditModeMixin, QGraphicsView):
         # .png 확장자는 Pillow로 프레임 수 확인
         if suffix == '.png':
             try:
-                with Image.open(str(file_path)) as img:
+                with PILImage.open(str(file_path)) as img:
                     return getattr(img, 'n_frames', 1) > 1
             except Exception:
                 return False

@@ -270,11 +270,18 @@
     }
   },
 
+  "loading_overlay": {
+    "anim_loading":  "애니메이션 로딩 중...",
+    "bg_loading":    "AI 모델 로딩 중...",
+    "bg_inferring":  "배경 제거 중..."
+  },
+
   "dialog": {
     "open_file": "이미지 열기",
     "open_folder": "폴더 열기",
     "save": "저장",
     "cancel": "취소",
+    "Cancelling": "취소 중...",
     "yes": "예",
     "no": "아니오",
     "confirm_delete": "파일 삭제",
@@ -377,7 +384,7 @@
     "btn_discard":      "저장 안 함",
     "error_title":      "저장 오류",
     "save_as_title":    "다른 이름으로 저장",
-    "save_as_filter":   "JPEG (*.jpg *.jpeg)"
+    "save_as_filter":   "이미지 파일 (*.jpg *.jpeg *.webp);;JPEG (*.jpg *.jpeg);;WebP (*.webp)"
   },
 
   "file_manager": {
@@ -574,7 +581,8 @@
     "tool_text":    "T 텍스트",
     "crop":         "✂ 자르기",
     "copy":         "⎘ 복사",
-    "mosaic":       "⬛ 모자이크",    
+    "mosaic":       "⬛ 모자이크", 
+    "filters":      "🎨 필터",   
     "size_label":   "크기:",
     "resize_apply": "↔ 적용",
     "shape_color_tooltip": "도형 색상",
@@ -588,6 +596,20 @@
     "color_dlg_shape": "도형 색상",
     "color_dlg_line": "선 색상",        
     "color_dlg_text":  "텍스트 색상",
+    "fmt_label":    "저장:",
+    "fmt_jpg":      "JPG",
+    "fmt_webp":     "WEBP",
+    "quality_tip":  "저장 품질 (높을수록 선명, 낮을수록 용량 감소)",
+    "bg_remove":        "✦ BG제거",
+    "bg_remove_tip":    "배경 자동 제거 (BEN2 Base · MIT)",
+    "crop_tip":     "자르기 (선택 영역 잘라내기)",
+    "copy_tip":     "복사 (선택 영역을 클립보드로)",
+    "mosaic_tip":   "모자이크 (선택 영역 픽셀화)",
+    "eraser_tip":   "지우개",
+    "filters_tip":  "필터 패널 열기/닫기",
+    "ai_panel_tip": "AI 도구 패널 열기/닫기",
+    "resize_tip":   "이미지 크기 조절",
+    "shapes_tip":   "도형 / 텍스트 삽입",
     "shape": {
       "None":           "─ 도형 선택 ─",    
       "rect":           "⬜ 사각형",
@@ -605,6 +627,56 @@
       "dashed":   "╌ 파선",
       "dotted":   "┄ 점선",
       "dash_dot": "┅ 일점쇄선"
+    }
+  },
+
+  "bg_remove": {
+    "dep_title":        "패키지 설치 필요",
+    "dep_msg":          "배경 제거 기능에 필요한 패키지가 없습니다.\n\n아래 명령어로 설치 후 프로그램을 재시작하세요:\n\n{cmd}",
+    "confirm_title":    "배경 제거",
+    "confirm_first":    "최초 실행 시 AI 모델을 다운로드합니다 (~150 MB).\n\n계속하시겠습니까?",
+    "cpu_warn":         "GPU가 감지되지 않아 처리 시간이 길 수 있습니다 (CPU 모드).",
+    "loading_model":    "AI 모델 로딩 중... (최초 1회 다운로드 포함)",
+    "inferring":        "배경 제거 중...",
+    "done":             "배경 제거 완료",
+    "failed":           "배경 제거 실패:\n{error}",
+    "transparency_tip": "투명 배경이 포함되어 있습니다.\n저장 포맷이 자동으로 WEBP로 변경되었습니다.\nJPG로 저장하면 흰 배경이 합성됩니다.",
+    "dl_title":       "AI 모델 다운로드",
+    "dl_desc":        "배경 제거 기능을 처음 사용합니다.\nBEN2 ONNX 모델(약 223 MB)을 다운로드합니다.\n이 작업은 최초 1회만 진행됩니다.",
+    "dl_cancel":      "취소",
+    "dl_done":        "완료 ✓",
+    "dl_fail_title":  "다운로드 실패",
+    "dl_fail_msg":    "모델 다운로드 중 오류가 발생했습니다.\n인터넷 연결을 확인하세요.\n\n{error}"
+  },
+
+  "edit_filter_panel": {
+    "tab_basic":       "기본",
+    "tab_style":       "스타일",
+    "tab_pro":         "전문가",
+    "btn_reset":       "↺ 초기화",
+    "intensity":       "강도",
+    "tip_reset_val":   "더블클릭: 이 값만 초기화",
+    "tip_reset_int":   "더블클릭: 강도 초기화",
+    "basic": {
+      "brightness":  "밝기",
+      "contrast":    "대비",
+      "saturation":  "채도",
+      "sharpness":   "샤픈",
+      "temperature": "색온도"
+    },
+    "style": {
+      "none":      "없음",
+      "grayscale": "흑백",
+      "sepia":     "세피아",
+      "vintage":   "빈티지"
+    },
+    "pro": {
+      "none":     "없음",
+      "vignette": "비네트",
+      "clarity":  "선명도",
+      "grain":    "필름 그레인",
+      "fade":     "페이드",
+      "glow":     "글로우"
     }
   },
 
@@ -801,6 +873,107 @@
           "paste_no_clip":    "클립보드에 파일이 없습니다.",
           "paste_fail":       "붙여넣기 실패:\n"
       }
-  }  
+  },
+
+  "ai_model_manager": {
+      "download_start":       "[{label}] 다운로드 시작: {url}",
+      "download_cancelled":   "[{label}] 다운로드 취소됨",
+      "download_complete":    "[{label}] 다운로드 완료: {path}",
+      "zip_extracting":       "[{label}] ZIP 압축 해제 중...",
+      "zip_inner_not_found":  "ZIP 내부에서 {target} 을 찾을 수 없음.\nZIP 내용: {contents}",
+      "zip_no_onnx":          "ZIP 내부에 .onnx 파일 없음",
+      "zip_extract_complete": "[{label}] 압축 해제 완료: {path}",
+      "download_failed": "AI 모델 다운로드 실패 ({model_key}):\n{msg}"
+  },
+  "ai_panel": {
+    "header":            "✦  AI Tools",
+    "bg_group_title":    "🪄  배경 제거(BEN2)",
+    "btn_run_bg":        "🪄  실행",
+    "erase_group_title": "🧹  AI 지우개(LaMa)",
+    "btn_brush":         "✏  브러시",
+    "btn_run_erase":     "🧹  실행",
+    "btn_clear":         "↺  마스크 초기화",
+    "status_checking":   "🔄 확인 중...",
+    "status_loading":    "⏳ 로딩 중...",
+    "status_ready":      "✅ 준비됨",
+    "status_no_model":   "💾 미설치 · 클릭 시 다운로드",
+    "status_working":    "⚙ 처리 중..."
+  },
+  "dep_install_dialog": {
+    "window_title":     "AI 패키지 설치",
+    "title":            "AI 배경 제거 패키지 설치",
+    "packages_label":   "아래 패키지를 설치합니다:\n{packages}",
+    "size_warning":     "onnxruntime 설치 크기: 약 15 MB",
+    "btn_install":      "설치 시작",
+    "btn_cancel":       "취소",
+    "btn_done":         "완료 ✓",
+    "btn_retry":        "재시도",
+    "error":            "오류: {error}\n",
+    "pkg_done_success": "\n✓ {pkg} 완료\n\n",
+    "pkg_done_failed":  "\n✗ {pkg} 실패\n\n",
+    "all_done_success": "\n모든 패키지 설치 완료. 배경 제거를 시작합니다.\n",
+    "all_done_failed":  "\n설치 실패. 인터넷 연결을 확인하거나 수동으로 설치하세요.\n"
+  },
+  "edit_mode_mixin": {
+    "color_picker_title":         "색상",
+    "text_content_label":         "텍스트 내용 (줄 바꿈 지원):",
+    "default_text":               "텍스트",
+    "text_input_title":           "텍스트 입력",
+    "text_edit_title":            "텍스트 편집",
+    "ai_erase_title":             "AI 지우개",
+    "ai_erase_guide":             "먼저 지울 영역을 브러시로 칠해주세요.",
+    "ai_erasing":                 "AI 지우는 중...",
+    "model_download_title":       "{label} 다운로드",
+    "model_download_desc":        "AI 기능을 처음 사용합니다.\n{label} 모델을 다운로드합니다.\n이 작업은 최초 1회만 진행됩니다.",
+    "ai_failed_title":            "AI 처리 실패",
+    "ai_failed_msg":              "처리 중 오류가 발생했습니다.\n\n{msg}"
+  },
+  "eraser_mixin": {
+    "section_title":     "🧽 지우개",
+    "size_tip":          "크기 (마우스 휠로도 조절)",
+    "color_pick_tip":    "색상 선택",
+    "color_dialog_title":"지우개 색상",
+    "color_white":       "흰색",
+    "color_black":       "검정",
+    "color_gray":        "회색"
+  },
+  "resize_mixin": {
+    "title":      "⤡ 리사이즈",
+    "lock_tip":   "비율 고정 / 해제",
+    "apply_tip":  "적용",
+    "cancel_tip": "취소"
+  },
+  "shape_text_mixin": {
+    "sec_shape":         "SHAPE",
+    "sec_text":          "TEXT",
+    "shape_none":        "선택 안함",
+    "shape_rect":        "사각형",
+    "shape_rect_round":  "둥근 사각형",
+    "shape_ellipse":     "원",
+    "shape_line":        "선",
+    "shape_arrow":       "화살표",
+    "shape_cross":       "십자선",
+    "shape_triangle":    "삼각형",
+    "shape_star":        "별",
+    "shape_heart":       "하트",
+    "shape_diamond":     "마름모",
+    "shape_pentagon":    "오각형",
+    "line_solid":        "실선",
+    "line_dash":         "파선",
+    "line_dot":          "점선",
+    "pen_color_tip":     "선 색상",
+    "pen_color_dialog":  "선 색상",
+    "stroke_opacity":    "선 투명도",
+    "fill_opacity":      "채움 투명도",
+    "font_tip":          "폰트",
+    "font_size_tip":     "폰트 크기 (이미지 픽셀 단위)",
+    "text_color_tip":    "텍스트 색상",
+    "text_color_dialog": "텍스트 색상",
+    "btn_insert_text":   "＋ 텍스트 삽입",
+    "text_edit_title":   "텍스트 편집",
+    "text_label":        "텍스트",
+    "default_text":      "텍스트"
+  }
+
 
 }

@@ -89,7 +89,6 @@ class HybridCache:
 
         self._setup_db()
 
-
     # ── DB 초기화 ────────────────────────────────────────────
 
     def _setup_db(self) -> None:
@@ -121,7 +120,6 @@ class HybridCache:
         self._cache_dir.mkdir(parents=True, exist_ok=True)
         self._setup_db()
         info_print(f"[{self.namespace}] DB 자동 복구 완료")
-
 
     # ── 메모리 캐시 (LRU) ────────────────────────
 
@@ -156,7 +154,6 @@ class HybridCache:
             if key in self._memory:
                 self._memory_bytes -= _pixmap_bytes(self._memory.pop(key))
 
-
     # ── 디스크 캐시 ──────────────────────────────
 
     @staticmethod
@@ -183,7 +180,6 @@ class HybridCache:
                 self._ensure_db()
             elif "database is locked" in err:
                 warning_print(f"[{self.namespace}] DB 읽기 락 충돌 (스킵): {e}")
-                # _ensure_db() 호출 안 함 — 테이블 문제 아님
             else:
                 warning_print(f"[{self.namespace}] DB 읽기 오류: {e}")
             return None
@@ -193,7 +189,6 @@ class HybridCache:
 
 
     def _db_touch(self, key: str) -> None:
-        # 락 획득 실패 시 skip (touch는 LRU 순서 업데이트일 뿐, 실패해도 무해)
         if not self._db_lock.acquire(blocking=False):
             return
         try:
@@ -329,7 +324,6 @@ class HybridCache:
         except Exception as e:
             warning_print(f"[{self.namespace}] 디스크 정리 오류: {e}")
 
-
     # ── 공개 API ─────────────────────────────────
 
     def get(self, key: str) -> Optional[QPixmap]:
@@ -446,6 +440,25 @@ class HybridCache:
             except Exception as e:
                 warning_print(f"[{self.namespace}] invalidate 오류: {e}")
 
+    def db_save(
+        self,
+        key: str,
+        data: bytes,
+        etag: Optional[str] = None,
+        last_modified: Optional[str] = None,
+        source_mtime: Optional[float] = None,
+    ) -> None:
+        """
+        Public API wrapper for _db_save (compatibility layer).
+        """
+        return self._db_save(
+            key=key,
+            data=data,
+            etag=etag,
+            last_modified=last_modified,
+            source_mtime=source_mtime,
+        )
+
 
     def _db_vacuum(self) -> None:
         """종료 시 DB 파편화 제거 (VACUUM) + WAL 정리"""
@@ -463,11 +476,11 @@ class HybridCache:
     def clear(self):
         with self._mem_lock:
             with self._db_lock:
-                # ① 메모리 초기화
+                # 메모리 초기화
                 self._memory.clear()
                 self._memory_bytes = 0
 
-                # ② 디스크 + DB 초기화
+                # 디스크 + DB 초기화
                 try:
                     with sqlite3.connect(str(self._db_path), timeout=5.0) as conn:
                         names = [
@@ -484,8 +497,8 @@ class HybridCache:
 
         info_print(f"[{self.namespace}] 캐시 전체 삭제")
 
-
     # ── 유틸리티 (static) ────────────────────────
+
     @staticmethod
     def pixmap_to_bytes(pixmap: QPixmap, fmt: str = "PNG") -> Optional[bytes]:
         ba = QByteArray()
@@ -515,8 +528,8 @@ class HybridCache:
 
         return bytes(ba.data()) if ba.size() > 0 else None
 
-
     # ── 메모리 전용 ──────────────────────────────
+
     def clear_memory(self) -> None:
         """메모리 캐시만 삭제 (디스크 캐시 유지).
         폴더 전환 시 이전 썸네일 메모리 해제용."""
@@ -525,8 +538,8 @@ class HybridCache:
             self._memory_bytes = 0
         debug_print(f"[{self.namespace}] 메모리 캐시 삭제")
 
-
     # ── 통계 ─────────────────────────────────────────────────
+
     def memory_count(self) -> int:
         with self._mem_lock:
             return len(self._memory)

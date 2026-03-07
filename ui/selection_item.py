@@ -18,6 +18,7 @@ class SelectionItem(QGraphicsRectItem):
         self.setZValue(100)    
         self.setVisible(False)
 
+
     def set_rect(self, rect: QRectF) -> None:
         self.setRect(rect)
         self.setVisible(not rect.isEmpty())

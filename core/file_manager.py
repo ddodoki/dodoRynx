@@ -99,7 +99,7 @@ class FileWorkerThread(QThread):
                         while dst.exists():
                             dst = self.target_folder / f"{stem}({counter}){suffixes}"
                             counter += 1
-                            if counter > 9999:               # 무한루프 방어
+                            if counter > 9999:
                                 dst = self.target_folder / f"{stem}_{uuid.uuid4().hex[:8]}{suffixes}"
                                 break
 
@@ -124,7 +124,6 @@ class FileWorkerThread(QThread):
 class FileOperations:
     """단일 파일 작업 (열기/삭제/이름변경/복사/잘라내기/붙여넣기/클립보드)."""
 
-
     def __init__(self, main_window: "MainWindow") -> None:
         self._mw: "MainWindow" = main_window
 
@@ -132,16 +131,17 @@ class FileOperations:
 
     def open_file_dialog(self) -> None:
         mw = self._mw
-        ext_filter = (
-            "이미지 파일 (*.jpg *.jpeg *.png *.gif *.webp *.bmp "
-            "*.heif *.heic *.avif *.tiff *.tif "
-            "*.nef *.cr2 *.arw *.dng *.raf *.orf)"
-        )
+
+        from core.folder_navigator import FolderNavigator
+        exts = " ".join(f"*{e}" for e in sorted(FolderNavigator.SUPPORTED_EXTENSIONS))
+        ext_filter = f"이미지 파일 ({exts})"
+
         filepath, _ = QFileDialog.getOpenFileName(
             mw,
             t('file_manager.open_image_title'),
             str(Path.home()),
-            t('file_manager.open_image_filter'),
+            #t('file_manager.open_image_filter'),
+            ext_filter
         )
         if filepath:
             mw.open_image(Path(filepath))
@@ -156,7 +156,6 @@ class FileOperations:
         )
         if folder:
             mw.open_folder(Path(folder))
-
 
     # ── 이름 변경 ─────────────────────────────────────────────
 
@@ -244,7 +243,6 @@ class FileOperations:
             )
             error_print(f"rename_file: {e}")
             
-
     # ── 붙여넣기 ──────────────────────────────────────────────
 
     def paste_file(self, target_folder: Optional[Path] = None) -> None:
@@ -323,7 +321,6 @@ class FileOperations:
         QApplication.clipboard().setText(str(mw._current_file))
         mw._show_status_message(t('file_manager.path_copied', path=mw._current_file), 2000)
         info_print(f"경로 복사: {mw._current_file}")
-
 
     # ── 파일 위치 / 속성 ──────────────────────────────────────
 
@@ -407,7 +404,7 @@ class HighlightOperations:
         if not current_file:
             return
         is_highlighted = mw.navigator.toggle_highlight(current_file)
-        self._sync_thumbnail_highlight(current_file, is_highlighted)
+        #self._sync_thumbnail_highlight(current_file, is_highlighted)
         highlight_count = mw.navigator.get_highlight_count()
         status = "하이라이트 설정" if is_highlighted else "하이라이트 해제"
         mw._show_status_message(t('file_manager.highlight_status', status=status, count=highlight_count), 1500)
@@ -426,15 +423,16 @@ class HighlightOperations:
 
 
     def clear_all_highlights_all_folders(self) -> None:
-        mw = self._mw  # HighlightOperations 기준, MainWindow라면 mw = self
+        mw = self._mw 
 
         total = mw.navigator.get_total_highlight_count()
         if total == 0:
             return
 
         # 전체 폴더 하이라이트 일괄 삭제
-        mw.navigator._highlights_by_folder.clear()
-        mw.navigator._highlighted.clear()
+        # mw.navigator._highlights_by_folder.clear()
+        # mw.navigator._highlighted.clear()
+        mw.navigator.clear_all_highlights_all_folders()
 
         # UI 동기화
         mw._sync_highlight_state(force_full_sync=True)
@@ -448,7 +446,7 @@ class HighlightOperations:
         highlighted = mw.navigator.get_highlighted_files()
         if not highlighted:
             QMessageBox.information(mw, t('file_manager.no_highlight_title'),
-                        t('file_manager.no_highlight_msg'))
+                t('file_manager.no_highlight_msg'))
             return
 
         preview = "\n".join(f.name for f in list(highlighted)[:5])
@@ -463,30 +461,44 @@ class HighlightOperations:
         if reply != QMessageBox.StandardButton.Yes:
             return
 
+        count = len(highlighted)
         next_index = mw.navigator.calculate_next_index_after_deletion(
             files_to_delete=highlighted, deletion_mode="multi"
         )
-        mw.navigator._temp_scan_prev_index = next_index
 
-        # 삭제 대상에서 안전한 파일로 먼저 이탈 → 파일 핸들 해제
-        highlighted_set = set(highlighted)
-        if mw.navigator.current() in highlighted_set:
-            safe_index = next(
-                (i for i, f in enumerate(mw.navigator.image_files)
-                if f not in highlighted_set),
-                None
-            )
-            if safe_index is not None:
-                # 삭제 대상이 아닌 파일로 이동
-                mw.navigator.go_to(safe_index)
-            else:
-                # 폴더 내 전체 파일 삭제 예정 → 뷰어 초기화로 파일 핸들 완전 해제
-                mw.image_viewer.clear()
+        # ── 이벤트 억제 ──────────────────────────────────────────
+        mw.folder_watcher.pause_events()           # pending 누적, 타이머 정지
+        mw.folder_watcher.suppress_batch_deleted() # batch_deleted 1회 억제
+        mw.navigator.bulk_delete_start()           # reload_after_deletion 억제
 
-        # 삭제 중 이미지 로딩 차단 (FolderWatcher reload 시 _load_current_image 스킵)
-        mw._is_deleting = True
-        files_to_delete = list(highlighted)
-        QTimer.singleShot(150, lambda: mw._run_file_worker("delete", files_to_delete))
+        # ── 삭제 실행 ────────────────────────────────────────────
+        failed = []
+        for path in highlighted:
+            try:
+                send2trash.send2trash(str(path))
+            except Exception as e:
+                failed.append(path)
+                error_print(f"삭제 실패: {path.name} — {e}")
+
+        # ── 정리 ─────────────────────────────────────────────────
+        mw.navigator.clear_highlights()
+        mw.navigator.bulk_delete_end(next_index)       # _bulk_deleting=False, index 저장
+        mw.file_manager.start_bulk_suppress(2000)      # on_file_deleted × N 억제
+        mw.folder_watcher.resume_events()              # _events_paused=False
+
+        # ── 직접 1회 reload ───────────────────────────────────────
+        def on_done(count_after: int) -> None:
+            mw._clear_op_status(f"{count}개 삭제 완료", 2000)
+            try:
+                mw.navigator.folder_scan_completed.disconnect(on_done)
+            except Exception:
+                pass
+
+        mw.navigator.folder_scan_completed.connect(on_done)
+        mw.navigator.reload_async()   # ← 이 1회만 스캔
+
+        if failed:
+            warning_print(f"⚠️ {len(failed)}개 파일 삭제 실패")
 
 
     def copy_highlighted_files(self) -> None:
@@ -567,6 +579,12 @@ class FolderWatchHandler:
         self._add_debounce_timer.setInterval(250)  # 250ms 안에 들어오는 파일 전부 묶음
         self._add_debounce_timer.timeout.connect(self._flush_added_files)
 
+        # bulk 삭제 직후 개별 on_file_deleted 억제
+        self._bulk_suppress: bool = False
+        self._bulk_suppress_timer = QTimer()
+        self._bulk_suppress_timer.setSingleShot(True)
+        self._bulk_suppress_timer.timeout.connect(self._end_bulk_suppress)
+
 
     def _flush_added_files(self) -> None:
         """디바운스 타이머 만료 → 누적된 파일 전체를 한 번에 처리."""
@@ -608,16 +626,31 @@ class FolderWatchHandler:
         self._add_debounce_timer.start()
 
 
+    def start_bulk_suppress(self, duration_ms: int = 2000) -> None:
+        """bulk 삭제 완료 후 개별 file_deleted 이벤트 억제 시작"""
+        self._bulk_suppress = True
+        self._bulk_suppress_timer.start(duration_ms)
+        info_print(f"⏸️ FolderWatchHandler: 개별 삭제 이벤트 억제 ({duration_ms}ms)")
+
+
+    def _end_bulk_suppress(self) -> None:
+        self._bulk_suppress = False
+        debug_print("▶️ FolderWatchHandler: 개별 삭제 이벤트 억제 해제")
+
+
     def on_file_deleted(self, filepath: Path) -> None:
         mw = self._mw
 
-        if getattr(mw, '_is_deleting', False):
-            # 의도적 삭제 완료 — 플래그 해제 후 reload 위임
-            mw._is_deleting = False          # ← 해제
-            mw.navigator.reload_async()      # ← 스캔 → 썸네일바 갱신
+        # bulk 삭제 억제 중이면 무시 (on_batch_deleted가 처리)
+        if self._bulk_suppress:
+            debug_print(f"bulk suppress 중 - on_file_deleted 무시: {filepath.name}")
             return
 
-        # 외부 삭제 감지 (탐색기 등) — 기존 코드 유지
+        if getattr(mw, '_is_deleting', False):
+            mw._is_deleting = False
+            mw.navigator.reload_after_deletion()
+            return
+
         sn = _short_name(filepath.name)
         info_print(f"파일 삭제 감지: {filepath.name}")
 
@@ -630,7 +663,7 @@ class FolderWatchHandler:
 
         mw.navigator.folder_scan_completed.connect(on_done)
         mw.navigator.reload_async()
-        
+
 
     def on_file_modified(self, filepath: Path) -> None:
         mw = self._mw
@@ -661,20 +694,25 @@ class FolderWatchHandler:
 
 
     def on_batch_deleted(self, deleted_files: list) -> None:
-        mw   = self._mw
+        mw = self._mw
         count = len(deleted_files)
         info_print(f"배치 삭제 감지: {count}개")
         mw._set_op_status(f"{count}개 삭제 감지 중...", 0, 0)
 
-        # 하이라이트에서도 제거
+        # clear_highlights()가 이미 호출된 경우 중복 처리 방지
+        # 하이라이트가 남아있는 경우(외부 삭제 등)만 정리
         for fp in deleted_files:
             if mw.navigator.is_highlighted(fp):
                 mw.navigator.toggle_highlight(fp)
+                mw.thumbnail_bar.highlighted_files.discard(fp) 
 
-        next_index = mw.navigator.calculate_next_index_after_deletion(
-            files_to_delete=deleted_files, deletion_mode="auto"
-        )
-        mw.navigator._temp_scan_prev_index = next_index
+        # next_index는 bulk_delete_end에서 이미 설정됨
+        # _temp_scan_prev_index 덮어쓰기 방지 — 값이 이미 있으면 유지
+        if mw.navigator._temp_scan_prev_index is None:
+            next_index = mw.navigator.calculate_next_index_after_deletion(
+                files_to_delete=deleted_files, deletion_mode="auto"
+            )
+            mw.navigator._temp_scan_prev_index = next_index
 
         def on_done(count_after):
             mw._clear_op_status(f"{count}개 삭제 완료", 2000)
@@ -684,7 +722,7 @@ class FolderWatchHandler:
                 pass
 
         mw.navigator.folder_scan_completed.connect(on_done)
-        mw.navigator.reload_async()
+        mw.navigator.reload_async() 
 
 
 # ══════════════════════════════════════════════════════════════
@@ -712,10 +750,14 @@ class FileManager:
     def open_file_dialog(self)           -> None: self._file_ops.open_file_dialog()
     def open_folder_dialog(self)         -> None: self._file_ops.open_folder_dialog()
     def rename_file(self)                -> None: self._file_ops.rename_file()
-    def paste_file(self)                 -> None: self._file_ops.paste_file()
+    #def paste_file(self)                 -> None: self._file_ops.paste_file()
+    def paste_file(self, target_folder: Optional[Path] = None) -> None:
+        self._file_ops.paste_file(target_folder)
     def copy_file_path(self)             -> None: self._file_ops.copy_file_path()
     def open_file_location(self)         -> None: self._file_ops.open_file_location()
     def show_file_properties(self)       -> None: self._file_ops.show_file_properties()
+    def start_bulk_suppress(self, ms: int = 2000) -> None: self._watch_handler.start_bulk_suppress(ms)
+    def suppress_batch_deleted(self) -> None: self._mw.folder_watcher.suppress_batch_deleted()
 
     # ── HighlightOperations 위임 ──────────────────────────────
 
@@ -779,13 +821,11 @@ class FileManager:
         mw = self._mw
 
         if operation == "delete":
-            mw._is_deleting = False   # 차단 해제
+            mw._is_deleting = False
 
-            # 차단 중 스킵된 이미지 로딩 재개
             if mw.navigator.image_files:
                 QTimer.singleShot(0, mw._load_current_image)
             else:
-                # 폴더가 비었으면 썸네일바 진행 상태 강제 완료
                 mw.thumbnail_bar.reset_loading_state()
 
         op_label = {'copy': '복사', 'move': '이동', 'delete': '삭제'}.get(operation, operation)
@@ -802,7 +842,6 @@ class FileManager:
             self._file_worker.wait(3000)
 
 
-    # 현재 파일 전용
     def _get_target_files(self) -> list[Path]:
         mw = self._mw
         if mw._current_file:
@@ -810,7 +849,6 @@ class FileManager:
         return []
 
 
-    # 하이라이트 배치 전용
     def _get_highlighted_targets(self) -> list[Path]:
         mw = self._mw
         highlighted = mw.navigator.get_highlighted_files()
@@ -874,7 +912,6 @@ class FileManager:
             files_to_delete=files, deletion_mode=mode)
         mw.navigator._temp_scan_prev_index = next_index
 
-        # 현재 파일이 삭제 대상이면 이탈 + 차단
         if mw._current_file in set(files):
             mw._is_deleting = True
 

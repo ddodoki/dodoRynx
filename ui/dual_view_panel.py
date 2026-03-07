@@ -222,9 +222,11 @@ class DualViewPanel(QWidget):
     def primary_viewer(self) -> ImageViewer:
         return self._primary
 
+
     @property
     def secondary_viewer(self) -> ImageViewer:
         return self._secondary
+
 
     @property
     def is_dual_mode(self) -> bool:
@@ -249,7 +251,6 @@ class DualViewPanel(QWidget):
             return self._hovered_viewer
         return self._primary
     
-
     # ============================================
     # 듀얼 모드 토글 / 레이아웃 제어
     # ============================================
@@ -278,7 +279,6 @@ class DualViewPanel(QWidget):
             self._no_next.setVisible(False)
             self._secondary.setVisible(False)
             self._secondary.clear()
-
 
     # ============================================
     # 보조 이미지 로드
@@ -348,7 +348,6 @@ class DualViewPanel(QWidget):
 
         except Exception as e:
             error_print(f"DualView _load_via_cache 실패: {e}")
-
 
     # ============================================
     # 세컨드 오버레이 적용
@@ -438,7 +437,6 @@ class DualViewPanel(QWidget):
             self._last_overlay_meta,
         )
 
-        # 1. scale 동기화
         ow = self._secondary.overlay_widget
         if ow is None:
             return
@@ -463,7 +461,6 @@ class DualViewPanel(QWidget):
             'opacity':     cfg.get_overlay_setting("opacity", 0.8),
             'position':    cfg.get_overlay_setting("position", "top_left"),
         }
-
 
     # ============================================
     # 리사이즈 / 지오메트리 동기화
@@ -500,7 +497,6 @@ class DualViewPanel(QWidget):
             ow.setGeometry(self._secondary.rect())
             ow.raise_()
             ow.update()
-
 
     # ============================================
     # 세컨드 뷰어 초기화

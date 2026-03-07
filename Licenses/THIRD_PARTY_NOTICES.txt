@@ -50,6 +50,37 @@ Windows Runtime (HEIF/HEIC/AVIF 디코딩 지원):
   - Copyright: MapLibre contributors
   - 웹사이트: https://maplibre.org
 
+AI 배경 제거 기능 (선택적, 최초 사용 시 자동 다운로드):
+
+- onnxruntime (MIT)
+  - 제공: Microsoft Corporation
+  - Copyright (c) Microsoft Corporation
+  - 웹사이트: https://github.com/microsoft/onnxruntime
+
+- BEN2 Base 모델 가중치 (MIT)
+  - 제공: PramaLLC
+  - Copyright (c) PramaLLC
+  - 모델: PramaLLC/BEN2 (BEN2_Base.onnx)
+  - 웹사이트: https://github.com/PramaLLC/BEN2
+  - HuggingFace: https://huggingface.co/PramaLLC/BEN2
+  - ※ 본 모델은 프로그램에 포함되지 않으며, 배경 제거 기능
+    최초 사용 시 HuggingFace에서 사용자 기기에 다운로드됩니다.
+
+AI 지우개 기능 (선택적, 최초 사용 시 자동 다운로드):
+
+- LaMa (Large Mask Inpainting) 모델 가중치 (Apache 2.0)
+  - 원본 모델 제공: advimman (Samsung Research)
+  - Copyright (c) Samsung Research, Samsung Electronics
+  - 논문: "Resolution-robust Large Mask Inpainting with
+    Fourier Convolutions" (WACV 2022)
+  - GitHub: https://github.com/advimman/lama
+
+- LaMa ONNX 변환 모델 (Apache 2.0)
+  - ONNX 변환 제공: Carve-Photos
+  - 모델: Carve/LaMa-ONNX (lama_fp32.onnx, ~208 MB)
+  - HuggingFace: https://huggingface.co/Carve/LaMa-ONNX
+  - ※ 본 모델은 프로그램에 포함되지 않으며, AI 지우개 기능
+    최초 사용 시 HuggingFace에서 사용자 기기에 다운로드됩니다.
 
 HEVC / H.265 관련 고지:
 
@@ -129,7 +160,40 @@ Map services and data:
   - License: BSD-3-Clause
   - Website: https://maplibre.org
 
+AI Background Removal (optional, downloaded on first use):
 
+- onnxruntime (MIT)
+  - Provider: Microsoft Corporation
+  - Copyright (c) Microsoft Corporation
+  - Website: https://github.com/microsoft/onnxruntime
+
+- BEN2 Base model weights (MIT)
+  - Provider: PramaLLC
+  - Copyright (c) PramaLLC
+  - Model: PramaLLC/BEN2 (BEN2_Base.onnx)
+  - Website: https://github.com/PramaLLC/BEN2
+  - HuggingFace: https://huggingface.co/PramaLLC/BEN2
+  - Note: This model is NOT bundled with the application.
+    It is downloaded from HuggingFace to the user's device
+    on first use of the background removal feature.
+
+AI Eraser (optional, downloaded on first use):
+
+- LaMa (Large Mask Inpainting) model weights (Apache 2.0)
+  - Original model by: advimman (Samsung Research)
+  - Copyright (c) Samsung Research, Samsung Electronics
+  - Paper: "Resolution-robust Large Mask Inpainting with
+    Fourier Convolutions" (WACV 2022)
+  - GitHub: https://github.com/advimman/lama
+
+- LaMa ONNX model (Apache 2.0)
+  - ONNX conversion by: Carve-Photos
+  - Model: Carve/LaMa-ONNX (lama_fp32.onnx, ~208 MB)
+  - HuggingFace: https://huggingface.co/Carve/LaMa-ONNX
+  - Note: This model is NOT bundled with the application.
+    It is downloaded from HuggingFace to the user's device
+    on first use of the AI Eraser feature.
+    
 HEVC / H.265 Notice:
 
 This program may call the Windows operating system's

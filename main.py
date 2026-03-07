@@ -9,7 +9,7 @@ dodoRynx
 import os
 import sys
 from pathlib import Path
-from typing import Optional, TYPE_CHECKING
+from typing import Optional
 
 from PySide6.QtCore import QThreadPool, qVersion
 from PySide6.QtGui import QColor, QPalette
@@ -24,9 +24,6 @@ from utils.paths import (
     is_frozen,
     print_path_info,
 )
-
-if TYPE_CHECKING:
-    from ui.main_window import MainWindow
 
 
 # ============================================
@@ -166,24 +163,24 @@ def _extract_initial_file() -> Optional[Path]:
 # 타입 힌트를 문자열로 → 런타임 NameError 방지
 # ============================================
 
-def handle_command_line_args(window: 'MainWindow') -> None:
-    if len(sys.argv) > 1:
-        arg_path = sys.argv[1]
-        if arg_path.startswith('--'):
-            return
-        try:
-            file_path = Path(arg_path)
-            if not file_path.exists():
-                warning_print(f"경로가 존재하지 않음: {file_path}")
-                return
+# def handle_command_line_args(window: 'MainWindow') -> None:
+#     if len(sys.argv) > 1:
+#         arg_path = sys.argv[1]
+#         if arg_path.startswith('--'):
+#             return
+#         try:
+#             file_path = Path(arg_path)
+#             if not file_path.exists():
+#                 warning_print(f"경로가 존재하지 않음: {file_path}")
+#                 return
 
-            if file_path.is_dir():
-                info_print(f"폴더 열기: {file_path}")
-                window.open_folder(file_path)
-            elif not file_path.is_file():
-                warning_print(f"지원하지 않는 경로 타입: {file_path}")
-        except Exception as e:
-            error_print(f"커맨드라인 인자 처리 실패: {e}")
+#             if file_path.is_dir():
+#                 info_print(f"폴더 열기: {file_path}")
+#                 window.open_folder(file_path)
+#             elif not file_path.is_file():
+#                 warning_print(f"지원하지 않는 경로 타입: {file_path}")
+#         except Exception as e:
+#             error_print(f"커맨드라인 인자 처리 실패: {e}")
 
 
 # ============================================
@@ -242,7 +239,7 @@ def main() -> int:
         try:
             window = MainWindow(config)
             window.show()
-            app.processEvents() 
+            app.processEvents()
 
             if sys.platform == 'win32':
                 hwnd = int(window.winId())
@@ -258,13 +255,22 @@ def main() -> int:
             )
             return 1
 
+        # 초기 경로 열기 (파일/폴더 통합 처리)
         try:
             if initial_file:
-                window.open_image(initial_file) 
-            else:
-                handle_command_line_args(window)  
+                # _extract_initial_file()이 이미 is_file() 검증 완료
+                window.open_image(initial_file)
+            elif len(sys.argv) > 1:
+                arg = sys.argv[1]
+                if not arg.startswith('--'):
+                    p = Path(arg)
+                    if p.exists() and p.is_dir():
+                        info_print(f"폴더 열기: {p}")
+                        window.open_folder(p)
+                    elif p.exists() and not p.is_file():
+                        warning_print(f"지원하지 않는 경로 타입: {p}")
         except Exception as e:
-            error_print(f"초기 파일 열기 예외: {e}")
+            error_print(f"초기 경로 열기 실패: {e}")
 
         info_print("애플리케이션 시작")
         exit_code = app.exec()

@@ -4,10 +4,16 @@
 > ⚠️ This project was created for personal learning and experimental purposes.  
 > Stability, compatibility, and long-term maintenance are not guaranteed.  
 
-- dodoRynx is a desktop image viewer optimized for a folder-based workflow.
-- It preloads images within a folder to generate a thumbnail cache and aims to handle photo metadata, GPS maps, overlays, printing, and lightweight editing — all in a single application.
+- dodoRynx is a desktop image viewer and management tool optimized for a folder-based workflow.
+- It preloads images within folders to generate a thumbnail cache and aims to handle photo metadata, GPS maps, overlays, printing, and lightweight editing — all in a single application.
 
-![Screenshot](screenshot.jpg)
+
+<p align="center">
+  <img src="screenshot_01.jpg" width="250">
+  <img src="screenshot_02.jpg" width="250">
+  <img src="screenshot_03.jpg" width="250">
+</p>
+
 
 ## ✨ Supported Formats
 - Most common image formats
@@ -26,31 +32,48 @@
     - Thumbnail list sorting:
         - Default sorting
         - Metadata-based sorting
+        - Folder-level sorting option is preserved during runtime (reset when the program exits)
     - Built-in folder explorer
     - Folder favorites (add/remove)
 
 2. Metadata & Overlay
     - Read photo metadata (EXIF, etc.)
-    - Copy metadata values to clipboard
-    - Metadata & map overlay display (maintains viewing flow)
+    - Copy metadata values to clipboard from the metadata panel
+    - Metadata & map overlay display (designed to maintain the viewing flow)
 
 3. GPS Map
     - Real-time map display for photos with GPS data
     - Click GPS values to open detailed map in web browser
     - Map tile & render result caching
 
-4. Highlight Workflow
-    - Dedicated Highlight feature
-    (separate from normal selection — ideal for filtering & workflow organization)
+4. Highlight Workflow (Multi-Tasking)
+    - Dedicated Highlight feature (separate from normal selection)
+    - Designed for filtering workflows and organizing selected items
+    - Highlight folder navigation via right-click menu (reset when the program exits)
 
-5. Lightweight Editing
+5. Lightweight Editing (Shortcut: E)
     - Basic image editing
+        - Crop
+        - Copy
+        - Erase
+        - Resize
+        - Filters
+        - Shape and text insertion
+        - Paste external clipboard images
+    - AI-related features (model downloaded once on first use, works offline)
+        - AI Background Removal
+        - AI Eraser (selection-based)
     - Rotation policy:
         - JPG: Reflect orientation metadata
         - RAW: Sidecar file generation
         - Other formats: Pixel-based rotation
 
-6. Print / Export
+6. Dual View (Shortcut: Ctrl + D)
+    - Display two consecutive images simultaneously
+    - Zoom control, overlays, and fullscreen behave the same in both views
+    - Resizable layout via the center split bar
+
+7. Print / Export
     - Print:
         - Single
         - All
@@ -60,10 +83,11 @@
     - Copy current screen (with overlay) to clipboard
     - Save current rendered image
 
-7. Performance & Rendering
+8. Performance & Rendering
     - Hybrid cache:
         - Thumbnail/map cache stored on disk
-        - Loaded into memory on relaunch
+        - Thumbnail and map tile cache loaded into memory on relaunch
+        - Metadata memory cache
     - Multi-threading:
         - Minimum 2 threads
         - Half of CPU cores
@@ -73,7 +97,7 @@
     - Anti-aliasing support
     - WebP animation modes: Fast mode / Quality mode
 
-8. i18n
+9. i18n
     - Korean
     - English
 
@@ -128,10 +152,9 @@ Licenses/
 > ⚠️ 본 프로젝트는 개인 학습 및 실험 목적으로 제작되었습니다.  
 > 안정성, 호환성, 장기 유지보수는 보장되지 않습니다.
 
-- dodoRynx 는 폴더 기반 워크플로우에 최적화된 데스크톱 이미지 뷰어입니다.
+- dodoRynx 는 폴더 기반 워크플로우에 최적화된 데스크톱 이미지 뷰어 및 관리 프로그램입니다.
 - 폴더 내 이미지를 사전 로딩하여 썸네일 캐시를 생성하고, 촬영 메타데이터, GPS 지도, 오버레이, 인쇄, 간단 편집까지 하나의 앱에서 처리하는 것을 목표로 합니다.
 
-![Screenshot](screenshot.jpg)
 
 ## ✨ 지원 포맷
 - 대부분의 이미지 포맷 확장자 지원
@@ -153,6 +176,7 @@ Licenses/
     - 썸네일 리스트 정렬:
         - 기본 정렬
         - 메타데이터 기반 정렬
+        - 폴더 단위 정렬 옵션 자동 유지(프로그램 종료 시 초기화)
     - 폴더 탐색기 지원
     - 폴더 즐겨찾기 (추가/제거)
 
@@ -166,18 +190,28 @@ Licenses/
     - GPS 값을 클릭하면 웹 브라우저에서 상세 지도 확인
     - 지도 타일 및 렌더 결과 캐시 지원
 
-4. 하이라이트 워크플로우
+4. 하이라이트 워크플로우 (다중 작업)
     - 일반 선택과 구분되는 하이라이트 기능
     - 선별 작업 및 작업 대상 구분에 최적화
+    - 마우스 우클릭 메뉴를 통해 하이라이트 폴더 네비게이션 지원(프로그램 종료 시 초기화)
 
-5. 간단 편집 기능
+5. 간단 편집 기능(단축키: E)
     - 기본 이미지 편집 지원
+        - 자르기, 복사, 지우기, 리사이즈, 필터, 도형 및 텍스트 삽입, 외부 클립보드 이미지 붙여넣기 지원
+    - Ai 관련 기능(최초 1회 모델 다운로드, 오프라인 방식)
+        - Ai 배경 지우기
+        - Ai 지우개(선택 영역)
     - 회전 처리 정책:
         - JPG: 메타데이터(orientation) 기반 회전 반영
         - RAW: 사이드카 파일 생성 방식
         - 기타 포맷: 픽셀 단위 회전
 
-6. 인쇄 / 내보내기
+6. 듀얼 뷰 지원(단축키: Ctrl+D)
+    - 연속된 이미지 2개를 출력
+    - 줌 컨트롤 및 오버레이, 전체화면에서 메인 뷰와 세컨트 뷰 동일하게 작동
+    - 중앙 스플릿 바를 통해 사이즈 조절 가능
+
+7. 인쇄 / PDF 내보내기
     - 인쇄:
         - 단일
         - 전체
@@ -187,10 +221,11 @@ Licenses/
     - 현재 화면 클립보드 복사 (오버레이 포함)
     - 현재 렌더링 이미지 저장
 
-7. 성능 & 렌더링
+8. 성능 & 렌더링
     - 하이브리드 캐시:
         - 썸네일/지도 데이터를 디스크에 저장
-        - 재실행 시 메모리로 로드
+        - (썸네일, 지도 타일)재실행 시 메모리로 로드
+        - 메타데이터 메모리 캐시 적용
     - 멀티스레드 지원:
         - 최소 2개
         - CPU 코어 절반 사용
@@ -200,7 +235,7 @@ Licenses/
     - 안티앨리어싱 지원
     - WebP 애니메이션 모드: 고속 모드/품질 모드
 
-8. 다국어 지원
+9. 다국어 지원
     - 한국어
     - 영어
 
@@ -236,7 +271,7 @@ Licenses/
 ### ⬇️ 포터블 버전 제공
 - GitHub 릴리즈(Release) 페이지에서 빌드된 포터블 **.exe** 버전을 제공합니다.
 - 설치 없이 실행 파일을 다운로드하여 바로 사용할 수 있습니다.
-- 릴리즈 페이지: 
+- 포터블 버전 다운로드: 
     - https://github.com/ddodoki/dodoRynx/releases
 
 ## 📄 라이선스

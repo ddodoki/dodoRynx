@@ -380,8 +380,8 @@ class _FolderTree(QTreeView):
 
     path_activated = Signal(Path)
 
-    _SCROLL_RETRY_DELAYS  = (100, 200, 350, 550, 850, 1300, 2000)   # src_invalid 재시도
-    _RENDER_RETRY_DELAYS  = (100, 150, 200, 300, 500, 800, 1200, 1500)  # visualRect 빈 재시도
+    _SCROLL_RETRY_DELAYS  = (100, 200, 350, 550, 850, 1300, 2000) 
+    _RENDER_RETRY_DELAYS  = (100, 150, 200, 300, 500, 800, 1200, 1500)
 
     def __init__(self, empty_set: set, parent=None) -> None:
         super().__init__(parent)
@@ -399,7 +399,7 @@ class _FolderTree(QTreeView):
 
         self._settle_timer = QTimer(self)
         self._settle_timer.setSingleShot(True)
-        self._settle_timer.setInterval(250)   # 마지막 rowsInserted 후 250ms 대기
+        self._settle_timer.setInterval(250) 
         self._settle_timer.timeout.connect(self._on_settle_complete)
         self._settle_persistent_idx = QPersistentModelIndex()
 
@@ -467,13 +467,13 @@ class _FolderTree(QTreeView):
     def _on_rows_inserted(self, parent: QModelIndex, first: int, last: int) -> None:
         if self._fe_pending_scroll is not None:
             self._scroll_timer.start()
-        # settle 대기 중이면 타이머 리셋 (행 삽입이 계속되는 동안 계속 연장)
+
         if self._settle_persistent_idx.isValid():
             self._settle_timer.start()
 
 
     def navigate_to(self, path: Path) -> None:
-        # 새 탐색 시작 시 이전 settle 취소
+
         self._settle_timer.stop()
         self._settle_persistent_idx = QPersistentModelIndex()
         self._fe_pending_scroll = path
@@ -487,7 +487,6 @@ class _FolderTree(QTreeView):
                 self.expand(proxy_idx)
                 self.setCurrentIndex(proxy_idx)
         else:
-            # directoryLoaded 연결 (중복 방지)
             try:
                 self._fs_model.directoryLoaded.disconnect(self._on_directory_loaded)
             except (RuntimeError, TypeError):
@@ -661,8 +660,6 @@ class _FolderTree(QTreeView):
         self.setCurrentIndex(proxy_idx)
         self.scrollTo(proxy_idx, QAbstractItemView.ScrollHint.PositionAtCenter)
 
-        # ↓ 기존 _verify_scroll / _center_after_settle 호출 제거하고 아래로 교체
-        # rowsInserted가 멈출 때까지 대기 후 최종 센터 확정
         self._settle_persistent_idx = QPersistentModelIndex(proxy_idx)
         self._settle_timer.start()
 
@@ -720,7 +717,6 @@ class _FolderTree(QTreeView):
         self.clearSelection()
         self.setCurrentIndex(QModelIndex())
         self.scrollToTop()
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 즐겨찾기 탭 트리
@@ -967,7 +963,6 @@ class FolderExplorer(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # ── 상단 툴바 ──────────────────────────────────────────────
         toolbar_widget = QWidget()
         toolbar_widget.setObjectName("fe_toolbar")
         toolbar_widget.setStyleSheet(_TOOLBAR_STYLE)
@@ -1022,7 +1017,6 @@ class FolderExplorer(QWidget):
         toolbar_layout.addWidget(self._new_btn,   1)
         root.addWidget(toolbar_widget)
 
-        # ── 폴더 트리 (탭 없이 직접 배치) ─────────────────────────
         self._empty_set: set = set()
 
         self._normal_tree = _FolderTree(self._empty_set, self)
@@ -1033,7 +1027,6 @@ class FolderExplorer(QWidget):
         )
         root.addWidget(self._normal_tree, 1)
 
-        # _FavTree는 UI 없이 데이터/델리게이트 전용으로 유지
         self._fav_tree = _FavTree(self._empty_set, self)
         self._fav_tree.setVisible(False)
 

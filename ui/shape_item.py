@@ -23,9 +23,9 @@ class ResizableShapeItem(QGraphicsObject):
 
     TL, TM, TR, MR, BR, BM, BL, ML = range(8)
 
-    HANDLE_SCREEN_PX  = 9
-    MIN_SCREEN_PX     = 30
-    ROT_HANDLE_OFFSET_PX = 22 
+    HANDLE_SCREEN_PX     = 9
+    MIN_SCREEN_PX        = 30
+    ROT_HANDLE_OFFSET_PX = 22
     ROT_HANDLE_RADIUS_PX = 6
 
     HANDLE_CURSORS = [
@@ -39,18 +39,17 @@ class ResizableShapeItem(QGraphicsObject):
         Qt.CursorShape.SizeHorCursor,
     ]
 
-    about_to_change   = Signal()
-    properties_needed = Signal(object)
+    about_to_change    = Signal()
+    properties_needed  = Signal(object)
     DEFAULT_LINE_WIDTH = 3
-
 
     def __init__(
         self,
-        shape_type:  str,
-        rect:        QRectF,
-        pen_color:   QColor           = QColor(255, 80, 80),
-        fill_color:  Optional[QColor] = None,
-        line_width:  int              = 2,
+        shape_type: str,
+        rect:       QRectF,
+        pen_color:  QColor           = QColor(255, 80, 80),
+        fill_color: Optional[QColor] = None,
+        line_width: int              = 2,
     ) -> None:
         super().__init__()
         self._shape_type = shape_type
@@ -60,14 +59,14 @@ class ResizableShapeItem(QGraphicsObject):
         self._pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         self._fill_color = fill_color
 
-        self._active_handle:      int               = -1
-        self._drag_start_local:   Optional[QPointF] = None
-        self._rect_start:         Optional[QRectF]  = None
+        self._active_handle:    int               = -1
+        self._drag_start_local: Optional[QPointF] = None
+        self._rect_start:       Optional[QRectF]  = None
 
-        self._rotation_mode:      bool              = False
-        self._rot_center_scene:   Optional[QPointF] = None
-        self._rot_start_angle:    float             = 0.0
-        self._rot_initial:        float             = 0.0
+        self._rotation_mode:    bool              = False
+        self._rot_center_scene: Optional[QPointF] = None
+        self._rot_start_angle:  float             = 0.0
+        self._rot_initial:      float             = 0.0
 
         self.setFlags(
             QGraphicsItem.GraphicsItemFlag.ItemIsMovable    |
@@ -78,7 +77,6 @@ class ResizableShapeItem(QGraphicsObject):
         self.setZValue(50)
         self._sync_transform_origin()
         self._notified_this_press = False
-
 
     # ── 외부 API ────────────────────────────────────────────────────
 
@@ -127,7 +125,6 @@ class ResizableShapeItem(QGraphicsObject):
                 pass
         self.update()
 
-
     # ── 줌 배율 역산 ────────────────────────────────────────────────
 
     def _view_scale(self) -> float:
@@ -151,7 +148,6 @@ class ResizableShapeItem(QGraphicsObject):
     def _min_size_scene(self) -> float:
         return self._screen_to_scene(self.MIN_SCREEN_PX)
 
-
     # ── QGraphicsItem 구현 ──────────────────────────────────────────
 
     def boundingRect(self) -> QRectF:
@@ -159,7 +155,7 @@ class ResizableShapeItem(QGraphicsObject):
         rot_m    = self._screen_to_scene(
             self.ROT_HANDLE_OFFSET_PX + self.ROT_HANDLE_RADIUS_PX + 2
         )
-        m = max(handle_m, rot_m) 
+        m = max(handle_m, rot_m)
         return self._rect.normalized().adjusted(-m, -m, m, m)
 
 
@@ -168,14 +164,19 @@ class ResizableShapeItem(QGraphicsObject):
         st = self._shape_type
         hs = self._handle_half()
 
-        # 도형 본체 path
         body = QPainterPath()
-        if st in ('rect', 'rect_filled'):
+
+        if st == 'rect':
             body.addRect(r)
-        elif st in ('ellipse', 'ellipse_filled'):
+
+        elif st == 'rect_round':  
+            radius = min(r.width(), r.height()) * 0.15
+            body.addRoundedRect(r, radius, radius)
+
+        elif st == 'ellipse':
             body.addEllipse(r)
+
         elif st in ('line', 'arrow', 'cross'):
-            # 선 계열: pen 두께를 고려한 스트로크 영역 생성
             stroker = QPainterPathStroker()
             stroker.setWidth(max(self._pen.widthF(), 1.0) + self._screen_to_scene(8))
             raw = QPainterPath()
@@ -185,19 +186,23 @@ class ResizableShapeItem(QGraphicsObject):
             else:
                 raw.moveTo(r.topLeft()); raw.lineTo(r.bottomRight())
             body = stroker.createStroke(raw)
+
         elif st == 'triangle':
             body.moveTo(r.center().x(), r.top())
             body.lineTo(r.bottomRight())
             body.lineTo(r.bottomLeft())
             body.closeSubpath()
+
         elif st == 'star':
-            # star는 복잡하므로 bounding rect 사용
             body.addRect(r)
+
+        elif st in ('heart', 'diamond', 'pentagon'):      
+            body.addRect(r)  
+
         else:
             body.addRect(r)
 
-        # 핸들 영역 합집합 — 모든 도형에서 핸들 클릭 보장
-        handles = QPainterPath()
+        handles  = QPainterPath()
         for hx, hy in self._handle_centers():
             handles.addRect(QRectF(hx - hs, hy - hs, hs * 2, hs * 2))
 
@@ -220,17 +225,26 @@ class ResizableShapeItem(QGraphicsObject):
             r  = self._rect.normalized()
             st = self._shape_type
 
-            if st in ('rect', 'rect_filled'):
+            if st == 'rect':
                 painter.drawRect(r)
-            elif st in ('ellipse', 'ellipse_filled'):
+
+            elif st == 'rect_round':         
+                radius = min(r.width(), r.height()) * 0.15
+                painter.drawRoundedRect(r, radius, radius)
+
+            elif st == 'ellipse':
                 painter.drawEllipse(r)
+
             elif st == 'line':
                 painter.drawLine(r.topLeft(), r.bottomRight())
+
             elif st == 'arrow':
                 self._draw_arrow(painter, r.topLeft(), r.bottomRight())
+
             elif st == 'cross':
                 painter.drawLine(r.topLeft(),  r.bottomRight())
                 painter.drawLine(r.topRight(), r.bottomLeft())
+
             elif st == 'triangle':
                 path = QPainterPath()
                 path.moveTo(r.center().x(), r.top())
@@ -238,8 +252,24 @@ class ResizableShapeItem(QGraphicsObject):
                 path.lineTo(r.bottomLeft())
                 path.closeSubpath()
                 painter.drawPath(path)
+
             elif st == 'star':
                 self._draw_star(painter, r)
+
+            elif st == 'heart':                   
+                self._draw_heart(painter, r)
+
+            elif st == 'diamond':          
+                path = QPainterPath()
+                path.moveTo(r.center().x(), r.top())
+                path.lineTo(r.right(),       r.center().y())
+                path.lineTo(r.center().x(), r.bottom())
+                path.lineTo(r.left(),        r.center().y())
+                path.closeSubpath()
+                painter.drawPath(path)
+
+            elif st == 'pentagon':           
+                self._draw_polygon(painter, r, sides=5, start_angle=-90)
 
             if not self.isSelected():
                 return
@@ -253,17 +283,15 @@ class ResizableShapeItem(QGraphicsObject):
                  self._screen_to_scene(2),  self._screen_to_scene(2)
             ))
 
-            # 핸들
             hs = self._handle_half()
             painter.setPen(QPen(QColor(255, 255, 255), self._screen_to_scene(1.2)))
             painter.setBrush(QBrush(QColor(74, 158, 255)))
             for hx, hy in self._handle_centers():
                 painter.drawRect(QRectF(hx - hs, hy - hs, hs * 2, hs * 2))
 
-            # 수정 3: 회전 핸들 오프셋을 상수 기반으로 통일
-            cx  = r.center().x()
-            ty  = r.top() - self._screen_to_scene(self.ROT_HANDLE_OFFSET_PX)
-            cr  = self._screen_to_scene(self.ROT_HANDLE_RADIUS_PX)
+            cx = r.center().x()
+            ty = r.top() - self._screen_to_scene(self.ROT_HANDLE_OFFSET_PX)
+            cr = self._screen_to_scene(self.ROT_HANDLE_RADIUS_PX)
             painter.setPen(QPen(QColor(255, 200, 50), self._screen_to_scene(1.5)))
             painter.setBrush(QBrush(QColor(255, 200, 50, 180)))
             painter.drawEllipse(QPointF(cx, ty), cr, cr)
@@ -271,7 +299,6 @@ class ResizableShapeItem(QGraphicsObject):
 
         finally:
             painter.restore()
-
 
     # ── 핸들 위치 ────────────────────────────────────────────────────
 
@@ -300,8 +327,7 @@ class ResizableShapeItem(QGraphicsObject):
 
 
     def _handle_at(self, pos: QPointF) -> int:
-
-        hit_extra = self._screen_to_scene(2.0) 
+        hit_extra = self._screen_to_scene(2.0)
         hs = self._handle_half() + hit_extra
         for i, (hx, hy) in enumerate(self._handle_centers()):
             if QRectF(hx - hs, hy - hs, hs * 2, hs * 2).contains(pos):
@@ -316,15 +342,13 @@ class ResizableShapeItem(QGraphicsObject):
             self.about_to_change.emit()
         return super().itemChange(change, value)
 
-
     # ── 마우스 이벤트 ───────────────────────────────────────────────
 
     def _rotation_handle_rect(self) -> QRectF:
-        """회전 핸들(노란 원)의 hit 영역"""
-        r   = self._rect.normalized()
-        cx  = r.center().x()
-        ty  = r.top() - self._screen_to_scene(self.ROT_HANDLE_OFFSET_PX)
-        cr  = self._screen_to_scene(self.ROT_HANDLE_RADIUS_PX + 4) 
+        r  = self._rect.normalized()
+        cx = r.center().x()
+        ty = r.top() - self._screen_to_scene(self.ROT_HANDLE_OFFSET_PX)
+        cr = self._screen_to_scene(self.ROT_HANDLE_RADIUS_PX + 4)
         return QRectF(cx - cr, ty - cr, cr * 2, cr * 2)
 
 
@@ -337,7 +361,6 @@ class ResizableShapeItem(QGraphicsObject):
             self.setCursor(Qt.CursorShape.CrossCursor)
             super().hoverMoveEvent(event)
             return
-
         h = self._handle_at(event.pos())
         if h >= 0:
             self.setCursor(self.HANDLE_CURSORS[h])
@@ -348,9 +371,7 @@ class ResizableShapeItem(QGraphicsObject):
 
     def mousePressEvent(self, event) -> None:
         self._notified_this_press = False
-
         if event.button() == Qt.MouseButton.LeftButton:
-
             if self._is_rotation_handle(event.pos()):
                 self.about_to_change.emit()
                 self._notified_this_press = True
@@ -358,23 +379,22 @@ class ResizableShapeItem(QGraphicsObject):
                 self._rot_center_scene = self.mapToScene(
                     self._rect.normalized().center()
                 )
-                self._rot_start_angle  = self._scene_angle(
+                self._rot_start_angle = self._scene_angle(
                     event.scenePos(), self._rot_center_scene
                 )
-                self._rot_initial      = self.rotation()
+                self._rot_initial = self.rotation()
                 self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, False)
                 event.accept()
                 return
 
-            # 핸들 리사이즈 (기존과 동일)
             h_idx = self._handle_at(event.pos())
             if h_idx >= 0:
-                self._active_handle = h_idx
+                self._active_handle       = h_idx
                 self.about_to_change.emit()
                 self._notified_this_press = True
                 self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, False)
-                self._drag_start_local = self.mapFromScene(event.scenePos())
-                self._rect_start       = QRectF(self._rect)
+                self._drag_start_local    = self.mapFromScene(event.scenePos())
+                self._rect_start          = QRectF(self._rect)
                 event.accept()
                 return
 
@@ -426,37 +446,33 @@ class ResizableShapeItem(QGraphicsObject):
         self.properties_needed.emit(self)
         event.accept()
 
-
     # ── 리사이즈 ────────────────────────────────────────────────────
 
     def _apply_handle_resize(self, handle: int, delta_local: QPointF) -> None:
         if self._rect_start is None:
             return
         self.prepareGeometryChange()
-        r  = QRectF(self._rect_start)
+        r      = QRectF(self._rect_start)
         dx, dy = delta_local.x(), delta_local.y()
 
-        if handle in (self.TL, self.BL, self.ML): r.setLeft(r.left()   + dx)
-        if handle in (self.TR, self.MR, self.BR): r.setRight(r.right() + dx)
-        if handle in (self.TL, self.TM, self.TR): r.setTop(r.top()     + dy)
+        if handle in (self.TL, self.BL, self.ML): r.setLeft(r.left()     + dx)
+        if handle in (self.TR, self.MR, self.BR): r.setRight(r.right()   + dx)
+        if handle in (self.TL, self.TM, self.TR): r.setTop(r.top()       + dy)
         if handle in (self.BL, self.BM, self.BR): r.setBottom(r.bottom() + dy)
 
-        r_norm = r.normalized()
-
-        # 절대 하한(10 scene px)으로 폭발 방지
+        r_norm        = r.normalized()
         MIN_SCENE_ABS = 10.0
-        min_s = max(self._min_size_scene(), MIN_SCENE_ABS)
-
-        w_ok = r_norm.width()  >= min_s
-        h_ok = r_norm.height() >= min_s
+        min_s         = max(self._min_size_scene(), MIN_SCENE_ABS)
+        w_ok          = r_norm.width()  >= min_s
+        h_ok          = r_norm.height() >= min_s
 
         if w_ok and h_ok:
             self._rect = r_norm
-        elif w_ok:          # 높이만 한계 → 너비만 반영
+        elif w_ok:
             cur = QRectF(self._rect)
             cur.setLeft(r_norm.left()); cur.setRight(r_norm.right())
             self._rect = cur.normalized()
-        elif h_ok:          # 너비만 한계 → 높이만 반영
+        elif h_ok:
             cur = QRectF(self._rect)
             cur.setTop(r_norm.top()); cur.setBottom(r_norm.bottom())
             self._rect = cur.normalized()
@@ -468,6 +484,13 @@ class ResizableShapeItem(QGraphicsObject):
     def _sync_transform_origin(self) -> None:
         self.setTransformOriginPoint(self._rect.normalized().center())
 
+
+    def update_rect(self, rect: QRectF) -> None:
+        """드래그 중 미리보기 크기 업데이트용"""
+        self.prepareGeometryChange()
+        self._rect = QRectF(rect)
+        self._sync_transform_origin()
+        self.update()
 
     # ── 유틸 ────────────────────────────────────────────────────────
 
@@ -522,9 +545,65 @@ class ResizableShapeItem(QGraphicsObject):
         painter.drawPath(path)
 
 
-    def update_rect(self, rect: QRectF) -> None:
-        """드래그 중 미리보기 크기 업데이트용"""
-        self.prepareGeometryChange()
-        self._rect = QRectF(rect)
-        self._sync_transform_origin()
-        self.update()
+    @staticmethod
+    def _draw_heart(painter: QPainter, r: QRectF) -> None:
+        """
+        파라메트릭 하트 곡선
+        x = 16·sin³(t)
+        y = 13·cos(t) - 5·cos(2t) - 2·cos(3t) - cos(4t)
+        → 자동 정규화로 r에 꽉 맞게 스케일
+        """
+        cx, cy = r.center().x(), r.center().y()
+        hw, hh = r.width() / 2, r.height() / 2
+
+        N   = 120
+        raw = []
+        for i in range(N):
+            t  = math.radians(-180 + i * 360 / N)
+            hx =  16 * math.sin(t) ** 3
+            hy = -(13 * math.cos(t) 
+                - 5 * math.cos(2 * t)
+                - 2 * math.cos(3 * t)
+                -     math.cos(4 * t))
+            raw.append((hx, hy))
+
+        # bounding box 기준 정규화
+        xs   = [p[0] for p in raw]
+        ys   = [p[1] for p in raw]
+        cx0  = (min(xs) + max(xs)) / 2
+        cy0  = (min(ys) + max(ys)) / 2
+        sx   = (max(xs) - min(xs)) / 2  or 1
+        sy   = (max(ys) - min(ys)) / 2  or 1
+
+        path = QPainterPath()
+        for i, (hx, hy) in enumerate(raw):
+            qx = cx + (hx - cx0) / sx * hw
+            qy = cy + (hy - cy0) / sy * hh
+            if i == 0:
+                path.moveTo(qx, qy)
+            else:
+                path.lineTo(qx, qy)
+        path.closeSubpath()
+        painter.drawPath(path)
+
+
+    @staticmethod
+    def _draw_polygon(  
+        painter: QPainter,
+        r:       QRectF,
+        sides:   int,
+        start_angle: float = -90,
+    ) -> None:
+        cx, cy = r.center().x(), r.center().y()
+        rx, ry = r.width() / 2, r.height() / 2
+        path   = QPainterPath()
+        for i in range(sides):
+            angle = math.radians(start_angle + i * 360 / sides)
+            x = cx + rx * math.cos(angle)
+            y = cy + ry * math.sin(angle)
+            if i == 0:
+                path.moveTo(x, y)
+            else:
+                path.lineTo(x, y)
+        path.closeSubpath()
+        painter.drawPath(path)

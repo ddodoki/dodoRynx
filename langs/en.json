@@ -271,11 +271,18 @@
     }
   },
 
+  "loading_overlay": {
+    "anim_loading":  "Loading animation...",
+    "bg_loading":    "Loading AI model...",
+    "bg_inferring":  "Removing background..."
+  },  
+
   "dialog": {
     "open_file": "Open Image",
     "open_folder": "Open Folder",
     "save": "Save",
     "cancel": "Cancel",
+    "Cancelling": "Cancelling...",
     "yes": "Yes",
     "no": "No",
     "confirm_delete": "Delete File",
@@ -378,7 +385,7 @@
     "btn_discard":      "Discard",
     "error_title":      "Save Error",
     "save_as_title":    "Save As",
-    "save_as_filter":   "JPEG (*.jpg *.jpeg)"
+    "save_as_filter":   "Image files (*.jpg *.jpeg *.webp);;JPEG (*.jpg *.jpeg);;WebP (*.webp)"
   },
 
   "file_manager": {
@@ -576,6 +583,7 @@
     "crop":         "✂ Crop",
     "copy":         "⎘ Copy",
     "mosaic":       "⬛ Mosaic",
+    "filters":      "🎨 Filters",       
     "size_label":   "Size:",
     "resize_apply": "↔ Apply",
     "shape_color_tooltip": "Shape color",
@@ -589,6 +597,20 @@
     "color_dlg_shape": "Shape Color",
     "color_dlg_line": "Line Color",    
     "color_dlg_text":  "Text Color",
+    "fmt_label":    "Save:",
+    "fmt_jpg":      "JPG",
+    "fmt_webp":     "WEBP",
+    "quality_tip":  "Quality (higher = sharper, lower = smaller file)",
+    "bg_remove":        "✦ BG Remove",
+    "bg_remove_tip":    "Auto background removal (BEN2 Base · MIT)",
+    "crop_tip":     "Crop (cut selected area)",
+    "copy_tip":     "Copy (copy selection to clipboard)",
+    "mosaic_tip":   "Mosaic (pixelate selected area)",
+    "eraser_tip":   "Eraser",
+    "filters_tip":  "Open / close filter panel",
+    "ai_panel_tip": "Open / close AI tools panel",
+    "resize_tip":   "Resize image",
+    "shapes_tip":   "Insert shape / text",
     "shape": {
       "None":           "─ Select Shape ─",
       "rect":           "⬜ Rectangle",
@@ -601,7 +623,6 @@
       "triangle":       "▲ Triangle",
       "star":           "★ Star"
     },
-
     "line_style": {
       "solid":    "━ Solid",
       "dashed":   "╌ Dashed",
@@ -609,7 +630,56 @@
       "dash_dot": "┅ Dash-dot"
     }
   },
-  
+    "bg_remove": {
+    "dep_title":        "Package Required",
+    "dep_msg":          "Required packages are missing.\n\nRun the following command and restart:\n\n{cmd}",
+    "confirm_title":    "Background Removal",
+    "confirm_first":    "The AI model will be downloaded on first run (~150 MB).\n\nContinue?",
+    "cpu_warn":         "No GPU detected. Processing may take a while (CPU mode).",
+    "loading_model":    "Loading AI model... (includes first-time download)",
+    "inferring":        "Removing background...",
+    "done":             "Background removal complete",
+    "failed":           "Background removal failed:\n{error}",
+    "transparency_tip": "Result contains transparency.\nSave format switched to WEBP automatically.\nSaving as JPG will add a white background.",
+    "dl_title": "Download AI Model",
+    "dl_desc": "You are using the background removal feature for the first time.\nThe BEN2 ONNX model (223 MB) will be downloaded.\nThis will only happen once.",
+    "dl_cancel": "Cancel",
+    "dl_done": "Done ✓",
+    "dl_fail_title": "Download Failed",
+    "dl_fail_msg": "An error occurred while downloading the model.\nPlease check your internet connection.\n\n{error}"
+  },
+
+  "edit_filter_panel": {
+    "tab_basic":       "Basic",
+    "tab_style":       "Style",
+    "tab_pro":         "Pro",
+    "btn_reset":       "↺ Reset",
+    "intensity":       "Intensity",
+    "tip_reset_val":   "Double-click: Reset this value",
+    "tip_reset_int":   "Double-click: Reset intensity",
+    "basic": {
+      "brightness":  "Brightness",
+      "contrast":    "Contrast",
+      "saturation":  "Saturation",
+      "sharpness":   "Sharpness",
+      "temperature": "Temperature"
+    },
+    "style": {
+      "none":      "None",
+      "grayscale": "Grayscale",
+      "sepia":     "Sepia",
+      "vintage":   "Vintage"
+    },
+    "pro": {
+      "none":     "None",
+      "vignette": "Vignette",
+      "clarity":  "Clarity",
+      "grain":    "Film Grain",
+      "fade":     "Fade",
+      "glow":     "Glow"
+    }
+  },
+
   "metadata_labels": {
     "filename":         "Filename",
     "size":             "Size",
@@ -803,6 +873,106 @@
           "paste_no_clip":    "No files in clipboard.",
           "paste_fail":       "Paste failed:\n"
       }
+  },
+  
+  "ai_model_manager": {
+      "download_start":       "[{label}] Download started: {url}",
+      "download_cancelled":   "[{label}] Download cancelled",
+      "download_complete":    "[{label}] Download complete: {path}",
+      "zip_extracting":       "[{label}] Extracting ZIP...",
+      "zip_inner_not_found":  "Cannot find {target} inside ZIP.\nZIP contents: {contents}",
+      "zip_no_onnx":          "No .onnx file found inside ZIP",
+      "zip_extract_complete": "[{label}] Extraction complete: {path}",
+      "download_failed": "AI model download failed ({model_key}):\n{msg}"
+  },
+  "ai_panel": {
+    "header":            "✦  AI Tools",
+    "bg_group_title":    "🪄  BG Remove (BEN2)",
+    "btn_run_bg":        "🪄  Run",
+    "erase_group_title": "🧹  AI Eraser (LaMa)",
+    "btn_brush":         "✏  Brush",
+    "btn_run_erase":     "🧹  Run",
+    "btn_clear":         "↺  Clear Mask",
+    "status_checking":   "🔄 Checking...",
+    "status_loading":    "⏳ Loading...",
+    "status_ready":      "✅ Ready",
+    "status_no_model":   "💾 Not installed · Click to download",
+    "status_working":    "⚙ Processing..."
+  },
+  "dep_install_dialog": {
+    "window_title":     "AI Package Installation",
+    "title":            "AI Background Removal Package Setup",
+    "packages_label":   "The following packages will be installed:\n{packages}",
+    "size_warning":     "onnxruntime install size: approx. 15 MB",
+    "btn_install":      "Start Install",
+    "btn_cancel":       "Cancel",
+    "btn_done":         "Done ✓",
+    "btn_retry":        "Retry",
+    "error":            "Error: {error}\n",
+    "pkg_done_success": "\n✓ {pkg} done\n\n",
+    "pkg_done_failed":  "\n✗ {pkg} failed\n\n",
+    "all_done_success": "\nAll packages installed successfully. Starting background removal.\n",
+    "all_done_failed":  "\nInstallation failed. Check your internet connection or install manually.\n"
+  },
+  "edit_mode_mixin": {
+    "color_picker_title":         "Color",
+    "text_content_label":         "Text content (line breaks supported):",
+    "default_text":               "Text",
+    "text_input_title":           "Insert Text",
+    "text_edit_title":            "Edit Text",
+    "ai_erase_title":             "AI Eraser",
+    "ai_erase_guide":             "Please paint the area to erase with the brush first.",
+    "ai_erasing":                 "AI erasing...",
+    "model_download_title":       "{label} Download",
+    "model_download_desc":        "This is your first time using AI features.\nDownloading the {label} model.\nThis only needs to be done once.",
+    "ai_failed_title":            "AI Processing Failed",
+    "ai_failed_msg":              "An error occurred during processing.\n\n{msg}"
+  },
+  "eraser_mixin": {
+    "section_title":     "🧽 Eraser",
+    "size_tip":          "Size (mouse wheel also works)",
+    "color_pick_tip":    "Pick color",
+    "color_dialog_title":"Eraser Color",
+    "color_white":       "White",
+    "color_black":       "Black",
+    "color_gray":        "Gray"
+  },
+  "resize_mixin": {
+    "title":      "⤡ Resize",
+    "lock_tip":   "Lock / unlock aspect ratio",
+    "apply_tip":  "Apply",
+    "cancel_tip": "Cancel"
+  },
+  "shape_text_mixin": {
+    "sec_shape":         "SHAPE",
+    "sec_text":          "TEXT",
+    "shape_none":        "None",
+    "shape_rect":        "Rectangle",
+    "shape_rect_round":  "Rounded Rectangle",
+    "shape_ellipse":     "Ellipse",
+    "shape_line":        "Line",
+    "shape_arrow":       "Arrow",
+    "shape_cross":       "Cross",
+    "shape_triangle":    "Triangle",
+    "shape_star":        "Star",
+    "shape_heart":       "Heart",
+    "shape_diamond":     "Diamond",
+    "shape_pentagon":    "Pentagon",
+    "line_solid":        "Solid",
+    "line_dash":         "Dashed",
+    "line_dot":          "Dotted",
+    "pen_color_tip":     "Stroke color",
+    "pen_color_dialog":  "Stroke Color",
+    "stroke_opacity":    "Stroke opacity",
+    "fill_opacity":      "Fill opacity",
+    "font_tip":          "Font",
+    "font_size_tip":     "Font size (image pixels)",
+    "text_color_tip":    "Text color",
+    "text_color_dialog": "Text Color",
+    "btn_insert_text":   "＋ Insert Text",
+    "text_edit_title":   "Edit Text",
+    "text_label":        "Text",
+    "default_text":      "Text"
   }  
 
 }

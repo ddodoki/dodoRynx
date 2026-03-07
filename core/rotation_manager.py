@@ -49,7 +49,7 @@ _ORIENT_CW: dict[int, int] = {
     2: 7,  # H-flip        → H-flip+CW90 (transverse)
     3: 8,  # 180°          → CCW90
     4: 5,  # V-flip        → transpose
-    5: 2,  # transpose     → H-flip        ← 이번 케이스 (5 CW→2)
+    5: 2,  # transpose     → H-flip
     6: 3,  # CW90          → 180°
     7: 4,  # transverse    → V-flip
     8: 1,  # CCW90         → normal
@@ -181,7 +181,7 @@ class RotationManager:
 
     def __init__(self) -> None:
         self._state: Optional[RotationState] = None
-        self._lock = RLock()  # 스레드 안전성
+        self._lock = RLock() 
 
 
     def set_current_file(
@@ -222,7 +222,6 @@ class RotationManager:
     def get_state(self) -> Optional[RotationState]:
         return self._state
 
-
     # ── 회전 조작 ────────────────────────────────
 
     def rotate_left(self) -> None:
@@ -254,7 +253,6 @@ class RotationManager:
         self._state.preview_pixmap = None
         debug_print(f"rotation reset to {self._state.current_angle}")
                 
-
     # ── 저장 (apply) ─────────────────────────────
 
     def apply(self) -> bool:
@@ -316,7 +314,7 @@ class RotationManager:
         exif_dict = piexif.load(str(st.file_path))
         exif_dict["0th"][piexif.ImageIFD.Orientation] = new_orient
         exif_bytes = piexif.dump(exif_dict)
-        piexif.insert(exif_bytes, str(st.file_path))  # ← 파일 픽셀 데이터 건드리지 않음
+        piexif.insert(exif_bytes, str(st.file_path))
 
         return True
 
@@ -444,7 +442,6 @@ class RotationManager:
             info_print(f"{file_path.name} 픽셀 회전 저장: {angle}°")
         return True
 
-
     # ── 미리보기 ─────────────────────────────────
 
     def get_preview_pixmap(self, base_pixmap: QPixmap) -> QPixmap:
@@ -485,7 +482,6 @@ class RotationManager:
 
         return rotated
     
-
     # ── EXIF 헬퍼 ────────────────────────────────
 
     def _read_exif_orientation(self, file_path: Path) -> int:
@@ -495,7 +491,7 @@ class RotationManager:
                 if not exif:
                     return 1
                 ori = int(exif.get(EXIF_ORIENTATION_TAG, 1))
-                return ori if 1 <= ori <= 8 else 1  # 5,7 포함 전체 반환
+                return ori if 1 <= ori <= 8 else 1
         except Exception as e:
             warning_print(f"EXIF Orientation 읽기 실패: {file_path.name} {e}")
             return 1

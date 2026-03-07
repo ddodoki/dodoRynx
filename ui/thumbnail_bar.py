@@ -131,7 +131,8 @@ class ThumbnailLoader(QRunnable):
             try:
                 raw_data = HybridCache.qimage_to_bytes(qimage, fmt="JPEG", quality=60)
                 if raw_data:
-                    self.cache._db_save(cache_key, raw_data, None, None, source_mtime)
+                    #self.cache._db_save(cache_key, raw_data, None, None, source_mtime)
+                    self.cache.db_save(cache_key, raw_data, None, None, source_mtime)
             except Exception as e:
                 error_print(f"{self.file_path.name} DB 저장 실패: {e}")
 
@@ -146,7 +147,6 @@ class ThumbnailLoader(QRunnable):
 
     def cancel(self) -> None:
         self.cancelled = True
-
 
     # ──────────────────────────────────────────────────────────
     # 썸네일 생성
@@ -209,7 +209,6 @@ class ThumbnailLoader(QRunnable):
                         img.width * 3, QImage.Format.Format_RGB888)
             return qimg.copy()  
         
-
     # ──────────────────────────────────────────────────────────
     # XMP mtime 빠른 읽기
     # ──────────────────────────────────────────────────────────
@@ -225,7 +224,6 @@ class ThumbnailLoader(QRunnable):
             return xmp_path.stat().st_mtime
         except OSError:
             return 0.0
-
 
 # ============================================
 # 썸네일 아이템 (개별 썸네일)
@@ -599,7 +597,6 @@ class ThumbnailBar(QWidget):
                 border-top: 1px solid rgba(255, 255, 255, 0.07);
             }
         """)
-
 
     # ============================================
     # 썸네일 목록 관리
@@ -1010,7 +1007,7 @@ class ThumbnailBar(QWidget):
         try:
             self._scroll_timer.timeout.disconnect()
         except Exception:
-            pass  # ★ RuntimeError → Exception (disconnect 실패 시 connect 누적 방지)
+            pass
 
         self._pending_scroll_index = index
         self._scroll_timer.timeout.connect(lambda: self._do_scroll(index))

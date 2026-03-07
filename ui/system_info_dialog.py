@@ -46,7 +46,6 @@ class SystemInfoDialog(QDialog):
         """UI 초기화"""
         layout = QVBoxLayout(self)
         
-        # 제목
         title = QLabel(t('system_info_dialog.heading', name=APP_NAME))
         title.setStyleSheet("""
             font-size: 16px;
@@ -56,11 +55,9 @@ class SystemInfoDialog(QDialog):
         """)
         layout.addWidget(title)
         
-        # GPU 상태 표시 (강조)
         gpu_status = self._create_gpu_status_widget()
         layout.addWidget(gpu_status)
         
-        # 상세 정보 텍스트
         self.info_text = QTextEdit()
         self.info_text.setReadOnly(True)
         self.info_text.setFont(QFont("Consolas", 9))
@@ -79,7 +76,6 @@ class SystemInfoDialog(QDialog):
         
         layout.addWidget(self.info_text)
         
-        # 버튼
         button_layout = QHBoxLayout()
         button_layout.addStretch()
         
@@ -152,7 +148,6 @@ class SystemInfoDialog(QDialog):
         status_label.setWordWrap(True)
         layout.addWidget(status_label)
         
-        # 설정 변경 안내
         tip_label = QLabel(t('system_info_dialog.rendering_tip'))
         tip_label.setStyleSheet("color: #888; font-size: 10px; padding: 5px;")
         layout.addWidget(tip_label)

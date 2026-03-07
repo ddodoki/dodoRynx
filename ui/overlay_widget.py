@@ -29,7 +29,6 @@ _ZOOM_DEBOUNCE_MS = 600
 class OverlayWidget(QWidget):
     """이미지 정보 오버레이"""
     
-    
     # ============================================
     # 초기화
     # ============================================
@@ -125,7 +124,6 @@ class OverlayWidget(QWidget):
 
         self.map_label.hide()
         self.setVisible(False)
-
 
     # ============================================
     # 설정 관리
@@ -241,7 +239,6 @@ class OverlayWidget(QWidget):
         
         debug_print(f"오버레이 스케일 적용 완료")
 
-    
     # ============================================
     # 데이터 설정 및 표시
     # ============================================
@@ -549,7 +546,6 @@ class OverlayWidget(QWidget):
             self.raise_()
             debug_print(f"  오버레이 표시됨!")
 
-
     # ============================================
     # 지도 관련
     # ============================================
@@ -711,7 +707,6 @@ class OverlayWidget(QWidget):
         """실패 레이블 지연 숨김 — 세대가 일치할 때만 실행."""
         if getattr(self, '_fail_generation', 0) == generation:
             self.map_label.hide()
-
 
     # ============================================
     # 유틸리티

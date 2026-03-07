@@ -60,6 +60,7 @@ class ClickableLabel(QLabel):
         self._original_style = style
         super().setStyleSheet(style)
 
+
     def set_copy_value(self, value: str) -> None:
         self._copy_value = value
 
@@ -82,6 +83,7 @@ class ClickableLabel(QLabel):
         super().setStyleSheet(feedback_style)
         QToolTip.showText(global_pos, t('metadata_panel.copy_feedback'), self, self.rect(), 1200)
         self._feedback_timer.start(700)
+
 
     def _restore_style(self) -> None:
         super().setStyleSheet(self._original_style)

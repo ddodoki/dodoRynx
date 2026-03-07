@@ -18,7 +18,6 @@ class ImageEditor:
         self._original: Image.Image = self._qpixmap_to_pil(pixmap)
         self._working:  Image.Image = self._original.copy()
 
-
     # ── 공개 API ──────────────────────────────────────────────────────
 
     def reset(self) -> QPixmap:
@@ -36,6 +35,8 @@ class ImageEditor:
 
 
     def resize(self, width: int, height: int) -> QPixmap:
+        width  = max(1, width)
+        height = max(1, height)
         self._working = self._working.resize(
             (width, height), Image.Resampling.LANCZOS
         )
@@ -62,6 +63,20 @@ class ImageEditor:
     def get_region_pixmap(self, rect: QRectF) -> QPixmap:
         return self._region_to_qpixmap(rect)
 
+
+    def get_working(self) -> Image.Image:
+        """현재 작업 PIL Image 반환 (필터·모자이크 미리보기용)."""
+        return self._working
+
+
+    def set_working(self, img: Image.Image) -> None:
+        """작업 PIL Image 교체 (BG 제거·AI 지우개 결과 반영용)."""
+        self._working = img
+
+
+    def commit(self) -> None:
+        """_working을 새 _original로 확정."""
+        self._original = self._working.copy()
 
     # ── 내부 ──────────────────────────────────────────────────────────
 

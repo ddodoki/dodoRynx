@@ -21,8 +21,7 @@ from utils.debug import debug_print
 class MiniMapWidget(QWidget):
     """줌 시 현재 위치를 보여주는 미니맵"""
     
-    position_clicked = Signal(float, float)  # 비율 (0.0 ~ 1.0)
-
+    position_clicked = Signal(float, float) 
 
     # ============================================
     # 초기화
@@ -47,7 +46,6 @@ class MiniMapWidget(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.hide()
     
-
     # ============================================
     # 설정 (투명도, 썸네일)
     # ============================================
@@ -131,8 +129,6 @@ class MiniMapWidget(QWidget):
         # 최종 최대 크기 제한
         minimap_width = min(self.max_size, minimap_width)
         minimap_height = min(self.max_size, minimap_height)
-        
-        #debug_print(f"미니맵 크기: {minimap_width}x{minimap_height}")
         
         # 미니맵 위젯 크기 조정
         self.setFixedSize(minimap_width, minimap_height)

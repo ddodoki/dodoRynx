@@ -183,7 +183,6 @@ class ImageLoader:
         '.srw': ImageFormat.RAW,   # Samsung
     }
 
-
     # ── 초기화 ──────────────────────────────────
 
     def __init__(self):
@@ -191,7 +190,6 @@ class ImageLoader:
         self.error_count    = 0
         self.has_rawpy      = RAW_AVAILABLE
         self._rawpy_checked = True
-
 
     # ── 메인 로딩 (포맷 자동 선택) ──────────────
 
@@ -229,7 +227,6 @@ class ImageLoader:
         suffix = file_path.suffix.lower()
         return self.FORMAT_MAP.get(suffix, ImageFormat.UNKNOWN)
 
-
     # ── 포맷별 백엔드 로더 ───────────────────────
 
     def _load_raw(self, file_path, max_size=None):
@@ -242,10 +239,10 @@ class ImageLoader:
             with rawpy.imread(str(file_path)) as raw:
                 flip = raw.sizes.flip
 
-                # ① postprocess 전에 썸네일 추출 (libraw 제약)
+                # postprocess 전에 썸네일 추출 (libraw 제약)
                 thumb_deg = _read_thumb_orientation_deg(raw)
 
-                # ② 그 다음 postprocess
+                # 그 다음 postprocess
                 rgb = raw.postprocess(
                     use_camera_wb=True,
                     half_size=False,
@@ -502,7 +499,6 @@ class ImageLoader:
             error_print(f"Qt 로더 실패 ({file_path.name}): {e}")
             return None
 
-
     # ── 이미지 변환 / 리사이징 ───────────────────
 
     def _resize_pixmap(self, pixmap: QPixmap, max_size: Tuple[int, int]) -> QPixmap:
@@ -551,7 +547,6 @@ class ImageLoader:
         else:
             arr = np.array(img.convert('RGB'))
         return ImageLoader._numpy_to_qpixmap(arr)
-
 
     # ── EXIF 처리 ────────────────────────────────
 
@@ -660,7 +655,6 @@ class ImageLoader:
 
         except Exception:
             return 0
-
 
     # ── 애니메이션 지원 ─────────────────────────
 
@@ -794,7 +788,6 @@ class ImageLoader:
                 return False
         return False
 
-
     # ── 이미지 정보 ─────────────────────────────
 
     def get_image_info(self, file_path: Path) -> Dict[str, Any]:
@@ -858,7 +851,6 @@ class ImageLoader:
             size_float /= 1024.0
         return f"{size_float:.2f} TB"
 
-
     # ── 통계 ────────────────────────────────────
 
     def get_stats(self) -> Dict[str, Any]:
@@ -872,5 +864,3 @@ class ImageLoader:
     def reset_stats(self) -> None:
         """통계 초기화"""
         self.error_count = 0
-
-

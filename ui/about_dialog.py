@@ -36,12 +36,7 @@ class AboutDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle(t('about_dialog.title', name=APP_NAME))
-        
-        # ===== 창 크기 고정 =====
         self.setFixedSize(700, 850)
-        # =======================
-        
-        # 심플한 다크 테마
         self.setStyleSheet("""
             QDialog {
                 background-color: #1a1a1a;
@@ -118,7 +113,6 @@ class AboutDialog(QDialog):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         
-        # ===== 헤더 =====
         header = QWidget()
         header.setStyleSheet("""
             QWidget {

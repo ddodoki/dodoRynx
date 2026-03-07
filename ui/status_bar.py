@@ -121,6 +121,7 @@ class StatusMessageOverlay(QLabel):
         self._hide_timer = QTimer(self)
         self._hide_timer.setSingleShot(True)
         self._hide_timer.timeout.connect(self._start_fadeout)
+        self._anim_connected: bool = False
 
 
     def show_message(self, text: str, duration: int = 2000) -> None:
@@ -169,6 +170,7 @@ class StatusMessageOverlay(QLabel):
         self._fade_anim.setEndValue(0.0)
         self._fade_anim.setEasingCurve(QEasingCurve.Type.InCubic)
         self._fade_anim.finished.connect(self._on_hidden)
+        self._anim_connected = True
         self._fade_anim.start()
 
     def _on_hidden(self) -> None:
@@ -176,12 +178,14 @@ class StatusMessageOverlay(QLabel):
         self.setVisible(False)
 
     def _disconnect_hidden(self) -> None:
-        """finished 시그널 중복 연결 방지."""
+        if not self._anim_connected:     
+            return
         try:
             self._fade_anim.finished.disconnect(self._on_hidden)
-        except RuntimeError:
+        except (RuntimeError, TypeError):
             pass
-
+        finally:
+            self._anim_connected = False   
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # SortMenuButton
@@ -207,7 +211,6 @@ class SortMenuButton(QPushButton):
         QPushButton:pressed { background: rgba(74,158,255,0.30); }
     """
 
-    # 활성 항목: 텍스트 파란색 + 볼드, 체크 인디케이터 자체 아이콘 제거
     _MENU_STYLE = """
         QMenu {
             background-color: #1e1e1e; 
@@ -243,8 +246,8 @@ class SortMenuButton(QPushButton):
 
     _SHORT_LABELS: dict[tuple[str, bool], str] = {
         ("highlight",    False): "⭐",
-        ("name",         False): "⇅", 
-        ("name",         True):  "Az",
+        ("name",         False): "↕️", 
+        ("name",         True):  "🔤",
         ("created",      True):  "📅",
         ("created",      False): "📅",
         ("modified",     True):  "🕒",
@@ -258,7 +261,7 @@ class SortMenuButton(QPushButton):
 
 
     def __init__(self, parent=None, widget_height: int = 30) -> None:
-        super().__init__("⇅", parent)
+        super().__init__("↕️", parent)
         self._dirty: bool = False        
         self.setToolTip(t('statusbar.sort_btn_tooltip'))
         self.setStyleSheet(self._STYLE)
@@ -271,7 +274,7 @@ class SortMenuButton(QPushButton):
 
 
     def _build_menu(self) -> QMenu:
-        from PySide6.QtGui import QAction  # 지역 임포트 (순환 방지)
+        from PySide6.QtGui import QAction 
         m = QMenu(self)
         m.setStyleSheet(self._MENU_STYLE)
 
@@ -1093,7 +1096,7 @@ class AppStatusBar:
         lay.addWidget(self.sort_btn)
 
         # 듀얼 뷰
-        self.dual_view_btn = QPushButton("⧉")
+        self.dual_view_btn = QPushButton("🪟")
         self.dual_view_btn.setFixedSize(self._WIDGET_H, self._WIDGET_H)
         self.dual_view_btn.setFixedWidth(37)
         self.dual_view_btn.setToolTip(t('statusbar.dual_view_tooltip'))
@@ -1101,7 +1104,7 @@ class AppStatusBar:
         lay.addWidget(self.dual_view_btn)
 
         # 편집 모드
-        self.edit_mode_btn = QPushButton("🎨")
+        self.edit_mode_btn = QPushButton("🖌")
         self.edit_mode_btn.setFixedSize(self._WIDGET_H, self._WIDGET_H)
         self.edit_mode_btn.setFixedWidth(37)
         self.edit_mode_btn.setToolTip(t('statusbar.edit_mode_tooltip'))
@@ -1267,7 +1270,6 @@ class StatusBarController:
     def _on_sort_order_changed(self, sort_order: SortOrder, reverse: bool) -> None:
         """폴더 이동 후 복원된 정렬 기준 → 버튼 UI 동기화 (folder_changed 대체)"""
         self._sb.sort_btn.update_active_sort(sort_order.value, reverse)
-        # update_active_sort 내부에서 clear_dirty() 이미 호출됨
 
 
     def _on_highlight_changed(self, file_path, is_highlighted) -> None:
@@ -1394,7 +1396,6 @@ class StatusBarController:
 
         mw.navigator.sort_files_async(sort_order, reverse, on_completed=on_sort_done)
 
-
     # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     # 파일 작업 (FILE_OP  P0)
     # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1421,7 +1422,6 @@ class StatusBarController:
             toast_text=toast or t('statusbar.file_op_done_short'),
         )
     
-
     # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     # 폴더 스캔 (SCAN  P2)
     # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1447,7 +1447,6 @@ class StatusBarController:
             toast_text=t('statusbar.scan_done_toast',   total=total),
         )
 
-
     # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     # 썸네일 로딩 (THUMB  P3)
     # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1472,7 +1471,6 @@ class StatusBarController:
             finish_text=t('statusbar.thumb_done', total=total),
             toast_text=t('statusbar.thumb_done', total=total),
         )
-
 
     # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     # 성능 오버레이

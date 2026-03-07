@@ -150,7 +150,6 @@ class MainWindow(QMainWindow):
     @property
     def status_message_label(self):
         return getattr(self.status_bar, 'status_message_label', None)
-
     @property
     def status_message_timer(self):
         return getattr(self.status_bar, 'status_message_timer', None)
@@ -160,16 +159,14 @@ class MainWindow(QMainWindow):
 # 초기화
 # ============================================
         
-    def __init__(self, config: ConfigManager, initial_file: Optional[Path] = None) -> None:
+    def __init__(self, config: ConfigManager) -> None:
         super().__init__()
         self.config = config
         self._initialization_complete = False
 
         self._set_window_icon()
         self._setup_initial_palette()
-
         self._init_all()
-
         self._initialization_complete = True
 
 
@@ -181,7 +178,6 @@ class MainWindow(QMainWindow):
         self.setPalette(palette)
         self.setAutoFillBackground(True)
         self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent)
-        self.setMinimumSize(1200, 800)
 
 
     def _init_all(self) -> None:
@@ -204,59 +200,55 @@ class MainWindow(QMainWindow):
         self._post_init()
         self.menu_ctrl = MenuShortcutController(self)
         self.menu_ctrl.setup()
-
+    
 
     def _init_core(self) -> None:
-        """
-        Step 1 — UI 없이 동작하는 핵심 데이터 객체 초기화.
-        """
-        # 설정
+        """Step 1 — UI 없이 동작하는 핵심 데이터 객체 초기화."""
         self.overlay_enabled: bool = self.config.get_overlay_setting("enabled", False)
 
-        # 핵심 컴포넌트 (타입 힌트 명시)
-        self.navigator:        FolderNavigator  = FolderNavigator()
-        self.cache_manager:    CacheManager     = CacheManager(
+        self.navigator:         FolderNavigator   = FolderNavigator()
+        self.cache_manager:     CacheManager      = CacheManager(
             ahead_count   = self.config.get('cache.ahead_count',    25),
             behind_count  = self.config.get('cache.behind_count',    5),
             max_memory_mb = self.config.get('cache.max_memory_mb', 500),
         )
-        self.perf_monitor:     PerformanceMonitor = PerformanceMonitor()
+        self.perf_monitor:      PerformanceMonitor = PerformanceMonitor()
         self.current_cpu_usage: float = 0.0
-        self.folder_watcher:   FolderWatcher    = FolderWatcher(FolderNavigator.SUPPORTED_EXTENSIONS)
-        self.imageloader:      ImageLoader      = ImageLoader()
-        self.rotation_manager: RotationManager  = RotationManager()
-        self.file_manager:     FileManager      = FileManager(self)
+        self.folder_watcher:    FolderWatcher     = FolderWatcher(FolderNavigator.SUPPORTED_EXTENSIONS)
+        self.imageloader:       ImageLoader       = ImageLoader()
+        self.rotation_manager:  RotationManager   = RotationManager()
+        self.file_manager:      FileManager       = FileManager(self)
 
         # 상태 플래그
         self._current_file:           Optional[Path] = None
         self.is_fullscreen:           bool           = False
-        self._print_manager = None
+        self._print_manager                          = None
+        self._meta_prefetch_pool:     Optional[object] = None 
         self._edit_locked:            bool           = False
         self.pending_rotation_for:    Optional[Path] = None
-        self._is_deleting: bool = False
+        self._is_deleting:            bool           = False
+        self._is_closing:             bool           = False 
 
-        # open_image/open_folder 상태 (hasattr 제거용)
+        # open_image/open_folder 상태
         self._pending_file_to_open:   Optional[Path] = None
         self._open_first_on_scan:     bool           = False
 
-        # 전체화면 진입 전 UI 상태 저장 (hasattr 제거용, #_toggle_fullscreen 패치)
-        self._pre_fullscreen_thumb_visible:  bool = True
-        self._pre_fullscreen_meta_visible:   bool = True
-        self._pre_fullscreen_status_visible: bool = True
-        self._pre_fullscreen_overlay_visible: bool = True
+        # 전체화면 진입 전 UI 상태
+        self._pre_fullscreen_thumb_visible:       bool = True
+        self._pre_fullscreen_meta_visible:        bool = True
+        self._pre_fullscreen_status_visible:      bool = True
+        self._pre_fullscreen_overlay_visible:     bool = True
+        self._pre_fullscreen_sec_overlay_visible: bool = False
 
-        # 타이머
         self.hide_timer = QTimer(self)
         self.hide_timer.timeout.connect(self._auto_hide_ui)
         self.hide_timer.setSingleShot(True)
 
-        # GPS 프리패치 signals — MainWindow 수명과 동일하게 관리
         self._prefetch_signals = _GpsReaderSignals()
         self._prefetch_signals.ready.connect(
             _prefetcher.schedule,
             Qt.ConnectionType.QueuedConnection
         )
-
         debug_print("_init_core() 완료")
 
 
@@ -277,7 +269,7 @@ class MainWindow(QMainWindow):
         self.h_splitter = QSplitter(Qt.Orientation.Horizontal)
 
         # ──────────────────────────────────────────────────────
-        # [수정] ① FolderExplorer — index 0, 기본 숨김
+        # FolderExplorer — index 0, 기본 숨김
         # ──────────────────────────────────────────────────────
         self.folder_explorer = FolderExplorer(self)
         self.folder_explorer.set_main_window(self)
@@ -290,7 +282,7 @@ class MainWindow(QMainWindow):
         self.h_splitter.addWidget(self.folder_explorer)   # index 0
 
         # ──────────────────────────────────────────────────────
-        # [기존 유지] ② 왼쪽: 이미지 뷰어 + 썸네일 — index 1
+        # 왼쪽: 이미지 뷰어 + 썸네일 — index 1
         # ──────────────────────────────────────────────────────
         left_widget = QWidget()
         left_layout = QVBoxLayout(left_widget)
@@ -504,9 +496,7 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(3000, self._warmup_edit_toolbar)
 
         saved_sizes = self.config.get("window.splitter_sizes", None)
-
-        # 한 번만 읽기
-        fe_visible = self.config.is_folder_explorer_visible()
+        fe_visible  = self.config.is_folder_explorer_visible()
 
         if saved_sizes and len(saved_sizes) == 3:
             self.h_splitter.setSizes(saved_sizes)
@@ -514,7 +504,6 @@ class MainWindow(QMainWindow):
             fe_w = self._fe_panel_width if fe_visible else 0
             self.h_splitter.setSizes([fe_w, 1140 - fe_w, 300])
 
-        # 반드시 실제 위젯에 적용
         self.folder_explorer.setVisible(fe_visible)
 
 
@@ -557,7 +546,7 @@ class MainWindow(QMainWindow):
                 warning_print(f"아이콘 로드 실패: {icon_path}")
         else:
             warning_print(f"아이콘 파일 없음: {icon_path}")
-
+        
 
 # ============================================
 # Qt 이벤트 오버라이드
@@ -592,128 +581,112 @@ class MainWindow(QMainWindow):
                 
 
     def closeEvent(self, event) -> None:
-        """프로그램 종료 이벤트"""
-        debug_print(f"========== 프로그램 종료 시작 ==========")
-
-        # 가장 먼저: prefetcher 즉시 취소 (2500ms 타이머 + 큐 + 진행 중 로더)
+        
+        self._is_closing = True
+        debug_print("========== 프로그램 종료 시작 ==========")
+        
+        # 1. 진행 중인 백그라운드 작업 즉시 취소
         try:
             _prefetcher.cancel()
         except Exception as e:
             warning_print(f"prefetcher 취소 실패: {e}")
-                    
-        # 오버레이 정리
-        if hasattr(self, 'overlay_widget'):
+
+        # 메타 프리페치 풀 종료
+        if hasattr(self, '_meta_prefetch_pool'):
             try:
-                self.overlay_widget.clear()
-                debug_print(f"오버레이 위젯 정리 완료")
+                self._meta_prefetch_pool.shutdown(wait=False)       # type: ignore[attr-defined]
+                debug_print("메타 프리페치 풀 종료")
             except Exception as e:
-                warning_print(f"오버레이 정리 실패: {e}")
-        
-        # 오버레이 상태 저장
-        if hasattr(self, 'overlay_enabled'):
-            debug_print(f"오버레이 상태 저장: enabled={self.overlay_enabled}")
-            self.config.set_overlay_setting("enabled", self.overlay_enabled)
-        
-        # 창 상태 저장
-        try:
-            # ===== QByteArray → str 변환 (Python 3.12+ 호환) =====
-            from PySide6.QtCore import QByteArray
-            
-            # Geometry 저장
-            geometry_qba: QByteArray = self.saveGeometry().toBase64()
-            # .data()가 memoryview를 반환할 수 있으므로 bytes()로 감싸기
-            geometry = bytes(geometry_qba.data()).decode('utf-8') 
-            self.config.set('window.geometry', geometry)
-            debug_print(f"창 geometry 저장 완료")
-            
-            # State 저장
-            state_qba: QByteArray = self.saveState().toBase64()
-            # .data()가 memoryview를 반환할 수 있으므로 bytes()로 감싸기
-            state = bytes(state_qba.data()).decode('utf-8')  
-            self.config.set('window.state', state)
-            debug_print(f"창 state 저장 완료")
-            
-            # Splitter 크기 저장
-            splitter_sizes = self.h_splitter.sizes()
-            self.config.set('window.splitter_sizes', splitter_sizes)
-            debug_print(f"Splitter 크기 저장: {splitter_sizes}")
-        
-        except Exception as e:
-            error_print(f"창 상태 저장 실패: {e}")
-        
-        # 설정 저장
-        self.config.save()
-        debug_print(f"설정 저장 완료")
+                warning_print(f"메타 프리페치 풀 종료 실패: {e}")
 
-        # 폴더 감시 중지
-        if hasattr(self, 'folder_watcher'):
-            try:
-                self.folder_watcher.stop_watching()
-                debug_print(f"폴더 감시 중지")
-            except Exception as e:
-                warning_print(f"폴더 감시 중지 실패: {e}")
-
-        # 폴더 탐색기
-        if hasattr(self, "folder_explorer"):
-            try:
-                self.folder_explorer.deactivate()   # OS 핸들 해제
-                debug_print("folder_explorer 정리 완료")
-            except Exception as e:
-                warning_print(f"folder_explorer 정리 실패: {e}")
-
-        # 캐시 정리
-        if hasattr(self, 'cache_manager'):
-            try:
-                self.cache_manager.clear()
-                debug_print(f"캐시 정리 완료")
-            except Exception as e:
-                warning_print(f"캐시 정리 실패: {e}")
-        
-        # 썸네일 스레드 풀 정리
-        if hasattr(self, 'thumbnail_bar'):
-            if hasattr(self.thumbnail_bar, 'thread_pool'):
-                try:
-                    self.thumbnail_bar.thread_pool.waitForDone(1000)
-                    debug_print(f"썸네일 스레드 풀 정리 완료")
-                except Exception as e:
-                    warning_print(f"썸네일 스레드 풀 정리 실패: {e}")
-
-        # 썸네일 캐시 DB 정리 (종료 시 1회)
-        if hasattr(self, 'thumbnail_bar'):
-            cache = getattr(self.thumbnail_bar, '_thumb_cache', None)
-            if cache and hasattr(cache, '_db_vacuum'):
-                try:
-                    cache._db_vacuum()  # VACUUM으로 파편화 제거
-                    debug_print("썸네일 DB VACUUM 완료")
-                except Exception as e:
-                    warning_print(f"DB VACUUM 실패: {e}")
-
-        # 메타데이터 캐시 정리
-        if hasattr(self, 'metadata_panel'):
-            if hasattr(self.metadata_panel, 'metadata_reader'):
-                try:
-                    self.metadata_panel.metadata_reader.clear_cache()
-                    debug_print(f"메타데이터 캐시 정리 완료")
-                except Exception as e:
-                    warning_print(f"메타데이터 캐시 정리 실패: {e}")
-        
+        # 파일 작업 스레드 취소
         if hasattr(self.file_manager, '_file_worker') and self.file_manager._file_worker:
             self.file_manager._file_worker.cancel()
-            self.file_manager._file_worker.wait(3000)   # 최대 3초 대기
+            self.file_manager._file_worker.wait(3000)
 
+        # 정렬 스레드 취소
         if hasattr(self.navigator, '_sort_thread') and self.navigator._sort_thread:
             self.navigator._sort_thread.cancel()
             self.navigator._sort_thread.wait(2000)
 
+        # 스캔 스레드 취소
         if hasattr(self.navigator, 'scan_thread') and self.navigator.scan_thread:
-            self.navigator.scan_thread.requestInterruption()
+            self.navigator.scan_thread.cancel()     
             self.navigator.scan_thread.wait(2000)
 
-        # 프리패치 스레드 종료 대기 (최대 2초)
+        # 2. 오버레이 정리
+        if hasattr(self, 'overlay_widget'):
+            try:
+                self.overlay_widget.clear()
+            except Exception as e:
+                warning_print(f"오버레이 정리 실패: {e}")
+
+        # 3. 오버레이 상태 저장
+        if hasattr(self, 'overlay_enabled'):
+            self.config.set_overlay_setting("enabled", self.overlay_enabled)
+
+        # 4. 창 상태 저장
+        try:
+            from PySide6.QtCore import QByteArray
+            geometry = bytes(self.saveGeometry().toBase64().data()).decode('utf-8')
+            self.config.set('window.geometry', geometry)
+            state = bytes(self.saveState().toBase64().data()).decode('utf-8')
+            self.config.set('window.state', state)
+            self.config.set('window.splitter_sizes', self.h_splitter.sizes())
+        except Exception as e:
+            error_print(f"창 상태 저장 실패: {e}")
+
+        self.config.save()
+
+        # 5. 폴더 감시 중지
+        if hasattr(self, 'folder_watcher'):
+            try:
+                self.folder_watcher.stop_watching()
+            except Exception as e:
+                warning_print(f"폴더 감시 중지 실패: {e}")
+
+        # 6. 폴더 탐색기 정리
+        if hasattr(self, "folder_explorer"):
+            try:
+                self.folder_explorer.deactivate()
+            except Exception as e:
+                warning_print(f"folder_explorer 정리 실패: {e}")
+
+        # 7. 캐시 정리 (프리페치 풀 종료 후)
+        if hasattr(self, 'cache_manager'):
+            try:
+                self.cache_manager.clear()
+            except Exception as e:
+                warning_print(f"캐시 정리 실패: {e}")
+
+        # 8. 썸네일 스레드 풀 정리
+        if hasattr(self, 'thumbnail_bar'):
+            if hasattr(self.thumbnail_bar, 'thread_pool'):
+                try:
+                    self.thumbnail_bar.thread_pool.waitForDone(1000)
+                except Exception as e:
+                    warning_print(f"썸네일 스레드 풀 정리 실패: {e}")
+
+            cache = getattr(self.thumbnail_bar, '_thumb_cache', None)
+            if cache and hasattr(cache, '_db_vacuum'):
+                try:
+                    cache._db_vacuum()
+                except Exception as e:
+                    warning_print(f"DB VACUUM 실패: {e}")
+
+        # 9. 메타데이터 캐시 정리
+        if hasattr(self, 'metadata_panel'):
+            if hasattr(self.metadata_panel, 'metadata_reader'):
+                try:
+                    self.metadata_panel.metadata_reader.clear_cache()
+                except Exception as e:
+                    warning_print(f"메타데이터 캐시 정리 실패: {e}")
+
+        # 10. 글로벌 스레드 풀 정리
         QThreadPool.globalInstance().clear()
         QThreadPool.globalInstance().waitForDone(500)
 
-        debug_print(f"========== 프로그램 종료 완료 ==========")
+        debug_print("========== 프로그램 종료 완료 ==========")
         event.accept()
 
 
@@ -745,9 +718,8 @@ class MainWindow(QMainWindow):
             try:
                 from PySide6.QtCore import QByteArray
                 
-                # 문자열 → bytes → QByteArray
-                geometry_bytes = geometry.encode('utf-8')  # 문자열을 bytes로
-                geometry_array = QByteArray.fromBase64(geometry_bytes)  # base64 디코딩
+                geometry_bytes = geometry.encode('utf-8')
+                geometry_array = QByteArray.fromBase64(geometry_bytes)
                 
                 self.restoreGeometry(geometry_array)
                 debug_print(f"창 geometry 복원 완료")
@@ -809,7 +781,7 @@ class MainWindow(QMainWindow):
     def _on_dual_mode_changed(self, enabled: bool) -> None:
         if enabled:
             sec_index = self.navigator.current_index + 1
-            self._load_secondary_deferred(sec_index)   # ← 딜레이 없이 직접 호출
+            self._load_secondary_deferred(sec_index) 
             self.thumbnail_bar.set_secondary_index(sec_index)
         else:
             self.thumbnail_bar.clear_secondary_index()
@@ -854,19 +826,16 @@ class MainWindow(QMainWindow):
         if self.navigator.current_folder == folder and self.navigator.image_files:
             try:
                 index = self.navigator.image_files.index(file_path)
-                self.navigator.go_to(index)          # #5 패치에서 추가될 메서드
+                self.navigator.go_to(index) 
                 info_print(f"같은 폴더 내 파일 이동: {file_path.name} → index {index}")
                 return
             except ValueError:
                 warning_print(f"파일이 목록에 없음, 재스캔: {file_path.name}")
 
-        # 다른 폴더이거나 목록에 없으면 → 재스캔
-        # 기존 클로저 잔존 방지: 항상 이전 것을 먼저 해제 후 재연결
         self._pending_file_to_open = file_path
-        self._open_first_on_scan   = False   # open_image는 첫 번째 자동선택 불필요
+        self._open_first_on_scan   = False
 
         self.navigator.scan_folder(folder)
-        # 클로저 완전 제거: _on_folder_scan_completed 단일 경로로 처리
 
 
     def open_folder(self, folder_path: Path) -> None:
@@ -981,6 +950,7 @@ class MainWindow(QMainWindow):
 
         self.cache_manager.set_image_list(image_list)
         self.thumbnail_bar.set_image_list(image_list, current_index)
+        QTimer.singleShot(0, lambda: self.navigator.go_to(current_index))
         #self._load_current_image()
 
         # 썸네일 로딩(16ms 타이머) 시작 이후로 트리 탐색을 지연
@@ -1082,7 +1052,7 @@ class MainWindow(QMainWindow):
 
         if self.dual_view_panel.is_dual_mode:
             sec_index = self.navigator.current_index + 1
-            self._load_secondary_deferred(sec_index)       # ← QTimer 제거
+            self._load_secondary_deferred(sec_index) 
             self.thumbnail_bar.set_secondary_index(sec_index)
                     
         # UI 업데이트
@@ -1091,8 +1061,60 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(f"{self._current_file.name} - dodoRynx")
         
         self.perf_monitor.end_load()
-        
+
+        # ── 프리페치: 앞뒤 2장 백그라운드 캐싱 ──────────────
+        self._prefetch_metadata_neighbors()        
+
         debug_print(f"_load_current_image 완료")
+
+
+    def _prefetch_metadata_neighbors(self) -> None:
+        """현재 인덱스 기준 ±2 파일 메타데이터 백그라운드 프리페치"""
+        idx = self.navigator.current_index
+        total = len(self.navigator.image_files)
+        
+        targets = [
+            i for i in [idx + 1, idx + 2, idx - 1, idx - 2]
+            if 0 <= i < total
+        ]
+
+        for i, target_idx in enumerate(targets):
+            filepath = self.navigator.image_files[target_idx]
+            delay = (i + 1) * 80
+            QTimer.singleShot(
+                delay,
+                lambda p=filepath, s=idx: self._prefetch_single_metadata(p, s)
+            )
+
+
+    def _prefetch_single_metadata(self, filepath: Path,
+                                snapshot_index: int) -> None:
+        # 종료 중이면 즉시 반환
+        if getattr(self, '_is_closing', False):
+            return
+
+        # 정렬 중이면 스킵
+        if self.navigator._sort_thread and self.navigator._sort_thread.isRunning():
+            return
+
+        if self.navigator.current_index != snapshot_index:
+            return
+        if self.metadata_panel.metadata_reader.get_from_cache(filepath):
+            return
+        if filepath == self.navigator.current():
+            return
+
+        # 백그라운드 스레드에서 파싱
+        if self._meta_prefetch_pool is None: 
+            from concurrent.futures import ThreadPoolExecutor
+            self._meta_prefetch_pool = ThreadPoolExecutor(max_workers=1)
+
+        try:                                    
+            self._meta_prefetch_pool.submit(            # type: ignore[attr-defined]
+                self.metadata_panel.metadata_reader.read, filepath
+            )
+        except RuntimeError:
+            pass
 
 
     @Slot(int)
@@ -1158,10 +1180,9 @@ class MainWindow(QMainWindow):
         if self._edit_lock_guard("이미지 이동"): return
         if not self.navigator.image_files: return
         self._clear_all_temp_highlights()
-        if not self.navigator.next():           # 경계 피드백만 담당
+        if not self.navigator.next():  
             self._show_status_message("This is the last image.", 1200)
-        # _load_current_image() 제거 — go_to() → index_changed → _on_index_changed가 처리
-        
+
 
     def _previous_image(self) -> None:
         if self._edit_lock_guard("이미지 이동"): return
@@ -1175,7 +1196,7 @@ class MainWindow(QMainWindow):
         if self._edit_lock_guard("이미지 이동"): return
         if not self.navigator.image_files: return
         self._clear_all_temp_highlights()
-        self.navigator.first()                  # 반환값 불필요
+        self.navigator.first()    
         
 
     def _last_image(self) -> None:
@@ -1188,7 +1209,7 @@ class MainWindow(QMainWindow):
     @Slot(Path)
     def _on_highlight_toggle_requested(self, file_path: Path) -> None:
         """ThumbnailBar Ctrl+클릭 → Navigator 토글 → 시그널로 ThumbnailBar에 반영"""
-        self.navigator.toggle_highlight(file_path)  # highlight_changed 자동 emit
+        self.navigator.toggle_highlight(file_path) 
         count = self.navigator.get_highlight_count()
         self._show_status_message(t('status.highlight_count', count=count), 1500)
 
@@ -1312,7 +1333,6 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
 
-        # fallback: 기존 파일 기준 붙여넣기 (target = current_file.parent)
         if hasattr(self, "file_manager"):
             if hasattr(self.file_manager, "paste_file"):
                 self.file_manager.paste_file()
@@ -1377,17 +1397,20 @@ class MainWindow(QMainWindow):
         if hasattr(self, "folder_explorer") and self.folder_explorer:
             self.folder_explorer.on_files_changed(file_path)
 
+
     @Slot(Path)
     def _on_fs_file_deleted(self, file_path: Path) -> None:
         self.file_manager.on_file_deleted(file_path)
         if hasattr(self, "folder_explorer") and self.folder_explorer:
             self.folder_explorer.on_files_changed(file_path)
 
+
     @Slot(Path)
     def _on_fs_file_modified(self, file_path: Path) -> None:
         self.file_manager.on_file_modified(file_path)
         if hasattr(self, "folder_explorer") and self.folder_explorer:
             self.folder_explorer.on_files_changed(file_path)
+
 
     @Slot(Path, Path)
     def _on_fs_file_moved(self, src_path: Path, dest_path: Path) -> None:
@@ -1396,6 +1419,7 @@ class MainWindow(QMainWindow):
             # moved는 (src,dst)라서 FolderExplorer에는 각각 1개씩 알려줘야 안전
             self.folder_explorer.on_files_changed(src_path)
             self.folder_explorer.on_files_changed(dest_path)
+
 
     @Slot(list)
     def _on_fs_batch_deleted(self, deleted_files: list) -> None:
@@ -1414,6 +1438,7 @@ class MainWindow(QMainWindow):
                     self.folder_explorer.refresh_empty_state(p)
                 except Exception:
                     pass
+
 
     @Slot(list)
     def _on_fs_batch_added(self, added_files: list) -> None:
@@ -1495,7 +1520,6 @@ class MainWindow(QMainWindow):
         """
         하이라이트 상태 동기화 (Single Source of Truth: Navigator).
         """
-        # QApplication.instance() 체크로 Qt 이벤트 루프 안전성 확보
         if QApplication.instance() is None:
             return
 
@@ -1505,7 +1529,6 @@ class MainWindow(QMainWindow):
 
             highlighted: set[Path] = set(self.navigator.get_highlighted_files())
 
-            # ThumbnailBar.highlighted_files를 navigator 기준으로 완전 교체 (SSOT)
             self.thumbnail_bar.highlighted_files = highlighted.copy()
 
             # 모든 썸네일 아이템 일괄 업데이트
@@ -1563,7 +1586,7 @@ class MainWindow(QMainWindow):
         self.image_viewer.metadata_visible = visible
         self.config.set_ui_visibility("metadata", visible)
 
-        sizes = self.h_splitter.sizes()          # [fe_w, viewer_w, meta_w]
+        sizes = self.h_splitter.sizes()
         fe_w, viewer_w, meta_w = sizes[0], sizes[1], sizes[2]
         total = fe_w + viewer_w + meta_w
 
@@ -1637,7 +1660,7 @@ class MainWindow(QMainWindow):
 
             self.image_viewer.set_fullscreen_mode(False)
             try:
-                self.dual_view_panel._secondary.set_fullscreen_mode(False)
+                self.dual_view_panel.secondary_viewer.set_fullscreen_mode(False)
             except AttributeError:
                 pass
 
@@ -1662,7 +1685,7 @@ class MainWindow(QMainWindow):
             self.image_viewer.set_zoom_mode('fit')
             try:
                 if self.dual_view_panel.is_dual_mode:
-                    self.dual_view_panel._secondary.set_zoom_mode('fit')
+                    self.dual_view_panel.secondary_viewer.set_zoom_mode('fit')
             except AttributeError:
                 pass
 
@@ -1677,7 +1700,7 @@ class MainWindow(QMainWindow):
 
             self.image_viewer.set_fullscreen_mode(True)
             try:
-                self.dual_view_panel._secondary.set_fullscreen_mode(True)
+                self.dual_view_panel.secondary_viewer.set_fullscreen_mode(True)
             except AttributeError:
                 pass
 
@@ -1705,7 +1728,7 @@ class MainWindow(QMainWindow):
     def _hide_secondary_overlay(self) -> None:
         """전체화면 진입 시 세컨드 오버레이 강제 숨김 + 상태 저장"""
         try:
-            sec_ow = self.dual_view_panel._secondary.overlay_widget
+            sec_ow = self.dual_view_panel.secondary_viewer.overlay_widget
             if sec_ow:
                 self._pre_fullscreen_sec_overlay_visible = sec_ow.isVisible()
                 sec_ow.hide_overlay()
@@ -1716,7 +1739,7 @@ class MainWindow(QMainWindow):
     def _restore_secondary_overlay_visibility(self) -> None:
         """전체화면 종료 시 세컨드 오버레이 이전 상태 복원"""
         try:
-            sec_ow = self.dual_view_panel._secondary.overlay_widget
+            sec_ow = self.dual_view_panel.secondary_viewer.overlay_widget
             if sec_ow:
                 if getattr(self, '_pre_fullscreen_sec_overlay_visible', False):
                     sec_ow.show_overlay()
@@ -1787,7 +1810,6 @@ class MainWindow(QMainWindow):
         if fw is None:
             return False
 
-        # folder_explorer 자신이거나, 그 자식 위젯에 포커스가 있으면 True
         return (fw is self.folder_explorer) or self.folder_explorer.isAncestorOf(fw)
 
 
@@ -1803,7 +1825,7 @@ class MainWindow(QMainWindow):
                 and event.type() == event.Type.MouseMove):
             QApplication.restoreOverrideCursor()
             self.hide_timer.start(3000)
-        return False  # 이벤트 소비 안 함 (다른 위젯 정상 동작 유지)
+        return False 
             
 
 # ============================================
@@ -1899,7 +1921,7 @@ class MainWindow(QMainWindow):
 
         overlay_data: dict = {
             'file_size':  file_size,
-            'dimensions': dimensions,          # None이면 오버레이가 MP 표시 생략
+            'dimensions': dimensions,   
             'camera':     metadata.get('camera', {}),
             'exif':       metadata.get('exif', {}),
             'gps':        metadata.get('gps'),
@@ -2022,7 +2044,6 @@ class MainWindow(QMainWindow):
         """CPU 사용률 업데이트"""
         try:
             self.current_cpu_usage = self.perf_monitor.get_cpu_usage(interval=0.1)
-            #debug_print(f"CPU: {self.current_cpu_usage:.1f}%")
         except Exception as e:
             error_print(f"[ERROR] CPU 측정 실패: {e}")
             self.current_cpu_usage = 0.0
@@ -2571,12 +2592,13 @@ class MainWindow(QMainWindow):
             # current가 프로퍼티인지 메서드인지 확인
             current_file = self.navigator.current()
             
-            # callable 체크는 Path 객체가 아닐 때만
-            if current_file and not isinstance(current_file, Path):
-                if callable(current_file):
-                    error_print(f"navigator.current가 함수입니다. 호출합니다.")
-                    current_file = current_file()  # 함수면 호출
-        
+            # # callable 체크는 Path 객체가 아닐 때만
+            # if current_file and not isinstance(current_file, Path):
+            #     if callable(current_file):
+            #         error_print(f"navigator.current가 함수입니다. 호출합니다.")
+            #         current_file = current_file()  # 함수면 호출
+            current_file: Optional[Path] = self.navigator.current()
+
         except AttributeError:
             error_print(f"navigator에서 현재 파일을 가져올 수 없습니다.")
             current_file = None
@@ -2788,72 +2810,6 @@ class MainWindow(QMainWindow):
                 self._load_current_image()
                 
 
-    def _save_edit_same_folder(self, pixmap: QPixmap) -> None:
-        """원본과 같은 폴더에 {이름}_edited.jpg로 자동 저장"""
-        if not self._current_file:
-            return
-        try:
-            stem   = self._current_file.stem
-            parent = self._current_file.parent
-            # 중복 방지
-            save_path = parent / f"{stem}_edited.jpg"
-            counter = 1
-            while save_path.exists():
-                save_path = parent / f"{stem}_edited_{counter}.jpg"
-                counter += 1
-
-            self._do_save_as_jpg(pixmap, save_path)
-        except Exception as e:
-            error_print(f"편집 저장 오류: {e}")
-            QMessageBox.critical(self, t('edit_dialog.error_title'), str(e))
-
-
-    def _save_edit_choose_path(self, pixmap: QPixmap) -> None:
-        """사용자가 직접 경로를 선택하여 저장"""
-        if not self._current_file:
-            return
-
-        default = str(self._current_file.parent / f"{self._current_file.stem}_edited.jpg")
-        save_path_str, _ = QFileDialog.getSaveFileName(
-            self,
-            t('edit_dialog.save_as_title'),
-            default,
-            t('edit_dialog.save_as_filter'),
-        )
-        if not save_path_str:
-            return
-        try:
-            save_path = Path(save_path_str)
-            # 확장자 없으면 .jpg 강제
-            if not save_path.suffix:
-                save_path = save_path.with_suffix('.jpg')
-            self._do_save_as_jpg(pixmap, save_path)
-        except Exception as e:
-            error_print(f"사본 저장 오류: {e}")
-            QMessageBox.critical(self, t('edit_dialog.error_title'), str(e))
-
-
-    def _do_save_as_jpg(self, pixmap: QPixmap, save_path: Path) -> None:
-
-        qimg = pixmap.toImage().convertToFormat(QImage.Format.Format_RGBA8888)
-        w, h = qimg.width(), qimg.height()
-        arr  = np.frombuffer(qimg.bits(), dtype=np.uint8).reshape((h, w, 4)).copy()
-
-        pil_rgba   = Image.fromarray(arr, 'RGBA')
-        background = Image.new('RGB', (w, h), (255, 255, 255))
-        background.paste(pil_rgba, mask=pil_rgba.split()[3])
-        pil_img = background
-
-        exif_bytes = self._build_save_exif(self._current_file)  
-
-        save_kwargs: dict = {'quality': 95, 'optimize': True}
-        if exif_bytes:
-            save_kwargs['exif'] = exif_bytes
-
-        pil_img.save(str(save_path), 'JPEG', **save_kwargs)
-        info_print(f"편집 저장: {save_path}")
-
-
     def _build_save_exif(self, filepath: Optional[Path]) -> Optional[bytes]:
         # 버전 정보: dodoRynx 패키지 import 대신 utils.version 또는 상수 사용
 
@@ -2988,4 +2944,135 @@ class MainWindow(QMainWindow):
 
         # 7. 타이틀바 초기화
         self.setWindowTitle("dodoRynx")
+
+
+    def _get_save_format(self) -> str:
+        """툴바에서 현재 선택된 저장 포맷 ('jpg' | 'webp')"""
+        tb = getattr(self.image_viewer, '_edit_toolbar', None)
+        if tb is not None and hasattr(tb, 'current_format'):
+            return tb.current_format()
+        return 'jpg'
+
+
+    def _get_save_quality(self) -> int:
+        """툴바에서 현재 저장 품질 (1-100)"""
+        tb = getattr(self.image_viewer, '_edit_toolbar', None)
+        if tb is not None and hasattr(tb, 'current_quality'):
+            return tb.current_quality()
+        return 85
+
+
+    def _save_edit_same_folder(self, pixmap: QPixmap) -> None:
+        """원본과 같은 폴더에 자동 저장 — 선택 포맷 적용"""
+        if not self._current_file:
+            return
+        try:
+            fmt  = self._get_save_format()
+            qual = self._get_save_quality()
+            ext  = '.webp' if fmt == 'webp' else '.jpg'
+
+            stem   = self._current_file.stem
+            parent = self._current_file.parent
+            save_path = parent / f"{stem}_edited{ext}"
+            counter = 1
+            while save_path.exists():
+                save_path = parent / f"{stem}_edited_{counter}{ext}"
+                counter += 1
+
+            self._do_save_image(pixmap, save_path, fmt, qual)
+        except Exception as e:
+            error_print(f"편집 저장 오류: {e}")
+            QMessageBox.critical(self, t('edit_dialog.error_title'), str(e))
+
+
+    def _save_edit_choose_path(self, pixmap: QPixmap) -> None:
+        """사용자가 직접 경로를 선택하여 저장 — 선택 포맷 적용"""
+        if not self._current_file:
+            return
+
+        fmt  = self._get_save_format()
+        qual = self._get_save_quality()
+        ext  = '.webp' if fmt == 'webp' else '.jpg'
+
+        default = str(
+            self._current_file.parent / f"{self._current_file.stem}_edited{ext}"
+        )
+        save_path_str, _ = QFileDialog.getSaveFileName(
+            self,
+            t('edit_dialog.save_as_title'),
+            default,
+            t('edit_dialog.save_as_filter'),   # JPG + WEBP 포함
+        )
+        if not save_path_str:
+            return
+
+        try:
+            save_path = Path(save_path_str)
+            # 확장자 없으면 선택 포맷 강제 적용
+            if not save_path.suffix:
+                save_path = save_path.with_suffix(ext)
+
+            # 확장자로 최종 포맷 결정 (파일 대화상자에서 바꿀 수 있음)
+            suffix = save_path.suffix.lower()
+            if suffix == '.webp':
+                actual_fmt = 'webp'
+            else:
+                actual_fmt = 'jpg'
+                # .jpg/.jpeg 이외 확장자면 .jpg 로 강제 변경
+                if suffix not in ('.jpg', '.jpeg'):
+                    save_path = save_path.with_suffix('.jpg')
+            self._do_save_image(pixmap, save_path, actual_fmt, qual)
+        except Exception as e:
+            error_print(f"사본 저장 오류: {e}")
+            QMessageBox.critical(self, t('edit_dialog.error_title'), str(e))
+
+
+    def _do_save_image(
+        self,
+        pixmap:    QPixmap,
+        save_path: Path,
+        fmt:       str,   # 'jpg' | 'webp'
+        quality:   int,   # 1-100
+    ) -> None:
+        """
+        JPG / WEBP 통합 저장.
+        - JPG  : RGBA → 흰 배경 RGB 합성 후 JPEG 저장
+        - WEBP : RGBA 그대로 저장 (투명도 보존)
+        - EXIF : 두 포맷 모두 piexif/Pillow fallback 적용
+        """
+        qimg = pixmap.toImage().convertToFormat(QImage.Format.Format_RGBA8888)
+        w, h = qimg.width(), qimg.height()
+        arr  = np.frombuffer(qimg.bits(), dtype=np.uint8).reshape((h, w, 4)).copy()
+        pil_rgba = Image.fromarray(arr, 'RGBA')
+
+        exif_bytes = self._build_save_exif(self._current_file)
+
+        if fmt == 'webp':
+            save_kwargs: dict = {'quality': quality, 'method': 4}
+            if exif_bytes:
+                try:
+                    pil_rgba.save(str(save_path), 'WEBP', exif=exif_bytes, **{k:v for k,v in save_kwargs.items()})
+                except Exception:
+                    # EXIF 문제 시 EXIF 없이 재시도
+                    debug_print("WEBP EXIF 저장 실패 → EXIF 없이 재시도")
+                    pil_rgba.save(str(save_path), 'WEBP', **save_kwargs)
+            else:
+                pil_rgba.save(str(save_path), 'WEBP', **save_kwargs)
+
+        else:
+            # JPG — 알파 채널 흰 배경으로 합성
+            background = Image.new('RGB', (w, h), (255, 255, 255))
+            background.paste(pil_rgba, mask=pil_rgba.split()[3])
+            save_kwargs = {'quality': quality, 'optimize': True}
+            if exif_bytes:
+                save_kwargs['exif'] = exif_bytes
+            background.save(str(save_path), 'JPEG', **save_kwargs)
+
+        info_print(f"편집 저장: {save_path}  fmt={fmt.upper()}  quality={quality}")
+
+
+    # 기존 코드와의 하위 호환 — 예전 호출부가 남아있을 경우 대비
+    def _do_save_as_jpg(self, pixmap: QPixmap, save_path: Path) -> None:
+        self._do_save_image(pixmap, save_path, 'jpg', 85)
+
 

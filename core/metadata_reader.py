@@ -112,7 +112,6 @@ class MetadataReader:
 
         return 0
             
-    
 # ============================================
 # 초기화
 # ============================================
@@ -121,10 +120,9 @@ class MetadataReader:
         self.use_cache = use_cache
         self.max_cache_size = max_cache_size
         self._cache: OrderedDict[str, Dict[str, Any]] = OrderedDict()
-        self._cache_lock = RLock()  # 재진입 가능 락
+        self._cache_lock = RLock()
         
         info_print(f"✅ MetadataReader 초기화 (캐시: {use_cache}, 크기: {max_cache_size})")
-
 
 # ============================================
 # 메인 메타데이터 읽기
@@ -147,7 +145,7 @@ class MetadataReader:
             with self._cache_lock:
                 if key in self._cache:
                     self._cache.move_to_end(key)
-                    cached = self._cache[key].copy()  # 복사본 반환 (안전)
+                    cached = self._cache[key].copy()
                     debug_print(f"캐시 히트: {file_path.name}")
                     return cached
         
@@ -308,7 +306,6 @@ class MetadataReader:
         
         return metadata
 
-
 # ============================================
 # 파일 정보 추출
 # ============================================
@@ -414,7 +411,6 @@ class MetadataReader:
             file_info['error']    = t('metadata.error_info_read')
         
         return file_info
-
 
 # ============================================
 # EXIF 정보 추출 (카메라)
@@ -606,7 +602,6 @@ class MetadataReader:
         
         return exif_info
 
-
 # ============================================
 # GPS 정보 추출
 # ============================================
@@ -739,7 +734,6 @@ class MetadataReader:
             error_print(f"GPS 좌표 변환 실패: {e}")
             return 0.0
     
-
 # ============================================
 # 타입 변환 유틸리티
 # ============================================
@@ -808,7 +802,6 @@ class MetadataReader:
             size_float /= 1024.0
         return f"{size_float:.2f} TB"
 
-
 # ============================================
 # 캐시 관리
 # ============================================
@@ -865,6 +858,18 @@ class MetadataReader:
             'enabled': self.use_cache,
         }
 
+
+    def get_from_cache(self, filepath: Path) -> Optional[Dict]:
+        """I/O 없이 캐시 조회만 수행"""
+        try:
+            key = str(filepath.absolute()).lower()
+        except Exception:
+            return None
+        with self._cache_lock:
+            if key in self._cache:
+                self._cache.move_to_end(key)
+                return self._cache[key].copy()
+        return None
 
     # ============================================
     # WinRT 유틸리티 (HEIF 전용)

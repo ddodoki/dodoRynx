@@ -119,7 +119,7 @@ class _RateLimiter:
             now = time.monotonic()
             elapsed = now - self._last_request
             wait = max(0.0, self._min_interval - elapsed)
-            self._last_request = now + wait   # 예약 시점 기준으로 갱신
+            self._last_request = now + wait 
             return wait
 
 
@@ -140,7 +140,7 @@ class _SilentPage(QWebEnginePage):
     """MapLibre 스타일 JS 경고 억제"""
     _SUPPRESS = (
         "Expected value to be of type number",
-        "could not be loaded",          # 스프라이트 누락 이미지
+        "could not be loaded",  
     )
 
     def javaScriptConsoleMessage(self, level, message, line, source):
@@ -195,7 +195,6 @@ class OFMMapLoader(QObject):
             return None
         return _render_cache.get(key)
 
-
     # ── 초기화 ──────────────────────────────────
 
     def __init__(
@@ -222,7 +221,6 @@ class OFMMapLoader(QObject):
         self._cancelled = False
         self._retry_count = 0
 
-
     # ── 공개 API ──────────────────────────────────
 
     def start(self) -> None:
@@ -246,7 +244,7 @@ class OFMMapLoader(QObject):
         debug_print("OFMMapLoader.cancel()")
         self._cancelled = True
         self._running   = False
-        _rate_limiter.release()          # ← 추가: 타임스탬프 롤백
+        _rate_limiter.release() 
         if self._timeout_timer is not None:
             self._timeout_timer.stop()
             self._timeout_timer = None
@@ -255,7 +253,6 @@ class OFMMapLoader(QObject):
 
     def isRunning(self) -> bool:
         return self._running
-
 
     # ── 내부 구현 ──────────────────────────────────────────────────────────────
 
@@ -276,7 +273,6 @@ class OFMMapLoader(QObject):
             return
 
         self._running   = True
-        # self._cancelled = False   ← 삭제: cancel() 후 QTimer 콜백 도착 시 취소 무시되는 버그
 
         key = self._cache_key()
         if not _render_cache.is_stale(key):
@@ -541,7 +537,6 @@ class OFMMapLoader(QObject):
                 pass
             self._view = None
 
-
     # ── 렌더링 헬퍼 ─────────────────────────────
 
     def _draw_marker(self, painter: QPainter, x: int, y: int) -> None:
@@ -628,7 +623,6 @@ class OFMPrefetcher(QObject):
         self._timer.setSingleShot(True)
         self._timer.timeout.connect(self._process_next)
 
-
     # ── 공개 API ─────────────────────────────────────────────────────────────
 
     def schedule(self, tasks: list[tuple]) -> None:
@@ -666,7 +660,6 @@ class OFMPrefetcher(QObject):
             except RuntimeError:
                 pass
             loader.cancel()
-
 
     # ── 내부 ─────────────────────────────────────────────────────────────────
 

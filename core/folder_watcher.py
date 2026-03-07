@@ -112,7 +112,7 @@ class FolderWatcherHandler(FileSystemEventHandler):
 
         path_key = str(file_path)
 
-        # ── ① 신규 파일 판별 ──────────────────────────────────────
+        # ── 신규 파일 판별 ──────────────────────────────────────
         # known_files에 없으면 → 감시 시작 이후 새로 생긴 파일
         # NAS/SMB는 on_created 없이 on_modified만 발생하는 경우가 있음
         if path_key not in self._known_files:
@@ -131,7 +131,7 @@ class FolderWatcherHandler(FileSystemEventHandler):
             self.file_added_signal.emit(file_path)
             return
 
-        # ── ② 기존 파일: stat 비교로 가짜 이벤트 차단 ────────────
+        # ── 기존 파일: stat 비교로 가짜 이벤트 차단 ────────────
         if self._is_duplicate_event(file_path, "modified"):
             return
 
@@ -212,6 +212,8 @@ class FolderWatcher(QObject):
         self.observer: Any = None
         self.watching_path: Optional[Path] = None
         self._active: bool = True
+        self._events_paused: bool = False
+        self._suppress_batch_deleted: bool = False
 
         # 이벤트 큐
         self.pending_added: Set[Path] = set()
@@ -316,6 +318,23 @@ class FolderWatcher(QObject):
             self.watching_path = None
 
 
+    def pause_events(self) -> None:
+        self._events_paused = True
+        self.event_timer.stop()
+        info_print("⏸️ FolderWatcher 이벤트 일시 중단")
+
+
+    def resume_events(self) -> None:
+        self._events_paused = False
+        info_print("▶️ FolderWatcher 이벤트 재개")
+
+
+    def suppress_batch_deleted(self) -> None:
+        """다음 batch_deleted 시그널 1회 억제 (직접 reload 사용 시)"""
+        self._suppress_batch_deleted = True
+        debug_print("batch_deleted 억제 설정")
+                
+
     def stop_watching(self) -> None:
         """폴더 감시 중지"""
         self._active = False   
@@ -365,7 +384,6 @@ class FolderWatcher(QObject):
             'supported_extensions_count': len(self.supported_extensions),
         }
 
-
     # ============================================
     # 내부 슬롯 (메인 스레드에서 실행)
     # ============================================
@@ -376,8 +394,10 @@ class FolderWatcher(QObject):
         if not self._active: 
             return
         info_print(f"🔔 _on_file_added (메인 스레드): {file_path.name}")
-        self.pending_added.add(file_path)
-        
+        if self._events_paused:
+            self.pending_added.add(file_path)
+            return
+
         if not self.event_timer.isActive():
             info_print(f"   ⏰ 타이머 시작 (300ms)")
             self.event_timer.start(300)
@@ -385,18 +405,22 @@ class FolderWatcher(QObject):
 
     @Slot(Path)
     def _on_file_deleted(self, file_path: Path) -> None:
-        """파일 삭제 핸들러 (메인 스레드)"""
-        if not self._active: 
+        if not self._active:
             return
         info_print(f"🔔 _on_file_deleted (메인 스레드): {file_path.name}")
         self.pending_deleted.add(file_path)
         info_print(f"   pending_deleted 크기: {len(self.pending_deleted)}개")
-        
+
+        # 일시 중단 중이면 누적만 하고 타이머 시작 안 함
+        if self._events_paused:
+            info_print("   ⏸️ 일시 중단 중 — 타이머 보류")
+            return
+
         if not self.event_timer.isActive():
-            info_print(f"   ⏰ 타이머 시작 (300ms)")
+            info_print("   ⏰ 타이머 시작 (300ms)")
             self.event_timer.start(300)
         else:
-            info_print(f"   ⏰ 타이머 이미 실행 중")
+            info_print("   ⏰ 타이머 이미 실행 중")
 
 
     @Slot(Path)
@@ -405,7 +429,9 @@ class FolderWatcher(QObject):
         if not self._active: 
             return
         debug_print(f"_on_file_modified (메인 스레드): {file_path.name}")
-        self.pending_modified.add(file_path)
+        if self._events_paused: 
+            self.pending_modified.add(file_path)
+            return
         
         if not self.event_timer.isActive():
             self.event_timer.start(300)
@@ -417,11 +443,12 @@ class FolderWatcher(QObject):
         if not self._active: 
             return
         info_print(f"_on_file_moved (메인 스레드): {src_path.name} → {dest_path.name}")
-        self.pending_moved.add((src_path, dest_path))
-        
+        if self._events_paused: 
+            self.pending_moved.add((src_path, dest_path))
+            return
+
         if not self.event_timer.isActive():
             self.event_timer.start(300)
-
 
     # ============================================
     # 이벤트 일괄 처리
@@ -437,7 +464,11 @@ class FolderWatcher(QObject):
         if self.pending_deleted:
             deleted_list = sorted(self.pending_deleted)
             self.pending_deleted.clear()
-            self.batch_deleted.emit(deleted_list)
+            if self._suppress_batch_deleted:
+                self._suppress_batch_deleted = False   # 자동 초기화
+                debug_print(f"batch_deleted 억제됨: {len(deleted_list)}개 (직접 reload 처리)")
+            else:
+                self.batch_deleted.emit(deleted_list)
 
         if self.pending_modified:
             modified_list = sorted(self.pending_modified)

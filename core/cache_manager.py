@@ -58,7 +58,6 @@ class ImageLoadWorker(QRunnable):
         self.setAutoDelete(True)  
         self.is_preview = is_preview
 
-
     # ── 실행 ────────────────────────────────────
 
     def run(self) -> None:
@@ -66,19 +65,14 @@ class ImageLoadWorker(QRunnable):
             return
 
         try:
-            # 1. 이미지 디코딩 (백그라운드 OK)
             pixmap = self.loader.load(self.file_path, self.max_size)
-
             if self.cancelled or not pixmap:
                 return
-
+            
             if self.cancelled:
                 return
 
-            # 3. Signal emit → Qt가 자동으로 메인 스레드 큐에 전달
-            self.bridge.loaded.emit(
-                        self.index, pixmap, 0, str(self.file_path), self.is_preview  # bool 추가
-                    )
+            self.bridge.loaded.emit(self.index, pixmap, 0, str(self.file_path), self.is_preview)
 
         except Exception as e:
             error_print(f"백그라운드 로딩 실패 [{self.file_path.name}]: {e}")
@@ -98,7 +92,6 @@ class CacheManager(QObject):
     cache_hit = Signal(int)
     cache_miss = Signal(int)
     full_image_loaded = Signal(int)
-
 
     # ── 초기화 및 설정 ─────────────────────────── 
 
@@ -197,7 +190,6 @@ class CacheManager(QObject):
         """외부 인터페이스 유지 — ImageLoader에 위임"""
         return self.loader.get_exif_rotation_angle(file_path)
 
-
     # ── 캐시 조회 ──────────────────────────────── 
 
     def get(
@@ -267,12 +259,11 @@ class CacheManager(QObject):
         
         return None
 
-
     # ── 비동기 로딩 ────────────────────────────── 
 
     def _load_full_async(self, index: int, file_path: Path) -> None:
         with self._lock(self.worker_mutex):
-            if index in self.active_workers:        # loading_indices 대체
+            if index in self.active_workers: 
                 return
             with self._lock(self.cache_mutex):
                 if index in self.cache:
@@ -284,7 +275,7 @@ class CacheManager(QObject):
                 max_size=None, 
                 bridge=self._bridge,
             )
-            self.active_workers[index] = worker     # 단일 락에서 원자적 등록
+            self.active_workers[index] = worker 
         self.thread_pool.start(worker)
 
 
@@ -376,12 +367,6 @@ class CacheManager(QObject):
     def _calculate_cache_memory(self, cache_dict: OrderedDict[int, QPixmap]) -> float:
         """
         캐시 메모리 사용량 계산 (MB)
-        
-        Args:
-            cache_dict: 캐시 딕셔너리
-        
-        Returns:
-            메모리 사용량 (MB)
         """
         memory_mb = 0.0
         for pixmap in cache_dict.values():
@@ -392,7 +377,7 @@ class CacheManager(QObject):
 
     def _manage_memory(self) -> None:
         try:
-            with self._lock(self.cache_mutex):      # ← 전체 블록을 락 안으로
+            with self._lock(self.cache_mutex):  
                 preview_memory = self._calculate_cache_memory(self.preview_cache)
                 full_memory    = self._calculate_cache_memory(self.cache)
                 total_memory   = preview_memory + full_memory
@@ -443,7 +428,6 @@ class CacheManager(QObject):
                 debug_print(f"캐시 제거: 인덱스 {index} ({mb:.1f}MB)")
 
         return removed_memory
-
 
     # ── 캐시 무효화 / 클리어 ─────────────────────
 
