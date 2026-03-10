@@ -12,8 +12,23 @@
   <img src="screenshot_01.jpg" width="250">
   <img src="screenshot_02.jpg" width="250">
   <img src="screenshot_03.jpg" width="250">
-</p>
+</p>  
+<br>
 
+**Map Feature Change (Online → Offline)**
+- The map service has been changed from an online mode to an offline mode.
+- The previous implementation relied on a free online service, but it has been switched to an offline mode due to expected service load in the future.
+
+**Map Data Usage**
+- A pmtiles map file is required to use the map feature.
+- A zoom level 8 pmtiles map file is included in the 2026-03-10 release package.
+- You can download the file if needed and enable it in the settings to use the map feature.
+
+**dditional Map Data**
+- If higher-resolution maps are required, you can download the latest pmtiles map files from external sources such as Protomaps.
+- Note: The full map dataset (zoom level 15) is approximately 125GB.
+
+<br>
 
 ## ✨ Supported Formats
 - Most common image formats
@@ -155,6 +170,22 @@ Licenses/
 - dodoRynx 는 폴더 기반 워크플로우에 최적화된 데스크톱 이미지 뷰어 및 관리 프로그램입니다.
 - 폴더 내 이미지를 사전 로딩하여 썸네일 캐시를 생성하고, 촬영 메타데이터, GPS 지도, 오버레이, 인쇄, 간단 편집까지 하나의 앱에서 처리하는 것을 목표로 합니다.
 
+<br>
+
+**지도 기능 변경 (온라인 → 오프라인)**
+- 지도 서비스를 온라인 방식에서 오프라인 방식으로 변경했습니다.
+- 기존 무료 온라인 서비스를 사용했으나 향후 서비스 부하가 예상되어 오프라인 방식으로 전환했습니다.
+
+**맵 데이터 사용 안내**
+- 지도 기능을 사용하려면 pmtiles 형식의 맵 파일이 필요합니다.
+- 2026-03-10 릴리즈 파일에 줌 레벨 8(pmtiles) 맵 파일이 포함되어 있습니다.
+- 필요 시 해당 파일을 다운로드하여 적용하면 지도 기능을 사용할 수 있습니다.
+
+**추가 맵 데이터**
+- 더 높은 해상도의 지도를 사용하려는 경우 Protomaps 등 외부 사이트에서 최신 pmtiles 맵 파일을 다운로드하여 사용할 수 있습니다.
+- 참고: 전체 맵 파일(줌 레벨 15 기준) 용량은 약 125GB입니다.
+
+<br>
 
 ## ✨ 지원 포맷
 - 대부분의 이미지 포맷 확장자 지원
