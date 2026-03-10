@@ -209,6 +209,7 @@ class DualViewPanel(QWidget):
 
         self._last_overlay_file: Optional[Path] = None
         self._last_overlay_meta: dict            = {}
+        self._last_overlay_zoom: Optional[int]   = None
         self._config_manager = config_manager 
 
         self._splitter.splitterMoved.connect(self._on_splitter_moved)
@@ -245,6 +246,7 @@ class DualViewPanel(QWidget):
                 self._hovered_viewer = None
         return super().eventFilter(obj, event)
 
+
     def get_active_viewer(self) -> ImageViewer:
         """마우스가 올라있는 뷰어 반환. 없으면 primary."""
         if self._is_dual and self._hovered_viewer is not None:
@@ -273,8 +275,10 @@ class DualViewPanel(QWidget):
         if self._is_dual:
             self._no_next.setVisible(False)
             self._secondary.setVisible(True) 
+            saved = self._config_manager.get("dual_view.splitter_sizes", None)
             total = max(self._splitter.width(), 600)
-            self._splitter.setSizes([total // 2, total // 2])
+            sizes = saved if (saved and sum(saved) > 0) else [total // 2, total // 2]
+            self._splitter.setSizes(sizes)
         else:
             self._no_next.setVisible(False)
             self._secondary.setVisible(False)
@@ -287,23 +291,25 @@ class DualViewPanel(QWidget):
     def load_secondary(self, main_window: "MainWindow", secondary_index: int) -> None:
         if not self._is_dual:
             return
-        
+
         self._secondary.set_main_window(main_window)
+        self._secondary.is_secondary = True  
+
         files = main_window.navigator.image_files
 
         if not (0 <= secondary_index < len(files)):
-            self._secondary.setVisible(True) 
+            self._secondary._secondary_file = None
+            self._secondary.setVisible(True)
             self._secondary.clear()
             self._no_next.setGeometry(0, 0, self._secondary.width(), self._secondary.height())
             self._no_next.setVisible(True)
             self._no_next.raise_()
-            debug_print("DualView: 마지막 이미지 → 플레이스홀더 표시")
             return
 
         self._no_next.setVisible(False)
         self._secondary.setVisible(True)
         sec_file = files[secondary_index]
-        debug_print(f"DualView: 보조 로드 → {sec_file.name}")
+        self._secondary._secondary_file = sec_file 
         self._load_via_cache(main_window, sec_file)
 
 
@@ -357,6 +363,7 @@ class DualViewPanel(QWidget):
         self,
         file_path: Path,
         metadata: dict,
+        initial_zoom: Optional[int] = None, 
     ) -> None:
         if not self._is_dual:
             return
@@ -365,8 +372,9 @@ class DualViewPanel(QWidget):
 
         self._last_overlay_file = file_path
         self._last_overlay_meta = metadata
+        self._last_overlay_zoom = initial_zoom  
 
-        self._apply_overlay_to_secondary(file_path, metadata)
+        self._apply_overlay_to_secondary(file_path, metadata, initial_zoom=initial_zoom)
         QTimer.singleShot(0, self._apply_secondary_overlay_deferred)
 
 
@@ -375,24 +383,32 @@ class DualViewPanel(QWidget):
             return
         if not self._last_overlay_file:
             return
-        
+
         ow = self._secondary.overlay_widget
         ow.setGeometry(self._secondary.rect())
         ow.raise_()
 
-        self._apply_overlay_to_secondary(self._last_overlay_file, self._last_overlay_meta)
-        ow.update() 
+        self._apply_overlay_to_secondary(
+            self._last_overlay_file,
+            self._last_overlay_meta,
+            initial_zoom=getattr(self, '_last_overlay_zoom', None),
+        )
+        ow.update()
 
 
-    def _apply_overlay_to_secondary(self, file_path: Path, metadata: dict) -> None:
-
+    def _apply_overlay_to_secondary(
+        self,
+        file_path: Path,
+        metadata: dict,
+        initial_zoom: Optional[int] = None, 
+    ) -> None:
         ow = self._secondary.overlay_widget
         if not ow:
             return
-        
+
         cfg = self._config_manager
 
-        scale_value = cfg.get_overlay_scale() 
+        scale_value = cfg.get_overlay_scale()
         ow.set_scale(scale_value / 100.0)
 
         enabled     = cfg.get_overlay_setting("enabled",          False)
@@ -410,39 +426,37 @@ class DualViewPanel(QWidget):
             show_file, show_camera, show_exif, show_lens,
             show_gps, show_map, opacity, position
         )
-        ow.set_data(file_path, metadata)
-        ow.update() 
+
+        ow.set_data(file_path, metadata, initial_zoom=initial_zoom)
+        ow.update()
 
         debug_print(
             f"[DUAL] apply_overlay_to_secondary: show_map={show_map}, "
-            f"gps={metadata.get('gps')}, file={file_path.name}"
+            f"gps={metadata.get('gps')}, file={file_path.name}, zoom={initial_zoom}"
         )
-
         debug_print(f"DualView overlay 갱신: {file_path.name}")
 
 
     def refresh_secondary_overlay(self) -> None:
-        """
-        옵션 변경 시 MainWindow에서 호출.
-        캐시된 데이터로 secondary overlay를 재렌더링.
-        """
+        """옵션 변경 시 MainWindow에서 호출. 캐시된 데이터로 재렌더링."""
         if not self._is_dual:
             return
         if not self._last_overlay_file:
             return
-        
+
         self._update_overlay_settings_cache()
         self._apply_overlay_to_secondary(
             self._last_overlay_file,
             self._last_overlay_meta,
+            initial_zoom=getattr(self, '_last_overlay_zoom', None),
         )
 
         ow = self._secondary.overlay_widget
         if ow is None:
             return
 
-        scale = self._config_manager.config.get("overlay.scale", 100)
-        ow.set_scale(scale)
+        scale = self._config_manager.get("overlay.scale", 100)
+        ow.set_scale(scale / 100.0)
 
         debug_print("DualView: overlay 설정 동기화")
 
@@ -474,11 +488,9 @@ class DualViewPanel(QWidget):
 
 
     def _on_resize_delayed(self) -> None:
-        """타이머 지연 후 resize 후처리 - event 없이 현재 크기 기준으로 처리"""
         self.update()
-
-        if hasattr(self, 'overlay_widget') and self._secondary.overlay_widget:
-            self._secondary.overlay_widget.setGeometry(self.rect())
+        if self._secondary.overlay_widget:
+            self._secondary.overlay_widget.setGeometry(self._secondary.rect())  
             self._secondary.overlay_widget.raise_()
 
 
@@ -492,6 +504,7 @@ class DualViewPanel(QWidget):
     def _on_splitter_moved(self, pos: int, index: int) -> None:
         if not self._is_dual:
             return
+        self._config_manager.set("dual_view.splitter_sizes", self._splitter.sizes())
         ow = self._secondary.overlay_widget
         if ow:
             ow.setGeometry(self._secondary.rect())
@@ -504,9 +517,8 @@ class DualViewPanel(QWidget):
 
     def clear_secondary(self) -> None:
         self._secondary.clear()
+        self._secondary._secondary_file = None 
         self._last_overlay_file = None
         self._last_overlay_meta = {}
         if self._secondary.overlay_widget:
             self._secondary.overlay_widget.clear()
-        debug_print("DualView: 보조 뷰어 클리어")
-

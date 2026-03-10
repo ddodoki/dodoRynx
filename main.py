@@ -127,6 +127,50 @@ def setup_thread_pool() -> None:
 
 
 # ============================================
+# 지도 에셋 초기화 (PMTiles + Glyph 사전 다운로드)
+# ============================================
+
+def _init_map(config) -> None:
+    """
+    PMTiles 설정 적용 + MapLibre/glyph 에셋 백그라운드 다운로드.
+    다운로드는 UI를 블로킹하지 않도록 별도 스레드에서 실행.
+    """
+    import threading
+    from core.map_loader import configure_pmtiles, configure_render_cache, download_assets
+    from pathlib import Path
+
+    # ── PMTiles 파일 경로 적용 ──────────────────────────────────────
+    pmtiles_path_str = config.get('map.pmtiles_path', '')
+    max_zoom = config.get('map.max_zoom', 14)
+
+    if pmtiles_path_str:
+        p = Path(pmtiles_path_str)
+        if p.exists():
+            configure_pmtiles(p, max_zoom)
+            info_print(f"PMTiles 경로 적용: {p.name}")
+        else:
+            warning_print(f"PMTiles 파일 없음 (설정 무시): {pmtiles_path_str}")
+            configure_pmtiles(None)
+    else:
+        configure_pmtiles(None)
+
+    # ── 렌더 메모리 캐시 크기 적용 ──────────────────────────────────
+    render_mb = config.get('cache.render_memory_mb', 50)
+    configure_render_cache(render_mb)
+
+    # ── glyph + JS/CSS 에셋 백그라운드 다운로드 ──────────────────────
+    def _bg_download():
+        ok = download_assets()
+        if ok:
+            info_print("[Map] 에셋 다운로드 완료 (glyph 포함)")
+        else:
+            warning_print("[Map] 일부 에셋 다운로드 실패 — 기존 캐시 사용")
+
+    t = threading.Thread(target=_bg_download, daemon=True, name="map-asset-dl")
+    t.start()
+
+
+# ============================================
 # 시스템 정보 출력
 # ============================================
 
@@ -156,31 +200,6 @@ def _extract_initial_file() -> Optional[Path]:
             if p.exists() and p.is_file():
                 return p
     return None
-
-
-# ============================================
-# 커맨드라인 인자 처리 (폴더 열기 전용)
-# 타입 힌트를 문자열로 → 런타임 NameError 방지
-# ============================================
-
-# def handle_command_line_args(window: 'MainWindow') -> None:
-#     if len(sys.argv) > 1:
-#         arg_path = sys.argv[1]
-#         if arg_path.startswith('--'):
-#             return
-#         try:
-#             file_path = Path(arg_path)
-#             if not file_path.exists():
-#                 warning_print(f"경로가 존재하지 않음: {file_path}")
-#                 return
-
-#             if file_path.is_dir():
-#                 info_print(f"폴더 열기: {file_path}")
-#                 window.open_folder(file_path)
-#             elif not file_path.is_file():
-#                 warning_print(f"지원하지 않는 경로 타입: {file_path}")
-#         except Exception as e:
-#             error_print(f"커맨드라인 인자 처리 실패: {e}")
 
 
 # ============================================
@@ -225,6 +244,7 @@ def main() -> int:
         try:
             config = ConfigManager(parent=app)
             _init_language(config)
+            _init_map(config)                          # ← [추가] PMTiles + glyph 초기화
             info_print(f"앱 디렉토리: {get_user_data_dir()}")
             info_print(f"캐시 디렉토리: {get_cache_dir()}")
         except Exception as e:

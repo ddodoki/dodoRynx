@@ -5,7 +5,7 @@ LICENSE.txt
 [ 한국어 안내문 ]
 
 저작권자:
-Copyright (c) 2026 blog.naver.com/ddodoki
+Copyright (c) 2026 https://github.com/ddodoki/
 
 프로젝트:
 dodoRynx
@@ -34,7 +34,7 @@ dodoRynx
 MIT License
 ========================================================================
 
-Copyright (c) 2026 blog.naver.com/ddodoki
+Copyright (c) 2026 https://github.com/ddodoki/
 
 Permission is hereby granted, free of charge, to any person obtaining
 a copy of this software and associated documentation files (the "Software"),

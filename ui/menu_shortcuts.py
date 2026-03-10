@@ -420,6 +420,132 @@ class MenuBuilder:
         menu.addMenu(info_sub)
 
 
+    def build_secondary(self, parent: Optional[QWidget] = None) -> QMenu:
+        """
+        보조 뷰어 전용 컨텍스트 메뉴.
+        파일 조작(삭제·이동·이름변경·하이라이트·회전·인쇄) 제외.
+        뷰 제어·클립보드 복사·경로 복사·탐색기 열기만 허용.
+        """
+        from ui.image_viewer import ImageViewer
+
+        mw = self._mw
+        menu = _menu(parent=parent)
+        menu.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+
+        if not isinstance(parent, ImageViewer):
+            error_print("build_secondary: parent가 ImageViewer가 아님 — 빈 메뉴 반환")
+            return menu
+
+        viewer: ImageViewer = parent  
+        sec_file = getattr(viewer, '_secondary_file', None)
+
+        sec_file = getattr(parent, '_secondary_file', None)
+
+        # ── 1. 파일명 레이블 (비활성 — 현재 파일 확인용) ──────────
+        if sec_file:
+            title = menu.addAction(f"📄  {sec_file.name}")
+            title.setEnabled(False)
+            f = QFont()
+            f.setPointSize(9)
+            title.setFont(f)
+            menu.addSeparator()
+
+        # ── 2. 줌 제어 ─────────────────────────────────────────
+        viewer = parent  # ImageViewer 인스턴스
+        zoom_sub = _menu(t('menu.zoom') if hasattr(mw, 't') else "🔍 Zoom", menu)
+
+        a = zoom_sub.addAction("⛶ Fit")
+        a.setShortcut(QKeySequence("F"))
+        a.triggered.connect(lambda: viewer.set_zoom_mode('fit'))
+
+        a = zoom_sub.addAction("① 1 : 1")
+        a.setShortcut(QKeySequence("1"))
+        a.triggered.connect(lambda: viewer.set_zoom_mode('actual'))
+
+        a = zoom_sub.addAction("↔ Width")
+        a.setShortcut(QKeySequence("W"))
+        a.triggered.connect(lambda: viewer.set_zoom_mode('width'))
+
+        zoom_sub.addSeparator()
+
+        a = zoom_sub.addAction("🔍➕ Zoom In")
+        a.setShortcut(QKeySequence("Ctrl+="))
+        a.triggered.connect(viewer.zoom_in)
+
+        a = zoom_sub.addAction("🔍➖ Zoom Out")
+        a.setShortcut(QKeySequence("Ctrl+-"))
+        a.triggered.connect(viewer.zoom_out)
+
+        menu.addMenu(zoom_sub)
+        menu.addSeparator()
+
+        # ── 3. 클립보드 / 경로 복사 ────────────────────────────
+        has_file = bool(sec_file and sec_file.exists())
+
+        a = menu.addAction(t('menu.capture.clipboard'))
+        a.setEnabled(has_file)
+        a.triggered.connect(
+            lambda: self._copy_image_to_clipboard(sec_file)
+        )
+
+        a = menu.addAction(t('menu.file.copy_path'))
+        a.setShortcut(QKeySequence("Ctrl+Shift+A"))
+        a.setEnabled(has_file)
+        a.triggered.connect(
+            lambda: QGuiApplication.clipboard().setText(str(sec_file))
+        )
+
+        menu.addSeparator()
+
+        # ── 4. 탐색기에서 열기 ─────────────────────────────────
+        a = menu.addAction(t('menu.file.open_location'))
+        a.setShortcut(QKeySequence("Ctrl+Shift+E"))
+        a.setEnabled(has_file)
+        a.triggered.connect(lambda: self._open_location(sec_file))
+
+        menu.addSeparator()
+
+        # ── 5. 뷰 토글 (전역 공유 항목 — 조작 없음) ───────────
+        self._section_view(menu, parent)
+
+        menu.addSeparator()
+
+        # ── 6. 종료 ────────────────────────────────────────────
+        exit_act = menu.addAction(t('menu.exit'))
+        exit_act.setShortcut(QKeySequence("Alt+F4"))
+        exit_act.triggered.connect(mw.close)
+
+        for action in menu.actions():
+            if not action.isSeparator() and not action.menu():
+                action.setShortcutVisibleInContextMenu(True)
+
+        return menu
+
+    # ── 헬퍼 (build_secondary 전용) ─────────────────────────────
+    def _copy_image_to_clipboard(self, file_path) -> None:
+        """navigator 인덱스 미사용 — sec_file 직접 로드"""
+        if not file_path or not file_path.exists():
+            return
+        try:
+            from core.image_loader import ImageLoader
+            pixmap = ImageLoader().load(file_path)
+            if pixmap and not pixmap.isNull():
+                QGuiApplication.clipboard().setPixmap(pixmap)
+                self._mw._show_status_message("이미지 클립보드 복사 완료", 2000)
+        except Exception as e:
+            error_print(f"secondary 클립보드 복사 실패: {e}")
+
+    def _open_location(self, file_path) -> None:
+        """navigator 인덱스 미사용 — file_path 직접 사용"""
+        if not file_path or not file_path.exists():
+            return
+        try:
+            import subprocess
+            subprocess.Popen(['explorer', '/select,', str(file_path)])
+        except Exception as e:
+            error_print(f"탐색기 열기 실패: {e}")
+            
+
 # ══════════════════════════════════════════════════════════════
 # ShortcutManager
 # ══════════════════════════════════════════════════════════════
@@ -563,6 +689,13 @@ class MenuShortcutController:
         """현재 상태를 반영한 컨텍스트 메뉴 반환."""
         return self._builder.build(parent)
 
+
+    def build_secondary_context_menu(
+        self, parent: Optional[QWidget] = None
+    ) -> QMenu:
+        """secondary viewer 전용 경량 메뉴 반환."""
+        return self._builder.build_secondary(parent)
+    
 
     def set_shortcut_enabled(self, name: str, enabled: bool) -> None:
         self._shortcut.set_enabled(name, enabled)

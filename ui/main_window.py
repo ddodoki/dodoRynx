@@ -44,8 +44,14 @@ from core.file_manager import FileManager
 from core.folder_navigator import FolderNavigator
 from core.folder_watcher import FolderWatcher
 from core.image_loader import ImageLoader
-from core.map_loader import _prefetcher
+from core.map_loader import (
+    configure_pmtiles,
+    configure_render_cache,
+    PMTilesMapLoader,
+    prefetcher as _map_prefetcher, 
+)
 from core.metadata_reader import MetadataReader
+from core.map_loader import schedule_font_download
 from core.rotation_manager import RotationManager
 
 from ui.about_dialog import AboutDialog
@@ -101,10 +107,12 @@ class PerfOverlayWidget(QLabel):
 
 
 class _GpsReaderSignals(QObject): 
+
     ready = Signal(list)
 
 
 class _GpsReader(QRunnable): 
+
     def __init__(self, files: list, zoom: int,
                  signals: _GpsReaderSignals) -> None:
         super().__init__()
@@ -127,6 +135,7 @@ class _GpsReader(QRunnable):
                 if lat is None or lon is None:
                     continue
                 tasks.append((lat, lon, self._zoom, 400, 300))
+                tasks.append((lat, lon, self._zoom, 280, 200))             
             except Exception:
                 pass
 
@@ -154,7 +163,6 @@ class MainWindow(QMainWindow):
     def status_message_timer(self):
         return getattr(self.status_bar, 'status_message_timer', None)
 
-
 # ============================================
 # 초기화
 # ============================================
@@ -181,17 +189,6 @@ class MainWindow(QMainWindow):
 
 
     def _init_all(self) -> None:
-        """
-        전체 초기화.
-
-        - 반드시 지켜야 할 순서:
-            1. _init_core()        핵심 데이터 객체 (UI 없음)
-            2. _init_ui()          위젯 생성 (core 객체 의존)
-            3. _create_statusbar() 상태바 생성 (init_ui 이후)
-            4. _connect_signals()  시그널 연결 (모든 위젯 준비 후)
-            5. _post_init()        복원/후처리 (시그널 연결 후)
-            6. menu_ctrl.setup()   단축키 등록 (모든 것 완료 후 맨 마지막)
-        """
         """전체 동기 초기화 (기존 구조 유지)"""
         self._init_core()
         self._init_ui()
@@ -200,34 +197,35 @@ class MainWindow(QMainWindow):
         self._post_init()
         self.menu_ctrl = MenuShortcutController(self)
         self.menu_ctrl.setup()
-    
+        schedule_font_download(delay_ms=8_000)
+
 
     def _init_core(self) -> None:
         """Step 1 — UI 없이 동작하는 핵심 데이터 객체 초기화."""
         self.overlay_enabled: bool = self.config.get_overlay_setting("enabled", False)
 
-        self.navigator:         FolderNavigator   = FolderNavigator()
-        self.cache_manager:     CacheManager      = CacheManager(
+        self.navigator:         FolderNavigator    = FolderNavigator()
+        self.cache_manager:     CacheManager       = CacheManager(
             ahead_count   = self.config.get('cache.ahead_count',    25),
             behind_count  = self.config.get('cache.behind_count',    5),
             max_memory_mb = self.config.get('cache.max_memory_mb', 500),
         )
         self.perf_monitor:      PerformanceMonitor = PerformanceMonitor()
-        self.current_cpu_usage: float = 0.0
-        self.folder_watcher:    FolderWatcher     = FolderWatcher(FolderNavigator.SUPPORTED_EXTENSIONS)
-        self.imageloader:       ImageLoader       = ImageLoader()
-        self.rotation_manager:  RotationManager   = RotationManager()
-        self.file_manager:      FileManager       = FileManager(self)
+        self.current_cpu_usage: float              = 0.0
+        self.folder_watcher:    FolderWatcher      = FolderWatcher(FolderNavigator.SUPPORTED_EXTENSIONS)
+        self.imageloader:       ImageLoader        = ImageLoader()
+        self.rotation_manager:  RotationManager    = RotationManager()
+        self.file_manager:      FileManager        = FileManager(self)
 
         # 상태 플래그
         self._current_file:           Optional[Path] = None
         self.is_fullscreen:           bool           = False
         self._print_manager                          = None
-        self._meta_prefetch_pool:     Optional[object] = None 
+        self._meta_prefetch_pool:     Optional[object] = None
         self._edit_locked:            bool           = False
         self.pending_rotation_for:    Optional[Path] = None
         self._is_deleting:            bool           = False
-        self._is_closing:             bool           = False 
+        self._is_closing:             bool           = False
 
         # open_image/open_folder 상태
         self._pending_file_to_open:   Optional[Path] = None
@@ -246,10 +244,35 @@ class MainWindow(QMainWindow):
 
         self._prefetch_signals = _GpsReaderSignals()
         self._prefetch_signals.ready.connect(
-            _prefetcher.schedule,
+            _map_prefetcher.schedule,
             Qt.ConnectionType.QueuedConnection
         )
+
+        # ── PMTiles 렌더 캐시 + 파일 경로 초기화 ──────────────────
+        self._init_map()
+        self._prefetch_timers: list[QTimer] = []
+
         debug_print("_init_core() 완료")
+
+
+    def _init_map(self) -> None:
+        """
+        PMTiles 렌더 캐시 및 파일 경로를 config에서 읽어 초기화한다.
+
+        configure_render_cache() : _MemRenderCache 크기 설정
+        configure_pmtiles()      : PMTiles 파일 경로 + 최대 줌 설정
+        """
+        render_mb    = self.config.get('cache.render_memory_mb', 50)
+        pmtiles_path = self.config.get('map.pmtiles_path', '').strip()
+        max_zoom     = self.config.get('map.max_zoom', 14)
+
+        configure_render_cache(render_mb)
+        configure_pmtiles(pmtiles_path if pmtiles_path else None, max_zoom)
+
+        info_print(
+            f"지도 초기화: PMTiles={pmtiles_path or '(미설정)'} "
+            f"최대줌={max_zoom} 렌더캐시={render_mb}MB"
+        )
 
 
     def _init_ui(self) -> None:
@@ -430,9 +453,11 @@ class MainWindow(QMainWindow):
         self.image_viewer.edit_mode_changed.connect(self._on_edit_mode_changed)
         self.image_viewer.edit_save_requested.connect(self._on_edit_save_requested)
         self.dual_view_panel.dual_mode_changed.connect(self._on_dual_mode_changed)
+        self.dual_view_panel.secondary_viewer.file_dropped.connect(
+            self._on_file_dropped
+        )
 
         # ── 3. FolderWatcher → MainWindow (모두 QueuedConnection) ──
-        # batch_added 연결 추가 (기존 누락 버그 수정)
         self.folder_watcher.file_added.connect(
             self._on_fs_file_added,    Qt.ConnectionType.QueuedConnection)
         self.folder_watcher.file_deleted.connect(
@@ -506,6 +531,33 @@ class MainWindow(QMainWindow):
 
         self.folder_explorer.setVisible(fe_visible)
 
+        from PySide6.QtWidgets import QApplication
+        _app = QApplication.instance()
+        if _app is not None:
+            _app.aboutToQuit.connect(self._on_app_about_to_quit)
+
+
+    def _on_app_about_to_quit(self) -> None:
+        """
+        앱 종료 직전 정리 작업.
+        - ThumbnailBar HybridCache VACUUM (DB 파편화 제거)
+        - PMTiles 렌더 캐시 해제 (메모리 반환)
+        """
+        try:
+            if hasattr(self, 'thumbnail_bar') and self.thumbnail_bar._thumb_cache:
+                self.thumbnail_bar._thumb_cache.vacuum()
+        except Exception as e:
+            warning_print(f"썸네일 캐시 VACUUM 실패: {e}")
+
+        from core.map_loader import _release_shared_profile
+        try:
+            PMTilesMapLoader.clear_cache()
+            _release_shared_profile() 
+        except Exception as e:
+            warning_print(f"PMTiles 정리 실패: {e}")
+
+        debug_print("_on_app_about_to_quit() 완료")
+
 
     def _start_perf_monitoring(self) -> None:
         """5초 후 성능 모니터링 시작"""
@@ -561,6 +613,11 @@ class MainWindow(QMainWindow):
             if hasattr(self, 'overlay_widget'):
                 self._update_overlay_position()
 
+            if hasattr(self, 'overlay_widget_b') and self.overlay_widget_b:
+                sec_viewer = self.dual_view_panel.secondary_viewer
+                self.overlay_widget_b.setGeometry(sec_viewer.rect())
+                self.overlay_widget_b.raise_()
+
         if hasattr(self, "status_ctrl") and hasattr(self.status_ctrl, "perf_overlay"):
             self.status_ctrl.reposition_perf_overlay()
             self.status_ctrl._toast_mgr._reposition()
@@ -587,9 +644,14 @@ class MainWindow(QMainWindow):
         
         # 1. 진행 중인 백그라운드 작업 즉시 취소
         try:
-            _prefetcher.cancel()
+            _map_prefetcher.cancel()
         except Exception as e:
             warning_print(f"prefetcher 취소 실패: {e}")
+
+        # 메타 프리페치 타이머 일괄 취소
+        for timer in getattr(self, '_prefetch_timers', []):
+            timer.stop()
+        self._prefetch_timers.clear()
 
         # 메타 프리페치 풀 종료
         if hasattr(self, '_meta_prefetch_pool'):
@@ -620,6 +682,12 @@ class MainWindow(QMainWindow):
                 self.overlay_widget.clear()
             except Exception as e:
                 warning_print(f"오버레이 정리 실패: {e}")
+
+        if hasattr(self, 'overlay_widget_b') and self.overlay_widget_b:
+            try:
+                self.overlay_widget_b.clear()
+            except Exception as e:
+                warning_print(f"세컨더리 오버레이 정리 실패: {e}")
 
         # 3. 오버레이 상태 저장
         if hasattr(self, 'overlay_enabled'):
@@ -668,9 +736,9 @@ class MainWindow(QMainWindow):
                     warning_print(f"썸네일 스레드 풀 정리 실패: {e}")
 
             cache = getattr(self.thumbnail_bar, '_thumb_cache', None)
-            if cache and hasattr(cache, '_db_vacuum'):
+            if cache and hasattr(cache, 'vacuum'):
                 try:
-                    cache._db_vacuum()
+                    cache.vacuum()
                 except Exception as e:
                     warning_print(f"DB VACUUM 실패: {e}")
 
@@ -703,7 +771,6 @@ class MainWindow(QMainWindow):
                 event.accept()
                 return
         super().keyPressEvent(event)
-
 
 # ============================================
 # 창 상태 관리
@@ -756,7 +823,7 @@ class MainWindow(QMainWindow):
         metadata_visible = self.config.get_ui_visibility("metadata")
         thumbnail_visible = self.config.get_ui_visibility("thumbnail_bar")
         statusbar_visible = self.config.get_ui_visibility("status_bar")
-        perf_visible = self.config.get_ui_visibility("perf_overlay")  # 기본 False
+        perf_visible = self.config.get_ui_visibility("perf_overlay") 
         if perf_visible:
             self.status_ctrl.toggle_performance_overlay(True)
 
@@ -793,8 +860,7 @@ class MainWindow(QMainWindow):
             return
         self.dual_view_panel.load_secondary(self, sec_index)
         self._update_secondary_overlay(sec_index)
-
-                
+      
 # ============================================
 # 파일/폴더 열기
 # ============================================
@@ -851,10 +917,8 @@ class MainWindow(QMainWindow):
             warning_print(f"폴더가 아님: {folder_path}")
             return
 
-        # 폴더 열기 시 첫 번째 이미지 자동 표시 플래그
-        # scan_folder()는 비동기 → 완료 시 on_folder_scan_completed()에서 처리
-        self._pending_file_to_open = None        # 특정 파일 없음
-        self._open_first_on_scan   = True        # 첫 번째 이미지 자동 선택 요청
+        self._pending_file_to_open = None  
+        self._open_first_on_scan   = True 
 
         # ── 추가: FolderExplorer 동기화 ──
         if hasattr(self, "folder_explorer") and self.folder_explorer.isVisible():
@@ -964,7 +1028,6 @@ class MainWindow(QMainWindow):
         if hasattr(self, "folder_explorer") and self.folder_explorer.isVisible():
             self.folder_explorer.navigate_to_folder(folder)
 
-
 # ============================================
 # 이미지 로딩 및 표시
 # ============================================
@@ -976,9 +1039,6 @@ class MainWindow(QMainWindow):
         if getattr(self, '_is_deleting', False):
             return
 
-        # 편집 모드 활성 상태에서 이미지 이동 시 자동 취소 종료
-        # - 저장하지 않고 종료 (이동 = 명시적 포기 의사)
-        # - 적용 후 저장은 사용자가 ✔ 버튼으로 명시적으로 해야 함
         if hasattr(self, 'image_viewer') and getattr(self.image_viewer, '_edit_mode', False):
             self.image_viewer._edit_cancel()
             self._show_status_message(t('msg.edit_auto_exit'), 2000)
@@ -1072,7 +1132,7 @@ class MainWindow(QMainWindow):
         """현재 인덱스 기준 ±2 파일 메타데이터 백그라운드 프리페치"""
         idx = self.navigator.current_index
         total = len(self.navigator.image_files)
-        
+
         targets = [
             i for i in [idx + 1, idx + 2, idx - 1, idx - 2]
             if 0 <= i < total
@@ -1081,10 +1141,22 @@ class MainWindow(QMainWindow):
         for i, target_idx in enumerate(targets):
             filepath = self.navigator.image_files[target_idx]
             delay = (i + 1) * 80
-            QTimer.singleShot(
-                delay,
-                lambda p=filepath, s=idx: self._prefetch_single_metadata(p, s)
-            )
+
+            t = QTimer(self)
+            t.setSingleShot(True)
+
+            def _make_slot(p, s, _t):
+                def _slot():
+                    self._prefetch_single_metadata(p, s)
+                    try:
+                        self._prefetch_timers.remove(_t)
+                    except ValueError:
+                        pass
+                return _slot
+
+            t.timeout.connect(_make_slot(filepath, idx, t))
+            t.start(delay)
+            self._prefetch_timers.append(t)
 
 
     def _prefetch_single_metadata(self, filepath: Path,
@@ -1150,7 +1222,7 @@ class MainWindow(QMainWindow):
 
 
     def _trigger_map_prefetch(self, current_index: int) -> None:
-        _prefetcher.cancel()
+        _map_prefetcher.cancel()                          # ← 수정
 
         file_list = self.navigator.image_files
         if not file_list or len(file_list) < 2:
@@ -1170,7 +1242,6 @@ class MainWindow(QMainWindow):
 
         reader = _GpsReader(adjacent_files, zoom, self._prefetch_signals)
         QThreadPool.globalInstance().start(reader)
-
 
 # ============================================
 # 이미지 네비게이션
@@ -1304,7 +1375,6 @@ class MainWindow(QMainWindow):
                 
                 debug_print(f"ThumbnailBar 임시 하이라이트 해제: {count}개")
 
-
 # ============================================
 # 파일 작업
 # ============================================
@@ -1368,7 +1438,6 @@ class MainWindow(QMainWindow):
         if current == 0 and total == 0:
             self.status_ctrl.on_file_op_started(display)
         else:
-            # task_update → task_progress (기존 패턴에 맞게 수정)
             self.status_ctrl.on_file_op_progress(display, current, total)
 
 
@@ -1472,7 +1541,6 @@ class MainWindow(QMainWindow):
         # 다른 폴더이면 open_folder()로 위임
         self.open_folder(folder_path)
 
-
 # ============================================
 # 하이라이트 기능
 # ============================================
@@ -1573,7 +1641,6 @@ class MainWindow(QMainWindow):
         """
         warning_print(f"_sync_highlights_to_thumbnail_bar()는 deprecated입니다. _sync_highlight_state()를 사용하세요.")
         self._sync_highlight_state(force_full_sync=True)
-
 
 # ============================================
 # UI 토글
@@ -1827,7 +1894,6 @@ class MainWindow(QMainWindow):
             self.hide_timer.start(3000)
         return False 
             
-
 # ============================================
 # 오버레이 관리
 # ============================================
@@ -1874,6 +1940,13 @@ class MainWindow(QMainWindow):
             show_gps, show_map, opacity, position
         )
 
+        # secondary 오버레이 동일 설정 적용
+        if hasattr(self, 'overlay_widget_b') and self.overlay_widget_b:
+            self.overlay_widget_b.update_settings(
+                self.overlay_enabled, show_file, show_camera, show_exif, show_lens,
+                show_gps, show_map, opacity, position
+            )
+
         if hasattr(self, 'dual_view_panel') and self.dual_view_panel.is_dual_mode:
             current_idx = self.navigator.current_index
             self._update_secondary_overlay(current_idx + 1) 
@@ -1882,16 +1955,13 @@ class MainWindow(QMainWindow):
     def _sync_secondary_overlay_settings(self, **kwargs) -> None:
         """Secondary overlay에 primary와 동일한 설정 동기화."""
         try:
-            sec_overlay = (
-                self.dual_view_panel
-                ._secondary
-                .overlay_widget
-            )
+            sec_overlay = self.dual_view_panel.secondary_viewer.overlay_widget
             if sec_overlay:
                 sec_overlay.update_settings(**kwargs)
         except AttributeError:
-            pass  # dual_view_panel 또는 secondary 미초기화 시 무시
+            pass 
         
+
     def _build_overlay_data(
         self,
         file_path: Path,
@@ -1953,14 +2023,14 @@ class MainWindow(QMainWindow):
 
         current_image_id = self.image_viewer.current_image_id
         debug_print(f"오버레이 업데이트 요청: ID={current_image_id}, 파일={file_path.name}")
-        debug_print(f"overlay_data 생성 완료: {list(overlay_data.keys())}")
 
         self.image_viewer.pending_overlay_data = (
             file_path,
             overlay_data,
             current_image_id,
+            self.metadata_panel.current_zoom,  
         )
-        debug_print(f"pending_overlay_data 설정 완료, ID={current_image_id}")
+        debug_print(f"pending_overlay_data 설정 완료, ID={current_image_id}, zoom={self.metadata_panel.current_zoom}")
 
         if self.image_viewer.overlay_timer.isActive():
             self.image_viewer.overlay_timer.stop()
@@ -1991,9 +2061,7 @@ class MainWindow(QMainWindow):
 
 
     def _update_secondary_overlay(self, sec_index: int) -> None:
-        """
-        보조 뷰어 오버레이 갱신.
-        """
+        """보조 뷰어 오버레이 갱신."""
         files = self.navigator.image_files
         if not (0 <= sec_index < len(files)):
             return
@@ -2006,8 +2074,11 @@ class MainWindow(QMainWindow):
 
         overlay_data = self._build_overlay_data(sec_file, meta)
         if overlay_data:
-            self.dual_view_panel.update_secondary_overlay(sec_file, overlay_data)
-
+            self.dual_view_panel.update_secondary_overlay(
+                sec_file,
+                overlay_data,
+                initial_zoom=self.metadata_panel.current_zoom, 
+            )
 
 # ============================================
 # 상태바 및 UI 업데이트
@@ -2040,6 +2111,7 @@ class MainWindow(QMainWindow):
         except Exception as e:
             error_print(f"[ERROR] 성능 정보 업데이트 실패: {e}")
 
+
     def _update_cpu_usage(self) -> None:
         """CPU 사용률 업데이트"""
         try:
@@ -2064,8 +2136,7 @@ class MainWindow(QMainWindow):
         """줌 레벨 변경"""
         self.status_ctrl.on_zoom_changed(zoom_factor)
 
-
-# ============================================
+# ===========================================
 # 썸네일 및 정렬
 # ============================================
 
@@ -2089,7 +2160,6 @@ class MainWindow(QMainWindow):
         """정렬 요청 → StatusBarController 위임"""
         self.status_ctrl._on_sort_requested(sort_type, reverse)
 
-
 # ============================================
 # 캐시 관리
 # ============================================
@@ -2102,7 +2172,6 @@ class MainWindow(QMainWindow):
     @Slot(int)
     def _on_cache_miss(self, index: int) -> None:
             self._update_performance_info()
-
 
 # ============================================
 # GPS 기능
@@ -2132,12 +2201,8 @@ class MainWindow(QMainWindow):
 
 
     def _on_map_zoom_changed(self, zoom: int) -> None:
-        """지도 줌 레벨 변경 (패널 → 오버레이 동기화) """
-        # 오버레이 지도 줌 업데이트
         self.overlay_widget.update_map_zoom(zoom)
-        self.config.save()
         info_print(f"지도 줌 레벨: {zoom}")
-
 
 # ============================================
 # 화면 캡쳐
@@ -2277,7 +2342,6 @@ class MainWindow(QMainWindow):
         
         return save_path
 
-
 # ============================================
 # 설정 및 다이얼로그
 # ============================================
@@ -2287,16 +2351,49 @@ class MainWindow(QMainWindow):
         from ui.settings_dialog import SettingsDialog
         dialog = SettingsDialog(self.config, self)
 
-        # ── 시그널 연결 (accept() 내부에서 emit됨) ──────────────
+        # ── 시그널 연결 ────────────────────────────────────────────
         dialog.cache_settings_changed.connect(self._on_cache_settings_changed)
         dialog.overlay_settings_changed.connect(self._on_overlay_settings_changed)
         dialog.rendering_settings_changed.connect(self._on_rendering_settings_changed)
+        dialog.map_settings_changed.connect(self._on_map_settings_changed)   # ← 신규
 
-        # ── 캐시 삭제 버튼 ────────────────────────────────────────
+        # ── 썸네일 캐시 메모리 해제 ───────────────────────────────
         dialog.thumbnail_cache_clear_requested.connect(
             lambda: self.thumbnail_bar._thumb_cache.clear_memory()
         )
+
         dialog.exec()
+
+
+    def _on_map_settings_changed(self) -> None:
+        """PMTiles 경로 또는 최대 줌이 변경됐을 때 런타임 즉시 반영."""
+        pmtiles_path = self.config.get('map.pmtiles_path', '').strip()
+        max_zoom     = self.config.get('map.max_zoom', 14)
+
+        configure_pmtiles(pmtiles_path if pmtiles_path else None, max_zoom)
+        PMTilesMapLoader.clear_cache()
+
+        self.metadata_panel.refresh_max_zoom()
+        
+        info_print(
+            f"PMTiles 설정 적용: 경로={pmtiles_path or '(미설정)'} 최대줌={max_zoom}"
+        )
+
+        # 현재 표시 중인 지도를 새 설정으로 재요청
+        if self._current_file:
+            metadata = self.metadata_panel.get_current_metadata()
+            # metadata는 dict, GPS는 'gps' 키 하위에 존재
+            has_gps = (
+                isinstance(metadata, dict)
+                and isinstance(metadata.get('gps'), dict)
+                and metadata['gps'].get('latitude') is not None
+            )
+            if has_gps:
+                self.metadata_panel.refresh_map()
+                # 오버레이 지도도 갱신
+                if self.overlay_widget.show_map and self.overlay_widget.current_gps:
+                    self.overlay_widget._refresh_map()
+                debug_print("지도 이미지 재요청 완료")
 
 
     def _on_overlay_settings_changed(self):
@@ -2325,7 +2422,14 @@ class MainWindow(QMainWindow):
                 show_file, show_camera, show_exif, show_lens,
                 show_gps, show_map, opacity, position
             )
-            
+
+            # secondary 오버레이 동일 설정 적용
+            if hasattr(self, 'overlay_widget_b') and self.overlay_widget_b:
+                self.overlay_widget_b.update_settings(
+                    self.overlay_enabled, show_file, show_camera, show_exif, show_lens,
+                    show_gps, show_map, opacity, position
+                )
+
             # 현재 이미지 오버레이 갱신
             if self._current_file:
                 metadata = self.metadata_panel.get_current_metadata()
@@ -2354,6 +2458,8 @@ class MainWindow(QMainWindow):
         self.cache_manager.ahead_count   = self.config.get('cache.ahead_count', 25)
         self.cache_manager.behind_count  = self.config.get('cache.behind_count', 5)
         self.cache_manager.max_memory_mb = self.config.get('cache.max_memory_mb', 700) 
+        render_mb = self.config.get('cache.render_memory_mb', 50)
+        configure_render_cache(render_mb)
 
         # ThumbnailBar HybridCache — 한도 런타임 갱신 (DB 재생성 불필요)
         self.thumbnail_bar._thumb_cache.max_memory_bytes = (
@@ -2362,8 +2468,6 @@ class MainWindow(QMainWindow):
         self.thumbnail_bar._thumb_cache.max_disk_bytes = (
             self.config.get('cache.thumb_disk_mb', 500) * 1024 * 1024
         )
-
-        # config.save() 제거 — accept()에서 이미 저장됨
         debug_print("캐시 설정 런타임 반영 완료")
 
 
@@ -2385,15 +2489,17 @@ class MainWindow(QMainWindow):
         dialog = SystemInfoDialog(self.config, self)
         dialog.exec()
 
-
 # ============================================
 # 컨텍스트 메뉴
 # ============================================
 
     def create_context_menu(self, parent_widget=None) -> "QMenu":
         """컨텍스트 메뉴 반환 (MenuShortcutController 위임)."""
-        return self.menu_ctrl.build_context_menu(parent_widget)
 
+        if getattr(parent_widget, 'is_secondary', False):
+            return self.menu_ctrl.build_secondary_context_menu(parent_widget)
+
+        return self.menu_ctrl.build_context_menu(parent_widget)
 
 # ============================================
 # 회전기능
@@ -2525,7 +2631,6 @@ class MainWindow(QMainWindow):
         # 썸네일 캐시도 삭제 (hash 기반이라 mtime 변경되면 자동으로 새 생성되지만, 확실히 하려면 캐시 폴더 제거도 고려)
         self.navigator.reload_async()  # 또는 현재 파일만 다시 로드하는 경량 함수가 있으면 사용
 
-
 # ============================================
 # 인쇄 기능
 # ============================================
@@ -2589,14 +2694,7 @@ class MainWindow(QMainWindow):
         
         # 현재 파일 가져오기
         try:
-            # current가 프로퍼티인지 메서드인지 확인
             current_file = self.navigator.current()
-            
-            # # callable 체크는 Path 객체가 아닐 때만
-            # if current_file and not isinstance(current_file, Path):
-            #     if callable(current_file):
-            #         error_print(f"navigator.current가 함수입니다. 호출합니다.")
-            #         current_file = current_file()  # 함수면 호출
             current_file: Optional[Path] = self.navigator.current()
 
         except AttributeError:
@@ -2705,7 +2803,6 @@ class MainWindow(QMainWindow):
         
         self._show_print_dialog(all_files, metadata_list)
 
-
 # ============================================
 # 편집 모드
 # ============================================
@@ -2718,8 +2815,6 @@ class MainWindow(QMainWindow):
             self.image_viewer._edit_cancel()
             self._show_status_message(t('msg.edit_exited'), 1500)
         else:
-            # current_pixmap이 None이면 pixmap_item에서 복구 시도
-            # (_exit_edit_mode가 current_pixmap을 None으로 초기화하기 때문)
             cp = self.image_viewer.current_pixmap
             if not cp or cp.isNull():
                 pi = getattr(self.image_viewer, 'pixmap_item', None)
@@ -2811,10 +2906,8 @@ class MainWindow(QMainWindow):
                 
 
     def _build_save_exif(self, filepath: Optional[Path]) -> Optional[bytes]:
-        # 버전 정보: dodoRynx 패키지 import 대신 utils.version 또는 상수 사용
 
         from utils.app_meta import APP_VERSION as app_version
-
         software_tag = f"dodoRynx v{app_version}"
 
         # ── piexif 경로 ──────────────────────────────────────
@@ -2874,9 +2967,6 @@ class MainWindow(QMainWindow):
             ifd_0th = exif_dict.get('0th', {})
             ifd_0th.pop(piexif.ImageIFD.Orientation, None)
 
-            # dump 실패를 유발하는 문제 태그 사전 제거
-            #   ComponentsConfiguration(37121): bytes여야 하는데 tuple로 저장된 경우
-            #   FlashPixVersion(40960), ExifVersion(36864) 등도 동일 문제 가능
             PROBLEMATIC_EXIF_TAGS = {
                 piexif.ExifIFD.ComponentsConfiguration,   # 37121
                 piexif.ExifIFD.ExifVersion,               # 36864
@@ -3001,7 +3091,7 @@ class MainWindow(QMainWindow):
             self,
             t('edit_dialog.save_as_title'),
             default,
-            t('edit_dialog.save_as_filter'),   # JPG + WEBP 포함
+            t('edit_dialog.save_as_filter'), 
         )
         if not save_path_str:
             return
@@ -3074,5 +3164,4 @@ class MainWindow(QMainWindow):
     # 기존 코드와의 하위 호환 — 예전 호출부가 남아있을 경우 대비
     def _do_save_as_jpg(self, pixmap: QPixmap, save_path: Path) -> None:
         self._do_save_image(pixmap, save_path, 'jpg', 85)
-
 

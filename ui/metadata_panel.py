@@ -9,13 +9,12 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from PySide6.QtCore import QTimer, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPixmap
+from PySide6.QtGui import QFont, QImage, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
     QHBoxLayout,
     QLabel,
-    QProgressBar,
     QPushButton,
     QScrollArea,
     QSizePolicy,
@@ -24,7 +23,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from core.map_loader import OFMMapLoader
+from core.map_loader import PMTilesMapLoader
 from core.metadata_reader import MetadataReader
 
 from utils.config_manager import ConfigManager
@@ -111,9 +110,10 @@ class MetadataPanel(QWidget):
         self.metadata_widgets: List[QWidget] = [] 
         
         # 지도 관련
-        self.map_loader: Optional[OFMMapLoader] = None
+        self.map_loader: Optional[PMTilesMapLoader] = None
         self.current_gps: Optional[tuple] = None
         self.current_zoom: int = self.DEFAULT_ZOOM
+        self._map_retry_count: int = 0 
 
         self._zoom_debounce_timer = QTimer(self)
         self._zoom_debounce_timer.setSingleShot(True)
@@ -195,7 +195,6 @@ class MetadataPanel(QWidget):
 
         layout.addWidget(scroll_area)
         
-
     # ============================================
     # 메타데이터 로딩
     # ============================================
@@ -261,7 +260,6 @@ class MetadataPanel(QWidget):
     def get_current_metadata(self) -> Dict[str, Any]:
         """현재 메타데이터 반환"""
         return self.current_metadata
-
 
     # ============================================
     # 섹션 생성
@@ -391,6 +389,7 @@ class MetadataPanel(QWidget):
 
         self.current_gps  = (gps_info['latitude'], gps_info['longitude'])
         self.current_zoom = self.config.get_gps_map_setting("default_zoom", 15)
+        self.map_zoom_changed.emit(self.current_zoom)
 
         # ── 자동 로드 체크박스 ────────────────────────────────────
         auto_load_checkbox = QCheckBox(t('metadata_panel.auto_load_map'))
@@ -432,30 +431,6 @@ class MetadataPanel(QWidget):
         map_layout = QVBoxLayout(map_container)
         map_layout.setContentsMargins(0, 4, 0, 0)
         map_layout.setSpacing(4)
-
-        # 진행률 바
-        self.map_progress = QProgressBar()
-        self.map_progress.setMaximum(100)
-        self.map_progress.setValue(0)
-        self.map_progress.setTextVisible(True)
-        self.map_progress.setFormat(t('metadata_panel.map_progress_format'))
-        self.map_progress.setFixedHeight(18)
-        self.map_progress.setStyleSheet(f"""
-            QProgressBar {{
-                border: 1px solid {_C_BTN_BOR};
-                border-radius: {_RADIUS};
-                background: {_C_BTN_BG};
-                text-align: center;
-                color: {_C_TEXT};
-                font-size: 10px;
-            }}
-            QProgressBar::chunk {{
-                background: rgba(74,158,255,0.50);
-                border-radius: 3px;
-            }}
-        """)
-        self.map_progress.setVisible(False)
-        map_layout.addWidget(self.map_progress)
 
         # 지도 이미지
         self.map_label = QLabel(t('metadata_panel.map_placeholder'))
@@ -507,21 +482,21 @@ class MetadataPanel(QWidget):
             btn.setStyleSheet(_btn_style)
             btn.clicked.connect(slot)
 
+        self.zoom_in_btn = zoom_in_btn
+
         # 줌 레벨 표시 라벨
         self.zoom_level_label = QLabel(
             t('metadata_panel.zoom_label', zoom=self.current_zoom)
         )
+
+        self.zoom_level_label = QLabel("")          # ← 빈 텍스트로 생성
         self.zoom_level_label.setFixedSize(60, _BTN_H)
         self.zoom_level_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.zoom_level_label.setStyleSheet(f"""
-            QLabel {{
-                color: {_C_TEXT_DIM};
-                font-size: 10px;
-                background: transparent;
-                border: none;
-                padding: 0;
-            }}
-        """)
+        self.zoom_level_label.setStyleSheet(
+            f"QLabel {{ color: {_C_TEXT_DIM}; font-size: 10px; "
+            f"background: transparent; border: none; padding: 0; }}"
+        )
+
 
         controls_layout = QHBoxLayout()
         controls_layout.setSpacing(4)
@@ -532,6 +507,7 @@ class MetadataPanel(QWidget):
         controls_layout.addWidget(reset_btn)
         map_layout.addLayout(controls_layout)
 
+        self._update_zoom_label()  
         self.metadata_layout.addWidget(map_container)
         self.metadata_widgets.append(map_container)
 
@@ -539,15 +515,8 @@ class MetadataPanel(QWidget):
             self._load_map()
 
         # ── Attribution ───────────────────────────────────────────
-        attr_label = QLabel(
-            '<a href="https://openfreemap.org/">© OpenFreeMap</a>'
-            '&nbsp;·&nbsp;'
-            '<a href="https://www.openmaptiles.org/">© OpenMapTiles</a>'
-            '&nbsp;·&nbsp;'
-            '<a href="https://www.openstreetmap.org/copyright">© OpenStreetMap</a>'
-        )
-        attr_label.setTextFormat(Qt.TextFormat.RichText)
-        attr_label.setOpenExternalLinks(True)
+        attr_label = QLabel("© OpenStreetMap contributors")
+        attr_label.setTextFormat(Qt.TextFormat.PlainText)
         attr_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         attr_label.setWordWrap(True)
         attr_label.setStyleSheet(f"""
@@ -568,7 +537,6 @@ class MetadataPanel(QWidget):
         """)
         map_layout.addWidget(attr_label)
         
-
     # ============================================
     # 위젯 정리
     # ============================================
@@ -608,91 +576,51 @@ class MetadataPanel(QWidget):
                     if nested_layout is not None:
                         self._clear_layout(nested_layout)
 
-
     # ============================================
     # 지도 관리
     # ============================================
 
     def stop_map_loader(self) -> None:
         """
-        OFMMapLoader 취소 및 참조 해제 (단일 진입점).
+        PMTilesMapLoader 취소 및 참조 해제 (단일 진입점).
 
-        OFMMapLoader(QObject) 아키텍처:
-        - cancel() : _cancelled 플래그 + QWebEngineView hide/deleteLater
+        - cancel()      : _cancelled 플래그 + QWebEngineView hide/deleteLater
         - deleteLater() : QObject C++ 메모리 이벤트 루프에서 안전 해제
-        - self.map_loader = None 로 지연 콜백(QueuedConnection) 무효화
+        - self.map_loader = None 으로 지연 콜백(QueuedConnection) 무효화
         """
         if self.map_loader is None:
             return
 
-        loader = self.map_loader
-        self.map_loader = None  
+        loader        = self.map_loader
+        self.map_loader = None
 
-        try:
-            loader.map_loaded.disconnect(self._on_map_loaded)
-        except RuntimeError:
-            pass
-        try:
-            loader.load_failed.disconnect(self._on_map_failed)
-        except RuntimeError:
-            pass
-        try:
-            loader.progress.disconnect(self._on_map_progress)
-        except RuntimeError:
-            pass
+        for sig, slot in (
+            (loader.map_loaded, self._on_map_loaded),
+            (loader.load_failed, self._on_map_failed),
+        ):
+            try:
+                sig.disconnect(slot)
+            except RuntimeError:
+                pass
 
-        loader.cancel()      
-        loader.deleteLater()    
-        debug_print("OFMMapLoader 취소 완료")
+        loader.cancel()
+        loader.deleteLater()
+        debug_print("PMTilesMapLoader 취소 완료")
 
 
     def _apply_attribution_overlay(self, img: QImage) -> QPixmap:
         """
-        QImage에 attribution 텍스트 오버레이를 그린 후 QPixmap 반환.
-        _load_map(캐시 HIT)과 _on_map_loaded(캐시 MISS) 공용.
+        QImage → QPixmap 변환.
+        attribution은 PMTilesMapLoader._draw_attribution()에서 이미 삽입됨.
+        렌더 크기가 280×200으로 고정되어 crop도 불필요.
         """
-        crop_x = max(0, (img.width()  - 280) // 2)
-        crop_y = max(0, (img.height() - 200) // 2)
-        crop_w = min(280, img.width())
-        crop_h = min(200, img.height())
-        cropped = img.copy(crop_x, crop_y, crop_w, crop_h)
-
-        painter = QPainter(cropped)
-        try:
-            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-
-            font = QFont()
-            font.setPointSize(7)
-            painter.setFont(font)
-
-            text = "OpenFreeMap © OpenMapTiles Data from OpenStreetMap"
-            metrics = painter.fontMetrics()
-            text_w  = metrics.horizontalAdvance(text)
-            text_h  = metrics.height()
-            margin  = 4
-
-            x = crop_w - text_w - margin
-            y = crop_h - margin
-
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QColor(255, 255, 255, 200))
-            painter.drawRoundedRect(
-                x - 2, y - text_h - 2,
-                text_w + 6, text_h + 4,
-                3, 3,
-            )
-            painter.setPen(QColor(0, 0, 0))
-            painter.drawText(x, y, text)
-        finally:
-            painter.end()
-
-        return QPixmap.fromImage(cropped)
+        return QPixmap.fromImage(img)
 
 
     def _load_map(self) -> None:
         """
         지도 로드 시작.
-        캐시 HIT: 로딩 UI 없이 즉시 표시.
+        캐시 HIT : 로딩 UI 없이 즉시 표시.
         캐시 MISS: 프로그레스바 표시 후 QWebEngineView 렌더링.
         """
         if not self.current_gps:
@@ -700,40 +628,40 @@ class MetadataPanel(QWidget):
 
         lat, lon = self.current_gps
 
-        # ── 렌더 캐시 선행 확인 ───────────────────────────────────────────
-        pix = OFMMapLoader.get_cached_pixmap(lat, lon, self.current_zoom, 400, 300)
+        # ── 렌더 캐시 선행 확인 ─────────────────────────────────────────
+        # 렌더 크기를 표시 크기(280×200)와 일치시켜 crop 제거
+        pix = PMTilesMapLoader.get_cached_pixmap(lat, lon, self.current_zoom, 280, 200)
 
         if pix is not None:
             self.stop_map_loader()
             try:
                 pixmap = self._apply_attribution_overlay(pix.toImage())
-                self.map_progress.setVisible(False)
+                # self.map_progress.setVisible(False)
                 self.map_label.setScaledContents(False)
                 self.map_label.setPixmap(pixmap)
                 self.map_label.setFixedSize(280, 200)
                 self.map_label.show()
-                debug_print(f"OFM 패널 캐시 HIT: z={self.current_zoom}")
+                debug_print(f"[PMTiles] 패널 캐시 HIT: z={self.current_zoom}")
             except RuntimeError:
                 pass
             return
 
-        # ── 캐시 MISS → 프로그레스바 + WebView 시작 ──────────────────────
-        self.stop_map_loader() 
+        # ── 캐시 MISS → 프로그레스바 + WebView 시작 ────────────────────
+        self.stop_map_loader()
 
         try:
-            self.map_progress.setVisible(False)
-            self.map_progress.setValue(0)
-            self.map_progress.setFormat("렌더링 중...")
             self.map_label.setPixmap(QPixmap())
-            self.map_label.setText(t("metadata_panel.map_loading_zoom", zoom=self.current_zoom))
+            self.map_label.setText(
+                t("metadata_panel.map_loading_zoom", zoom=self.current_zoom)
+            )
         except RuntimeError:
-            return 
+            return
 
-        self.map_loader = OFMMapLoader(
+        self.map_loader = PMTilesMapLoader(
             lat, lon,
             zoom   = self.current_zoom,
-            width  = 400,
-            height = 300,
+            width  = 280,  
+            height = 200,
         )
         # QueuedConnection: 캐시 HIT 동기 emit 재진입 방지
         self.map_loader.map_loaded.connect(
@@ -742,11 +670,11 @@ class MetadataPanel(QWidget):
         self.map_loader.load_failed.connect(
             self._on_map_failed, Qt.ConnectionType.QueuedConnection
         )
-        self.map_loader.progress.connect(
-            self._on_map_progress, Qt.ConnectionType.QueuedConnection
-        )
         self.map_loader.start()
-        info_print(f"OFM 지도 로딩 시작: ({lat:.6f}, {lon:.6f}), 줌: {self.current_zoom}")
+        self._map_retry_count = 0
+        info_print(
+            f"[PMTiles] 지도 로딩 시작: ({lat:.6f}, {lon:.6f})  줌={self.current_zoom}"
+        )
 
 
     def clear_map(self) -> None:
@@ -784,10 +712,6 @@ class MetadataPanel(QWidget):
             loader.load_failed.disconnect(self._on_map_failed)
         except RuntimeError:
             pass
-        try:
-            loader.progress.disconnect(self._on_map_progress)
-        except RuntimeError:
-            pass
 
         loader.cancel() 
         loader.deleteLater()
@@ -803,12 +727,6 @@ class MetadataPanel(QWidget):
         except RuntimeError as e:
             warning_print(f"map_label 이미 삭제됨: {e}")
             return
-
-        try:
-            if hasattr(self, "map_progress"):
-                self.map_progress.setVisible(False)
-        except RuntimeError:
-            pass
 
         pixmap = self._apply_attribution_overlay(q_image)
         self.map_label.setPixmap(pixmap)
@@ -833,20 +751,18 @@ class MetadataPanel(QWidget):
             loader.load_failed.disconnect(self._on_map_failed)
         except RuntimeError:
             pass
-        try:
-            loader.progress.disconnect(self._on_map_progress)
-        except RuntimeError:
-            pass
 
         loader.cancel()
         loader.deleteLater()
 
-        try:
-            if hasattr(self, 'map_progress'):
-                self.map_progress.setVisible(False)
-        except RuntimeError:
-            pass
+        if ("Failed to fetch" in error or "failed to fetch" in error.lower()) \
+                and self._map_retry_count < 1:
+            self._map_retry_count += 1
+            debug_print(f"[PMTiles] 패널 fetch 오류 재시도 ({self._map_retry_count}/1)")
+            QTimer.singleShot(400, self._load_map)
+            return
 
+        self._map_retry_count = 0
         try:
             self.map_label.setPixmap(QPixmap())
             self.map_label.setText(f"❌ {error}")
@@ -854,37 +770,16 @@ class MetadataPanel(QWidget):
             warning_print(f"map_label 이미 삭제됨 (_on_map_failed): {e}")
 
 
-    def _on_map_progress(self, current: int, total: int) -> None:
-        if self.map_loader is None:
+    def refresh_map(self) -> None:
+        """
+        PMTiles 설정 변경 후 현재 GPS 위치의 지도를 다시 로드한다.
+        캐시는 이미 PMTilesMapLoader.clear_cache()로 무효화된 상태여야 한다.
+        """
+        if not self.current_gps:
+            debug_print("refresh_map: GPS 정보 없음 — 스킵")
             return
-        try:
-            if not hasattr(self, "map_progress"):
-                return
-            self.map_progress.isVisible()
-        except RuntimeError:
-            return
-
-        if total > 0:
-            percentage = int((current / total) * 100)
-            self.map_progress.setValue(percentage)
-
-            if current < total:
-                self.map_progress.setFormat(
-                    t('metadata_panel.map_progress_format') 
-                )
-            else:
-                self.map_progress.setFormat("완료")
-                # 완료 시 잠시 후 숨김
-                QTimer.singleShot(500, lambda: self._hide_progress_safe())
-
-
-    def _hide_progress_safe(self) -> None:
-        try:
-            if hasattr(self, 'map_progress'):
-                self.map_progress.setVisible(False)
-        except RuntimeError:
-            pass
-        
+        debug_print(f"refresh_map: 지도 재요청 z={self.current_zoom}")
+        self._load_map()
 
 # ============================================
 # 지도 줌 컨트롤
@@ -925,15 +820,56 @@ class MetadataPanel(QWidget):
 
     def _reset_zoom(self) -> None:
         """리셋"""
-        self._change_zoom(self.DEFAULT_ZOOM, "줌 리셋")
+        self._change_zoom(self._effective_max_zoom, "줌 리셋")
 
 
     def _update_zoom_label(self) -> None:
-        """줌 레벨 라벨 업데이트"""
-        if hasattr(self, 'zoom_level_label'):
-            self.zoom_level_label.setText(t('metadata_panel.zoom_label', zoom=self.current_zoom))
+        if not hasattr(self, 'zoom_level_label'):
+            return
+
+        zoom    = self.current_zoom
+        eff_max = self._effective_max_zoom
+        at_max  = (zoom >= eff_max)
+
+        if at_max:
+            self.zoom_level_label.setText(f"Zoom {zoom} Max")
+            self.zoom_level_label.setStyleSheet(
+                "QLabel { color: #ff9800; font-size: 9px; "
+                "background: transparent; border: none; padding: 0; }"
+            )
+        else:
+            self.zoom_level_label.setText(
+                t('metadata_panel.zoom_label', zoom=zoom)
+            )
+            self.zoom_level_label.setStyleSheet(
+                "QLabel { color: #888888; font-size: 10px; "
+                "background: transparent; border: none; padding: 0; }"
+            )
+
+        # + 버튼 비활성화 (경고 없이 UX로만 차단)
+        if hasattr(self, 'zoom_in_btn'):
+            self.zoom_in_btn.setEnabled(not at_max)
+
+    @property
+    def _effective_max_zoom(self) -> int:
+        """map_loader 모듈의 실제 pmtiles_max_zoom 반환 (설정 변경 즉시 반영)."""
+        try:
+            from core import map_loader as _ml
+            return _ml._pmtiles_max_zoom         # configure_pmtiles() 호출 시 갱신됨
+        except Exception:
+            return self.DEFAULT_ZOOM                # fallback: 클래스 상수 18
 
 
+    def refresh_max_zoom(self) -> None:
+        """설정 다이얼로그에서 PMTiles 파일/maxzoom 변경 시 MainWindow가 호출."""
+        eff_max = self._effective_max_zoom
+        if self.current_zoom > eff_max:
+            # 현재 줌이 새 상한 초과 → 클램핑 (change_zoom이 update_zoom_label 포함)
+            self._change_zoom(eff_max)
+        else:
+            # 범위 내여도 라벨·버튼 상태 갱신 (상한이 높아진 경우 Max 해제)
+            self._update_zoom_label()
+                        
 # ============================================
 # 설정 관리
 # ============================================

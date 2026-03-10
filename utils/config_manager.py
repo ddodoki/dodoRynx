@@ -32,67 +32,68 @@ class ConfigManager(QObject):
     • config.get_ui_visibility(element)        → ui{"show_{element}"}
     """
 
-    # ─── 기본값 ─────────────────────────────────────────────
     DEFAULT_CONFIG: Dict[str, Any] = {
-        # 캐시 (flat)
-        "cache.ahead_count":    25,
-        "cache.behind_count":   5,
+        # ── 캐시 (flat) ─────────────────────────────────────────
+        "cache.ahead_count":     25,
+        "cache.behind_count":    5,
         "cache.max_memory_mb":   700,
         "cache.thumb_memory_mb": 100,
         "cache.thumb_disk_mb":   500,
-        "cache.ofm_memory_mb":   50,
-        "cache.ofm_disk_mb":    200,
-        "cache.ofm_expiry_days": 28,
+        "cache.render_memory_mb": 50,   # PMTiles 렌더 메모리 캐시 (MB)
 
-        # 렌더링 (nested)
+        # ── 렌더링 (nested) ──────────────────────────────────────
         "rendering": {
             "use_opengl":   False,
-            "vsync":       False,
+            "vsync":        False,
             "msaa_samples": 0,
         },
 
-        # 애니메이션 (nested)
+        # ── 애니메이션 (nested) ───────────────────────────────────
         "animation": {
             "scale_quality": "high",
             "cache_mode":    True,
-            "webp_mode": "fast"
+            "webp_mode":     "fast",
         },
 
-        # 기타 flat 키
+        # ── 기타 flat 키 ──────────────────────────────────────────
         "map.service":    "google",
         "browser.path":   "system_default",
 
-        # 뷰어 (flat)
+        # ── 지도 (PMTiles) ────────────────────────────────────────
+        "map.pmtiles_path": "",    # 로컬 .pmtiles 파일 절대 경로
+        "map.max_zoom":     14,    # PMTiles 헤더에서 자동 파싱 후 덮어씀
+
+        # ── 뷰어 (flat) ───────────────────────────────────────────
         "viewer.wheel_delay_ms": 100,
 
-        # 미니맵 (flat)
+        # ── 미니맵 (flat) ─────────────────────────────────────────
         "minimap.opacity": 0.8,
 
-        # 오버레이 스케일 (flat — settings_dialog 슬라이더로 관리됨)
+        # ── 오버레이 스케일 (flat) ────────────────────────────────
         "overlay.scale": 100,
 
-        # 창 상태 (flat)
-        "window.geometry":     None,
-        "window.state":        None,
+        # ── 창 상태 (flat) ────────────────────────────────────────
+        "window.geometry":      None,
+        "window.state":         None,
         "window.splitter_sizes": None,
 
-        # GPS 지도 (nested)
+        # ── GPS 지도 동작 (nested) ────────────────────────────────
         "gps_map": {
             "auto_load":    False,
             "default_zoom": 15,
         },
 
-        # UI 가시성 (nested) — show_perf_overlay 추가
+        # ── UI 가시성 (nested) ────────────────────────────────────
         "ui": {
-            "show_metadata":       False,
-            "show_thumbnail_bar":  True,
-            "show_status_bar":     True,
-            "show_perf_overlay":   False,   # 신규: 성능 오버레이 표시 여부
+            "show_metadata":      False,
+            "show_thumbnail_bar": True,
+            "show_status_bar":    True,
+            "show_perf_overlay":  False,
         },
 
-        # 오버레이 정보 표시 (nested)
+        # ── 오버레이 정보 표시 (nested) ───────────────────────────
         "overlay": {
-            "enabled":        False,
+            "enabled":          False,
             "show_file_info":   True,
             "show_camera_info": True,
             "show_exif_info":   True,
@@ -103,16 +104,16 @@ class ConfigManager(QObject):
             "position":         "top_left",
         },
 
-        # 폴더 탐색기 (nested)
+        # ── 폴더 탐색기 (nested) ──────────────────────────────────
         "folder_explorer": {
-            "favorites":      [],
-            "last_path":      None,
-            "panel_width":    220,
-            "visible":        False,
-            "empty_folders":  [],
+            "favorites":     [],
+            "last_path":     None,
+            "panel_width":   220,
+            "visible":       False,
+            "empty_folders": [],
         },
-        
-        # UI 언어 (flat key)
+
+        # ── UI 언어 (flat) ────────────────────────────────────────
         "ui.language": "auto",   # "auto" = OS 언어 자동 감지
     }
 
@@ -150,12 +151,26 @@ class ConfigManager(QObject):
                 with open(self.config_file, "r", encoding="utf-8") as f:
                     loaded = json.load(f)
                 self._deep_update(self.config, loaded)
+                self._migrate_config()          # ← 추가
                 info_print(f"설정 로드: {self.config_file}")
             except Exception as e:
                 warning_print(f"설정 로드 실패: {e}, 기본값 사용")
         else:
             info_print(f"설정 파일 없음 → 기본값 사용: {self.config_file}")
             self.save()
+
+    def _migrate_config(self) -> None:
+        """
+        구버전 설정 키 정리.
+        OFM 관련 키를 제거하고 저장은 하지 않는다
+        (다음 save() 호출 시 자연스럽게 사라짐).
+        """
+        _OFM_KEYS = ("cache.ofm_memory_mb", "cache.ofm_disk_mb", "cache.ofm_expiry_days")
+        removed = [k for k in _OFM_KEYS if k in self.config]
+        for k in removed:
+            del self.config[k]
+        if removed:
+            info_print(f"설정 마이그레이션: 제거된 키 {removed}")
 
     def save(self) -> None:
         try:

@@ -78,6 +78,7 @@ from ui.selection_item import SelectionItem
 from ui.shape_item import ResizableShapeItem
 from ui.text_item import TextShapeItem
 
+from ui.watermark_mixin import WatermarkMixin
 from ui.eraser_mixin import EraserMixin
 from ui.resize_mixin import ResizeMixin
 from ui.shape_text_mixin import ShapeTextMixin
@@ -186,7 +187,6 @@ class _EditSnap:
     pixmap: Optional[QPixmap]
     shapes: List[_ShapeSnap]
 
-
 # ──────────────────────────────────────────────────────────────────────────────
 # _ClipboardImageItem
 # ──────────────────────────────────────────────────────────────────────────────
@@ -196,6 +196,7 @@ def _clip_angle(pos: QPointF, center: QPointF) -> float:
         pos.y() - center.y(), pos.x() - center.x()
     ))
 
+
 class _ClipboardImageItem(QGraphicsObject):
     """클립보드 이미지 — 이동 · 꼭지점 리사이즈 · 회전 지원."""
 
@@ -204,8 +205,10 @@ class _ClipboardImageItem(QGraphicsObject):
 
     HANDLE_SCREEN_PX: int = 9
 
+
     def mouseDoubleClickEvent(self, event) -> None:  # type: ignore[override]
         event.accept()
+
 
     def __init__(self, pixmap: QPixmap) -> None:
         super().__init__()
@@ -305,6 +308,7 @@ class _ClipboardImageItem(QGraphicsObject):
         self.setCursor(Qt.CursorShape.SizeAllCursor)
         super().hoverMoveEvent(event)
 
+
     def mousePressEvent(self, event) -> None:
         self._notified_this_press = False
 
@@ -353,6 +357,7 @@ class _ClipboardImageItem(QGraphicsObject):
 
         super().mousePressEvent(event)
 
+
     def mouseMoveEvent(self, event) -> None:
         if self._rotation_mode and self._rot_center_scene:
             delta = (_clip_angle(event.scenePos(), self._rot_center_scene)
@@ -378,6 +383,7 @@ class _ClipboardImageItem(QGraphicsObject):
 
         super().mouseMoveEvent(event)
 
+
     def mouseReleaseEvent(self, event) -> None:  # type: ignore[override]
         if self._rotation_mode:
             self._rotation_mode    = False
@@ -397,6 +403,7 @@ class _ClipboardImageItem(QGraphicsObject):
         self._notified_this_press = False
         super().mouseReleaseEvent(event)
 
+
     def itemChange(self, change: QGraphicsItem.GraphicsItemChange,
                    value: object) -> object:
         if (change == QGraphicsItem.GraphicsItemChange.ItemPositionChange
@@ -410,11 +417,13 @@ class _ClipboardImageItem(QGraphicsObject):
     def _sync_origin(self) -> None:
         self.setTransformOriginPoint(self._rect.center())
 
+
     def _rot_handle_rect(self) -> QRectF:
         r   = self._s2i(float(self.HANDLE_SCREEN_PX))
         cx  = self._rect.center().x()
         top = self._rect.top() - self._s2i(22.0)
         return QRectF(cx - r, top - r, r * 2, r * 2)
+
 
     def _handle_rects(self) -> dict[str, QRectF]:
         r  = self._rect
@@ -425,6 +434,7 @@ class _ClipboardImageItem(QGraphicsObject):
             'bl': QRectF(r.left()  - hs, r.bottom() - hs, hs*2, hs*2),
             'br': QRectF(r.right() - hs, r.bottom() - hs, hs*2, hs*2),
         }
+
 
     def _s2i(self, px: float) -> float:
         scene = self.scene()
@@ -440,7 +450,7 @@ class _ClipboardImageItem(QGraphicsObject):
 # EditModeMixin
 # ──────────────────────────────────────────────────────────────────────────────
 
-class EditModeMixin(EraserMixin, ResizeMixin, ShapeTextMixin):
+class EditModeMixin(WatermarkMixin, EraserMixin, ResizeMixin, ShapeTextMixin):
     """
     ImageViewer에 편집 모드 기능을 주입하는 Mixin.
 
@@ -510,6 +520,8 @@ class EditModeMixin(EraserMixin, ResizeMixin, ShapeTextMixin):
         self._init_eraser()
         self._init_resize()
         self._init_shape_text()
+        self._init_watermark()
+
 
     # ------------------------------------------------------------------
     # Undo 히스토리
@@ -658,7 +670,11 @@ class EditModeMixin(EraserMixin, ResizeMixin, ShapeTextMixin):
         tb.cancel_requested.connect(self._edit_cancel)
         tb.filters_visibility_changed.connect(self._on_filter_panel_toggle)
         tb.ai_panel_requested.connect(self._on_ai_panel_toggle)
-
+        if hasattr(tb, 'btn_watermark'):
+            tb.btn_watermark.clicked.connect(
+                lambda checked: self._on_watermark_panel_toggle(checked)
+            )
+            
     # ------------------------------------------------------------------
     # 편집 모드 진입 / 종료
     # ------------------------------------------------------------------
@@ -710,6 +726,11 @@ class EditModeMixin(EraserMixin, ResizeMixin, ShapeTextMixin):
             tb.btn_eraser.setChecked(False)
             tb.btn_eraser.blockSignals(False)
 
+        if hasattr(tb, 'btn_watermark') and tb.btn_watermark.isChecked():
+            tb.btn_watermark.blockSignals(True)
+            tb.btn_watermark.setChecked(False)
+            tb.btn_watermark.blockSignals(False)
+
         # ── 뷰포트에 이벤트 필터 설치 — MMB 패닝
         self.viewport().installEventFilter(self)  # type: ignore[attr-defined]
 
@@ -732,7 +753,6 @@ class EditModeMixin(EraserMixin, ResizeMixin, ShapeTextMixin):
         self.graphics_scene.addItem(self._selection)  # type: ignore[attr-defined]
 
         w, h = self._editor.get_size()
-        # tb.set_image_size(w, h)
         tb.setVisible(True)
         self._position_edit_toolbar()
 
@@ -748,6 +768,7 @@ class EditModeMixin(EraserMixin, ResizeMixin, ShapeTextMixin):
             mw.installEventFilter(self)  # type: ignore[arg-type]
 
         self.edit_mode_changed.emit(True)  # type: ignore[attr-defined]
+
         debug_print("편집 모드 진입")
         
 
@@ -758,6 +779,7 @@ class EditModeMixin(EraserMixin, ResizeMixin, ShapeTextMixin):
         self._cleanup_eraser()
         self._cleanup_resize() 
         self._cleanup_shape_text() 
+        self._cleanup_watermark()
 
         ai_panel = getattr(self, '_ai_panel_widget', None)
         if ai_panel is not None:
@@ -827,8 +849,7 @@ class EditModeMixin(EraserMixin, ResizeMixin, ShapeTextMixin):
     # ------------------------------------------------------------------
 
     def _edit_cancel(self) -> None:
-        # _edit_original_pixmap: enter_edit_mode()에서 저장한 딥카피 원본
-        # → AI 지우개, BG 제거, 필터, 크롭 등 모든 작업을 완전히 무시하고 복원
+
         original = getattr(self, '_edit_original_pixmap', None)
         if original is not None and not original.isNull():
             self._replace_pixmap_inplace(original)       # type: ignore[attr-defined]
@@ -987,7 +1008,7 @@ class EditModeMixin(EraserMixin, ResizeMixin, ShapeTextMixin):
             return None
 
         region = src.crop((x, y, x2, y2))
-        block  = max(8, min(w, h) // 15) # 짧은 변의 1/15, 최소 8px
+        block  = max(8, min(w, h) // 15) 
         small  = region.resize(
             (max(1, (x2 - x) // block), max(1, (y2 - y) // block)),
             Image.Resampling.NEAREST,
@@ -1014,7 +1035,7 @@ class EditModeMixin(EraserMixin, ResizeMixin, ShapeTextMixin):
             preview = self._apply_mosaic_to_pil(self._editor.get_working(), rect)
             if preview is None:
                 return
-            # PIL → QPixmap : raw RGBA 직접 변환 (PNG 인코딩 없이 빠름)
+
             preview_rgba = preview.convert('RGBA')
             data = preview_rgba.tobytes('raw', 'RGBA')
             qimg = QImage(data, preview_rgba.width, preview_rgba.height,
@@ -1669,7 +1690,6 @@ class EditModeMixin(EraserMixin, ResizeMixin, ShapeTextMixin):
         if src_pixmap.isNull():
             return
 
-        # BG 버튼만 비활성화. erase 버튼은 절대 건드리지 않는다.
         ai_panel = getattr(self, '_ai_panel_widget', None)
         if ai_panel is not None and hasattr(ai_panel, 'set_bg_task_running'):
             ai_panel.set_bg_task_running(True)
@@ -1706,7 +1726,6 @@ class EditModeMixin(EraserMixin, ResizeMixin, ShapeTextMixin):
             return
         self._replace_pixmap_inplace(result)  # type: ignore[attr-defined]
         if self._editor is not None:
-            # 동일한 이유로 _working만 교체
             self._editor.set_working(qpixmap_to_pil(result))
             self._editor.commit() 
 
@@ -1777,7 +1796,6 @@ class EditModeMixin(EraserMixin, ResizeMixin, ShapeTextMixin):
             return
         from ui.ai_panel import PANEL_W
         tb_h = self._edit_toolbar.height() if self._edit_toolbar else EditToolbar._BASE_H
-        # 필터 패널 바로 왼쪽에 배치 (겹치지 않도록)
         fp = getattr(self, '_filter_panel_widget', None)
         if fp is not None and fp.isVisible():
             x = fp.x() - PANEL_W - 8
@@ -1991,9 +2009,6 @@ class EditModeMixin(EraserMixin, ResizeMixin, ShapeTextMixin):
             return
         self._replace_pixmap_inplace(result)  # type: ignore[attr-defined]
         if self._editor is not None:
-            # _working만 교체. _original은 절대 건드리지 않는다.
-            #   → 취소/저장안함 시 ed.reset()이 진짜 원본을 반환할 수 있음
-            #self._editor._working = qpixmap_to_pil(result)
             self._editor.set_working(qpixmap_to_pil(result))
         debug_print("AI 지우개 완료")
 

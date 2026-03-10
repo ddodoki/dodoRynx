@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import Optional
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QEasingCurve, QPropertyAnimation
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QButtonGroup, QFrame, QHBoxLayout, QLabel,
-    QPushButton, QSlider, QVBoxLayout, QWidget,
+    QPushButton, QSlider, QVBoxLayout, QWidget, QGraphicsOpacityEffect
 )
 from ui.edit_filter_panel import EditFilterPanel
 from utils.lang_manager import t
@@ -99,10 +99,7 @@ QFrame[frameShape="5"] {{
 
 
 class EditToolbar(QWidget):
-    """편집 모드 툴바 — 단일 행 아이콘 레이아웃
-
-    [✂][⧉][▦][⌫][◈] [✦] │ [⤡][⬟] │ ──── │ [JPG][WEBP][q──][85] │ [✔][✕]
-    """
+    """편집 모드 툴바 — 단일 행 아이콘 레이아웃"""
 
     # ── 시그널 ──────────────────────────────────────────────────────────────
     crop_requested             = Signal()
@@ -136,6 +133,31 @@ class EditToolbar(QWidget):
 
         self._build_ui()
         self.setFixedHeight(self._BASE_H)
+
+        # ── 반투명 페이드 효과 ──────────────────────────────────────────
+        self._opacity_fx = QGraphicsOpacityEffect(self)
+        self._opacity_fx.setOpacity(0.30) 
+        self.setGraphicsEffect(self._opacity_fx)
+
+        self._fade = QPropertyAnimation(self._opacity_fx, b"opacity", self)
+        self._fade.setDuration(180)
+        self._fade.setEasingCurve(QEasingCurve.Type.OutCubic)
+
+
+    def enterEvent(self, event) -> None:
+        self._fade.stop()
+        self._fade.setStartValue(self._opacity_fx.opacity())
+        self._fade.setEndValue(1.0)
+        self._fade.start()
+        super().enterEvent(event)
+
+
+    def leaveEvent(self, event) -> None:
+        self._fade.stop()
+        self._fade.setStartValue(self._opacity_fx.opacity())
+        self._fade.setEndValue(0.30)
+        self._fade.start()
+        super().leaveEvent(event)
 
 
     def _build_ui(self) -> None:
@@ -176,6 +198,14 @@ class EditToolbar(QWidget):
         self.btn_ai.setToolTip(t('edit_toolbar.ai_panel_tip'))
         self.btn_ai.clicked.connect(self._on_ai_panel_toggled)
         row.addWidget(self.btn_ai)
+
+        self.btn_watermark = QPushButton("💧")
+        self.btn_watermark.setObjectName("ai_btn")  
+        self.btn_watermark.setFixedHeight(_H)
+        self.btn_watermark.setCheckable(True)
+        self.btn_watermark.setToolTip(t('edit_toolbar.watermark_tip'))
+        self.btn_watermark.clicked.connect(self._on_watermark_toggled)
+        row.addWidget(self.btn_watermark)
 
         row.addWidget(self._vsep())
 
@@ -267,6 +297,10 @@ class EditToolbar(QWidget):
         self.ai_panel_requested.emit(checked)
         if checked:
             self.ai_preload_requested.emit()
+
+
+    def _on_watermark_toggled(self, checked: bool) -> None:
+        self.tool_changed.emit('watermark' if checked else 'select')
 
 
     def _on_eraser_toggled(self, checked: bool) -> None:

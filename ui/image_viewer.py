@@ -121,7 +121,7 @@ class ImageViewer(EditModeMixin, QGraphicsView):
         self.main_window: Optional['MainWindow'] = None
         self.current_is_highlighted = False
         
-        self.wheel_timer = QTimer()
+        self.wheel_timer = QTimer(self)
         self.wheel_timer.setSingleShot(True)
         self.wheel_timer.setInterval(200)
 
@@ -171,7 +171,7 @@ class ImageViewer(EditModeMixin, QGraphicsView):
         self.last_mouse_pos: Optional[QPoint] = None
 
         # 줌 적용 딜레이 타이머
-        self.zoom_apply_timer = QTimer()
+        self.zoom_apply_timer = QTimer(self)
         self.zoom_apply_timer.setSingleShot(True)
         self.zoom_apply_timer.timeout.connect(self._delayed_apply_zoom)
         
@@ -181,7 +181,7 @@ class ImageViewer(EditModeMixin, QGraphicsView):
         self.overlay_timer.timeout.connect(self._apply_overlay)
         
         # 타입 힌트 명확히: Tuple[Path, Dict[str, Any], int]
-        self.pending_overlay_data: Optional[Tuple[Path, Dict[str, Any], int]] = None
+        self.pending_overlay_data: Optional[Tuple[Path, Dict[str, Any], int, int]] = None
         
         # 오버레이 위젯 참조
         self.overlay_widget: Optional['OverlayWidget'] = None
@@ -286,16 +286,11 @@ class ImageViewer(EditModeMixin, QGraphicsView):
 
         # 캐시 모드 설정
         self.setCacheMode(QGraphicsView.CacheModeFlag.CacheBackground)
-        
-        # 최적화 플래그
-        self.setOptimizationFlags(
-            QGraphicsView.OptimizationFlag.DontSavePainterState
-        )        
 
         # 자동 스크롤 관련 변수 추가
         self.auto_scroll_active = False
         self.auto_scroll_origin = QPoint()
-        self.auto_scroll_timer = QTimer()
+        self.auto_scroll_timer = QTimer(self)
         self.auto_scroll_timer.timeout.connect(self._auto_scroll)
         self.auto_scroll_timer.setInterval(16)  # ~60 FPS
 
@@ -304,7 +299,7 @@ class ImageViewer(EditModeMixin, QGraphicsView):
         self._position_minimap()  # 우측 하단 배치
 
         # 미니맵 업데이트 타이머
-        self.minimap_update_timer = QTimer()
+        self.minimap_update_timer = QTimer(self)
         self.minimap_update_timer.setSingleShot(True)
         self.minimap_update_timer.timeout.connect(self._update_minimap)
 
@@ -313,6 +308,9 @@ class ImageViewer(EditModeMixin, QGraphicsView):
 
         self._webp_workers: list = [] 
         self._loading_overlay = LoadingOverlay(self)
+
+        self.is_secondary: bool = False    
+        self._secondary_file: Optional[Path] = None 
 
 
     # 히스토리
@@ -349,7 +347,6 @@ class ImageViewer(EditModeMixin, QGraphicsView):
             if event.key() in nav_keys:
                 event.accept()
                 return
-            # 편집 모드 단축키(Del/Ctrl+Z/C/V)는 eventFilter에서 처리
 
         super().keyPressEvent(event)
 
@@ -357,6 +354,11 @@ class ImageViewer(EditModeMixin, QGraphicsView):
     def set_main_window(self, main_window) -> None:
         """메인 윈도우 참조 설정"""
         self.main_window = main_window
+
+
+    def set_secondary_file(self, file_path: Optional[Path]) -> None:
+        """secondary viewer가 현재 표시 중인 파일 경로 추적"""
+        self._secondary_file = file_path
 
 
     def set_overlay_widget(self, overlay_widget) -> None:
@@ -618,6 +620,7 @@ class ImageViewer(EditModeMixin, QGraphicsView):
             if timer and timer.isActive():
                 timer.stop()
 
+
     def _cleanup_all_timers(self) -> None:
         self._stop_timers_only()  
         for timer in self._pending_timers:
@@ -667,7 +670,7 @@ class ImageViewer(EditModeMixin, QGraphicsView):
         anim_cfg       = self.config_manager.get('animation', {})
         scale_quality: str = anim_cfg.get('scale_quality', 'high')
         cache_mode: bool   = anim_cfg.get('cache_mode', True)
-        webp_mode: str     = anim_cfg.get('webp_mode', 'quality')  # 'fast' | 'quality'
+        webp_mode: str     = anim_cfg.get('webp_mode', 'quality') 
 
         # ── 분기 결정 ────────────────────────────────────────────────
         is_webp = (file_path is not None and file_path.suffix.lower() == '.webp')
@@ -679,8 +682,7 @@ class ImageViewer(EditModeMixin, QGraphicsView):
         if use_pillow:
             assert file_path is not None  # mypy/Pylance 만족용
 
-            # 1) 첫 프레임 즉시 정적 표시 (set_image 내부에서 _stop_webp_workers 호출되지만
-            #    오버레이는 아직 꺼진 상태라 무해)
+            # 1) 첫 프레임 즉시 정적 표시
             from core.image_loader import ImageLoader
             first_static = ImageLoader().load(file_path)
             if first_static and not first_static.isNull():
@@ -950,7 +952,6 @@ class ImageViewer(EditModeMixin, QGraphicsView):
 
 
     def _cleanup_worker(self, worker: QThread) -> None:
-        # WebPDecodeWorker, _ApngDecodeWorker 모두 수용
         try:
             self._webp_workers.remove(worker)
         except ValueError:
@@ -1096,7 +1097,6 @@ class ImageViewer(EditModeMixin, QGraphicsView):
         self.zoom_factor = 1.0
         
         debug_print("✅ ImageViewer 완전 초기화 완료")
-
 
 # ============================================
 # 줌 제어
@@ -1331,7 +1331,6 @@ class ImageViewer(EditModeMixin, QGraphicsView):
         self.zoom_factor = actual_zoom
         self.zoom_changed.emit(actual_zoom)
         debug_print(f"줌 레벨: {actual_zoom:.3f}x ({actual_zoom*100:.1f}%)")
-
 
 # ============================================
 # 커서 및 캐시 관리
@@ -1730,8 +1729,7 @@ class ImageViewer(EditModeMixin, QGraphicsView):
         sc = self.mapToScene(int(vp.width() / 2), int(vp.height() / 2))
         return QRectF(sc.x() - base / 2.0, sc.y() - base * 0.375, base, base * 0.75)
 
-
-# ============================================
+# ===========================================
 # 드래그 앤 드롭
 # ============================================
 
@@ -1856,7 +1854,6 @@ class ImageViewer(EditModeMixin, QGraphicsView):
         self._update_cursor()
         debug_print(f"[DEBUG] 자동 스크롤 종료")
 
-
 # ============================================
 # 미니맵
 # ============================================
@@ -1957,7 +1954,6 @@ class ImageViewer(EditModeMixin, QGraphicsView):
             # Qt 종료 시퀀스 중 C++ QTimer 객체가 이미 소멸된 경우
             pass
 
-
 # ============================================
 # 오버레이
 # ============================================
@@ -1965,36 +1961,34 @@ class ImageViewer(EditModeMixin, QGraphicsView):
     def _apply_overlay(self) -> None:
         """오버레이 실제 적용 (딜레이 후 호출)"""
         debug_print(f"========== _apply_overlay() 호출됨 ==========")
-        
-        if not self.pending_overlay_data:
+
+        # 'if not' → 'is None' : Never 방지
+        if self.pending_overlay_data is None:
             warning_print(f"pending_overlay_data 없음")
             return
-        
+
         if not self.overlay_widget:
             warning_print(f"overlay_widget 연결 안됨")
             return
-        
-        file_path, overlay_data, image_id = self.pending_overlay_data
-        
-        # 이미지 ID 검증
+
+        file_path, overlay_data, image_id, initial_zoom = self.pending_overlay_data
+
         if image_id != self.current_image_id:
             warning_print(f"오버레이 타이머 무효 (이미지 변경됨)")
             return
-        
-        debug_print(f"파일: {file_path.name}, ID={image_id}")
+
+        debug_print(f"파일: {file_path.name}, ID={image_id}, zoom={initial_zoom}")
         debug_print(f"overlay_data keys: {list(overlay_data.keys())}")
-        
-        # 오버레이 데이터 설정
-        self.overlay_widget.set_data(file_path, overlay_data)
-        
+
+        self.overlay_widget.set_data(file_path, overlay_data, initial_zoom=initial_zoom)
+
         self.pending_overlay_data = None
         debug_print(f"========== 오버레이 적용 완료 ==========")
 
 
     def update_overlay(self) -> None:
-        self.overlay_refresh_requested.emit()  # MainWindow가 처리
+        self.overlay_refresh_requested.emit() 
         
-
 # ============================================
 # 스크롤 위치 복원
 # ============================================
@@ -2016,7 +2010,6 @@ class ImageViewer(EditModeMixin, QGraphicsView):
             self.verticalScrollBar().setValue(v_value)
         
         debug_print(f"스크롤 복원: 비율({h_ratio:.2f}, {v_ratio:.2f}) → 값({h_value}, {v_value}), max=({h_max}, {v_max})")
-
 
 # ============================================
 # resize 및 유틸리티

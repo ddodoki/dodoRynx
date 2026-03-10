@@ -24,6 +24,12 @@ THIRD PARTY NOTICES
 - pywin32-ctypes (BSD-3-Clause)
 - pywin32 (PSF License)
 - piexif (MIT)
+- PySide6-WebEngine / Qt WebEngine (LGPL v3 + Chromium BSD-3-Clause)
+  - 지도 렌더링용 웹 엔진 컴포넌트
+  - Qt WebEngine 고유 부분: LGPL v3
+  - 내장 Chromium: BSD-3-Clause
+  - Copyright (c) The Chromium Authors. All rights reserved.
+  - 웹사이트: https://doc.qt.io/qt-6/qtwebengine-licensing.html
 
 Windows Runtime (HEIF/HEIC/AVIF 디코딩 지원):
 
@@ -37,18 +43,48 @@ Windows Runtime (HEIF/HEIC/AVIF 디코딩 지원):
 
 지도 데이터 및 타일 서비스:
 
-- OpenFreeMap
-  - 지도 타일 호스팅 서비스
-  - 서버 코드 라이선스: MIT
+- Protomaps / PMTiles
+  - 오프라인 벡터 지도 타일 형식 및 배포 파일
+  - 라이선스: BSD-3-Clause
+  - 제공: Protomaps
   - 지도 데이터: OpenStreetMap (ODbL)
-  - 크레딧: OpenFreeMap © OpenMapTiles Data from OpenStreetMap
-  - 웹사이트: https://openfreemap.org
+  - 웹사이트: https://protomaps.com
+  - PMTiles GitHub: https://github.com/protomaps/PMTiles
+  ※ 배포되는 PMTiles 파일은 OpenStreetMap 데이터를 포함하며,
+    ODbL v1.0 라이선스가 적용됩니다.
+    데이터 출처: © OpenStreetMap contributors
+    빌드 출처: https://protomaps.com/builds 
+
+- OpenStreetMap
+  - 지도 원본 데이터
+  - 라이선스: Open Database License (ODbL) v1.0
+  - 크레딧: © OpenStreetMap contributors
+  - 웹사이트: https://www.openstreetmap.org/copyright
 
 - MapLibre GL JS
   - 벡터 타일 렌더링 엔진
   - 라이선스: BSD-3-Clause
   - Copyright: MapLibre contributors
   - 웹사이트: https://maplibre.org
+
+- pmtiles.js
+  - 클라이언트 사이드 PMTiles 프로토콜 구현 라이브러리
+  - 라이선스: BSD-3-Clause
+  - 제공: Protomaps
+  - 웹사이트: https://github.com/protomaps/PMTiles
+
+- Noto Sans (PBF 글리프 형식)
+  - 지도 텍스트 렌더링용 글리프 폰트 (백그라운드 자동 다운로드)
+  - 포함 변형: Noto Sans Regular, Noto Sans Italic,
+               Noto Sans Medium, Noto Sans Devanagari Regular
+  - 원본 폰트: Google Noto Fonts
+  - Copyright (c) 2012 Google Inc. All Rights Reserved.
+  - 라이선스: SIL Open Font License (OFL) v1.1
+  - 배포 출처: Protomaps basemaps-assets
+  - 배포 URL: https://protomaps.github.io/basemaps-assets/
+  - GitHub: https://github.com/protomaps/basemaps-assets
+  - ※ 폰트 파일은 프로그램에 포함되지 않으며, 최초 프로그램 로딩 시
+    백그라운드에서 자동 다운로드됩니다.
 
 AI 배경 제거 기능 (선택적, 최초 사용 시 자동 다운로드):
 
@@ -135,6 +171,12 @@ Included libraries:
 - pywin32-ctypes (BSD-3-Clause)
 - pywin32 (PSF License)
 - piexif (MIT)
+- PySide6-WebEngine / Qt WebEngine (LGPL v3 + Chromium BSD-3-Clause)
+  - Web engine component used for map rendering
+  - Qt WebEngine-specific parts: LGPL v3
+  - Bundled Chromium: BSD-3-Clause
+  - Copyright (c) The Chromium Authors. All rights reserved.
+  - Website: https://doc.qt.io/qt-6/qtwebengine-licensing.html
 
 Windows Runtime (HEIF/HEIC/AVIF decoding support):
 
@@ -148,17 +190,48 @@ Windows Runtime (HEIF/HEIC/AVIF decoding support):
 
 Map services and data:
 
-- OpenFreeMap
-  - Tile hosting service
-  - Server code license: MIT
+- Protomaps / PMTiles
+  - Offline vector map tile format and distribution files
+  - License: BSD-3-Clause
+  - Provider: Protomaps
   - Map data: OpenStreetMap (ODbL)
-  - Credit: OpenFreeMap © OpenMapTiles Data from OpenStreetMap
-  - Website: https://openfreemap.org
+  - Website: https://protomaps.com
+  - PMTiles GitHub: https://github.com/protomaps/PMTiles
+  ※ The distributed PMTiles files include OpenStreetMap data and are subject to the ODbL v1.0 license.
+  Data source: © OpenStreetMap contributors
+  Build source: https://protomaps.com/builds
+
+- OpenStreetMap
+  - Source map data
+  - License: Open Database License (ODbL) v1.0
+  - Credit: © OpenStreetMap contributors
+  - Website: https://www.openstreetmap.org/copyright
 
 - MapLibre GL JS
   - Vector tile rendering engine
   - License: BSD-3-Clause
+  - Copyright: MapLibre contributors
   - Website: https://maplibre.org
+
+- pmtiles.js
+  - Client-side PMTiles protocol implementation library
+  - License: BSD-3-Clause
+  - Provider: Protomaps
+  - Website: https://github.com/protomaps/PMTiles
+
+- Noto Sans (PBF glyph format)
+  - Glyph font for map text rendering (downloaded automatically in background)
+  - Variants: Noto Sans Regular, Noto Sans Italic,
+              Noto Sans Medium, Noto Sans Devanagari Regular
+  - Original font: Google Noto Fonts
+  - Copyright (c) 2012 Google Inc. All Rights Reserved.
+  - License: SIL Open Font License (OFL) v1.1
+  - Distribution source: Protomaps basemaps-assets
+  - Distribution URL: https://protomaps.github.io/basemaps-assets/
+  - GitHub: https://github.com/protomaps/basemaps-assets
+  - Note: Font files are NOT bundled with the application.
+    They are downloaded automatically in the background
+    on first use of the application.
 
 AI Background Removal (optional, downloaded on first use):
 

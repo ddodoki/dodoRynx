@@ -30,8 +30,8 @@ try:
 except ImportError:
     _WINRT_META_AVAILABLE = False
 
-_HEIF_EXTS: frozenset = frozenset({'.heic', '.heif', '.avif'})
 
+_HEIF_EXTS: frozenset = frozenset({'.heic', '.heif', '.avif'})
 _RAW_EXTS: frozenset = frozenset({
     '.dng', '.nef', '.cr2', '.cr3', '.arw', '.orf',
     '.rw2', '.raf', '.raw', '.rwl', '.srw', '.x3f',
@@ -45,7 +45,7 @@ class MetadataReader:
     def _raw_flip_to_degrees(self, flip: int) -> int:
         """LibRaw sizes.flip → QTransform.rotate() 각도 (image_loader.py와 동일)"""
         return {0: 0, 3: 180, 5: 270, 6: 90}.get(int(flip), 0)
-        #                          ↑ CCW=270   ↑ CW=90
+
 
     def _get_raw_rotation_degrees(self, file_path: Path) -> int:
         """
@@ -140,14 +140,33 @@ class MetadataReader:
             error_print(f"파일 경로 처리 실패: {e}")
             return self._create_error_metadata(file_path, t('metadata.error_path'))
         
-        # ===== 2. 캐시 확인 (스레드 안전) =====
+        # ── 2. 캐시 확인 (mtime 검증 포함) ──────────────────────────────
         if self.use_cache:
             with self._cache_lock:
                 if key in self._cache:
-                    self._cache.move_to_end(key)
-                    cached = self._cache[key].copy()
-                    debug_print(f"캐시 히트: {file_path.name}")
-                    return cached
+                    cached = self._cache[key]
+                    try:
+                        current_mtime = file_path.stat().st_mtime
+                        cached_mtime  = cached.get("_mtime")          # ← 저장된 mtime
+                        if cached_mtime is not None and current_mtime <= cached_mtime:
+                            # 파일 미변경 → 캐시 히트
+                            self._cache.move_to_end(key)
+                            debug_print(f"캐시 히트: {file_path.name}")
+                            result = cached.copy()
+                            result.pop("_mtime", None)   
+                            return result
+                        else:
+                            # mtime 변경 → 캐시 자동 무효화
+                            del self._cache[key]
+                            debug_print(
+                                f"mtime 변경 → 캐시 무효화: {file_path.name} "
+                                f"(저장={cached_mtime}, 현재={current_mtime})"
+                            )
+                    except OSError:
+                        self._cache.move_to_end(key)
+                        result = cached.copy()
+                        result.pop("_mtime", None)
+                        return result
         
         # ===== 3. 파일 존재 확인 (캐시 전) =====
         if not file_path.exists():
@@ -167,18 +186,22 @@ class MetadataReader:
         # ===== 5. 메타데이터 읽기 =====
         metadata = self._read_metadata_unsafe(file_path)
         
-        # ===== 6. 캐시 저장 (오류가 아닌 경우만) =====
+        # ── 6. 캐시 저장 시 mtime 함께 기록 ─────────────────────────────
         if self.use_cache and 'file' in metadata and 'error' not in metadata['file']:
             with self._cache_lock:
+                try:
+                    metadata["_mtime"] = file_path.stat().st_mtime   # ← mtime 저장
+                except OSError:
+                    metadata["_mtime"] = None
+
                 self._cache[key] = metadata
                 self._cache.move_to_end(key)
-                
-                # LRU 정리
+
                 while len(self._cache) > self.max_cache_size:
                     oldest_key = next(iter(self._cache))
-                    removed = self._cache.pop(oldest_key)
+                    self._cache.pop(oldest_key)
                     debug_print(f"캐시 제거 (LRU): {Path(oldest_key).name}")
-        
+
         return metadata
     
 
@@ -517,7 +540,6 @@ class MetadataReader:
                 )
         
         # ===== 렌즈 정보 =====
-        # 렌즈 제조사
         if 42035 in exif_data:  # LensMake
             lens_make = self._safe_exif_value(exif_data[42035])
             if lens_make and lens_make != "알 수 없음" and lens_make.strip():
@@ -701,8 +723,6 @@ class MetadataReader:
                 except Exception as e:
                         error_print(f"고도 정보 파싱 실패: {e}")
             
-                #debug_print(f"GPS 정보 파싱 성공: {result['display']}")
-            
             return result
         
         except Exception as e:
@@ -844,7 +864,6 @@ class MetadataReader:
         total_bytes = 0
         
         for metadata in self._cache.values():
-            #total_bytes += sys.getsizeof(metadata)
             total_bytes += len(pickle.dumps(metadata))
         
         return self._format_size(total_bytes)
@@ -860,15 +879,24 @@ class MetadataReader:
 
 
     def get_from_cache(self, filepath: Path) -> Optional[Dict]:
-        """I/O 없이 캐시 조회만 수행"""
         try:
             key = str(filepath.absolute()).lower()
         except Exception:
             return None
         with self._cache_lock:
             if key in self._cache:
+                cached = self._cache[key]
+                try:
+                    current_mtime = filepath.stat().st_mtime
+                    if cached.get("_mtime") is not None and current_mtime > cached["_mtime"]:
+                        del self._cache[key]   # mtime 변경 → 무효화
+                        return None
+                except OSError:
+                    pass
                 self._cache.move_to_end(key)
-                return self._cache[key].copy()
+                result = cached.copy()
+                result.pop("_mtime", None)
+                return result
         return None
 
     # ============================================
@@ -899,6 +927,7 @@ class MetadataReader:
         if exc[0] is not None:
             raise exc[0]
         return result[0]
+
 
     @staticmethod
     async def _read_heif_metadata_async(
@@ -1111,3 +1140,5 @@ class MetadataReader:
             debug_print(f"HEIF BitmapProperties 실패 ({file_path.name}): {e}")
 
         return w, h, camera, exif, gps
+    
+    

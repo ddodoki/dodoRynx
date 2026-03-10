@@ -159,13 +159,14 @@
     "title": "설정",
     "tab_rendering": "렌더링",
     "tab_cache": "캐시",
-    "tab_browser": "지도",
+    "tab_browser": "브라우저",
     "tab_layout": "화면",
+    "tab_map": "지도",
 
     "restart_title": "설정 저장됨",
     "restart_body": "일부 설정은 프로그램을 재시작해야 적용됩니다.\n\n변경된 설정:\n",
-    "restart_rendering": "• 렌더링 설정 (OpenGL, V-Sync, MSAA)",
-    "restart_cache_disk": "• 캐시 용량 설정 (썸네일 / 지도 타일)",
+    "restart_rendering": "-  렌더링 설정 (OpenGL, V-Sync, MSAA)",
+    "restart_cache_disk": "-  캐시 용량 설정 (썸네일 / 지도 타일)",
 
     "language": {
       "group_title": "언어",
@@ -173,7 +174,6 @@
       "restart_hint": "⚠️ 언어 변경은 프로그램 재시작 후 적용됩니다.",
       "auto": "자동 (시스템 기본)"
     },
-
     "rendering": {
       "group_opengl": "GPU 가속 (OpenGL)",
       "opengl_checkbox": "OpenGL 렌더링 사용 (GPU 가속)",
@@ -185,7 +185,7 @@
       "msaa_tooltip": "이미지 가장자리를 부드럽게 처리합니다.\n높은 값일수록 품질이 좋지만 성능이 저하될 수 있습니다.\n\n권장값: 4x\n※ OpenGL 활성화 시에만 작동합니다.",
       "restart_hint": "⚠️ 렌더링 설정 변경 시 프로그램 재시작이 필요합니다.",
       "perf_group": "💡 성능 가이드",
-      "perf_text": "• OpenGL ON: 대용량 이미지나 빠른 확대/축소 시 권장 (GPU 필요)\n• OpenGL OFF: 구형 PC나 GPU 드라이버 문제 시 권장\n• V-Sync: 화면 찢어짐이 보일 때 활성화\n• MSAA: 고해상도 모니터에서는 끄는 것을 권장 (이미 충분히 선명함)",
+      "perf_text": "-  OpenGL ON: 대용량 이미지나 빠른 확대/축소 시 권장 (GPU 필요)\n-  OpenGL OFF: 구형 PC나 GPU 드라이버 문제 시 권장\n-  V-Sync: 화면 찢어짐이 보일 때 활성화\n-  MSAA: 고해상도 모니터에서는 끄는 것을 권장 (이미 충분히 선명함)",
       "anim_group": "애니메이션 설정",
       "anim_quality_label": "품질:",
       "anim_quality_low": "낮음 (빠름)",
@@ -197,7 +197,6 @@
       "webp_quality": "🎞 품질 모드 — 정확한 타이밍 (Pillow)",
       "webp_tooltip": "WebP 애니메이션 전용 설정\n\n⚡ 고속 모드: Qt 내장 디코더로 즉시 재생\n  (프레임 타이밍이 다소 부정확할 수 있음)\n\n🎞 품질 모드: 백그라운드 디코딩 후 정확한 타이밍으로 재생\n  (재생 전 로딩 중 표시)"
     },
-
     "cache": {
       "viewer_group": "이미지 뷰어 캐시 (메모리 전용 — 재시작 시 초기화)",
       "ahead": "앞쪽 선행 캐싱:",
@@ -230,9 +229,10 @@
       "ofm_label": "🗺️ 지도 타일 캐시",
       "clear_thumb": "🗑️ 썸네일 삭제",
       "clear_ofm": "🗑️ 지도 삭제",
-      "hint": "💡 썸네일 삭제 시 재방문한 폴더에서 썸네일을 다시 생성합니다.\n   지도 삭제 시 다음 표시 시 타일을 다시 다운로드합니다."
+      "hint": "💡 썸네일 삭제 시 재방문한 폴더에서 썸네일을 다시 생성합니다.\n   지도 삭제 시 다음 표시 시 타일을 다시 다운로드합니다.",
+      "unit_sheets": " 장",
+      "size_with_count": "{size} ({count}개)"      
     },
-
     "browser": {
       "group_map": "지도 서비스",
       "default_map_label": "기본 지도:",
@@ -247,9 +247,36 @@
       "select_title": "브라우저 선택",
       "select_filter": "실행 파일 (*.exe)",
       "no_browser_title": "브라우저 없음",
-      "no_browser_msg": "{name}를 찾을 수 없습니다:\n{path}\n\n계속하시겠습니까? (시스템 기본 브라우저가 사용됩니다)"
+      "no_browser_msg": "{name}를 찾을 수 없습니다:\n{path}\n\n계속하시겠습니까? (시스템 기본 브라우저가 사용됩니다)",
+      "custom_name": "사용자 지정 브라우저"
     },
-
+    "map": {
+      "pmtiles_group": "PMTiles 파일",
+      "pmtiles_guide": "오프라인 지도 표시에 사용할 .pmtiles 파일을 선택하세요.\n파일 선택 시 줌 범위가 자동으로 설정됩니다.",
+      "pmtiles_placeholder": "PMTiles 파일 경로를 선택하세요...",
+      "pmtiles_browse": "파일 선택",
+      "pmtiles_clear_tooltip": "경로 초기화",
+      "pmtiles_select_title": "PMTiles 파일 선택",
+      "pmtiles_no_file": "파일이 선택되지 않았습니다",
+      "zoom_group": "줌 레벨",
+      "max_zoom_label": "최대 줌",
+      "max_zoom_tooltip": "PMTiles 파일 종류에 따라 최대 줌이 제한됩니다.\n파일 선택 시 자동으로 설정됩니다 (1–22).",
+      "zoom_hint": "파일을 선택하면 헤더에서 최대 줌을 자동으로 읽어옵니다.\n직접 수정할 수도 있습니다.",
+      "render_cache_group": "렌더 메모리 캐시",
+      "render_memory_label": "캐시 용량",
+      "render_memory_tooltip": "렌더링된 지도 이미지를 메모리에 보관할 최대 용량입니다.",
+      "render_cache_clear": "렌더 캐시 삭제",
+      "invalid_pmtiles_title": "유효하지 않은 파일",
+      "invalid_pmtiles_msg": "선택한 PMTiles 파일이 유효하지 않습니다.",
+      "pmtiles_file_filter": "PMTiles 파일 (*.pmtiles);;모든 파일 (*.*)",
+      "header_parse_fail": "❌ 헤더 파싱 실패",
+      "tile_type_mvt": "벡터(MVT)",
+      "tile_type_png": "PNG 래스터",
+      "tile_type_jpeg": "JPEG 래스터",
+      "tile_type_webp": "WebP 래스터",
+      "tile_type_unknown": "타입{n}",
+      "pmtiles_info_text": "✅ {tile_type} | 줌 {min_zoom} ~ {max_zoom} | {size_mb} MB"      
+    },
     "overlay": {
       "info_text": "오버레이는 이미지 위에 EXIF·GPS 등 정보를 표시합니다.",
       "group_items": "표시 항목",
@@ -261,7 +288,9 @@
       "map": "🗺️ 지도 표시",
       "group_appearance": "외관",
       "scale": "크기 (Scale):",
+      "scale_reset_tooltip": "100%로 초기화 (클릭)",
       "opacity": "투명도:",
+      "opacity_reset_tooltip": "80%로 초기화 (클릭)",
       "position": "표시 위치:",
       "pos_top_left": "좌상단",
       "pos_top_right": "우상단",
@@ -271,9 +300,9 @@
   },
 
   "loading_overlay": {
-    "anim_loading":  "애니메이션 로딩 중...",
-    "bg_loading":    "AI 모델 로딩 중...",
-    "bg_inferring":  "배경 제거 중..."
+    "anim_loading": "애니메이션 로딩 중...",
+    "bg_loading": "AI 모델 로딩 중...",
+    "bg_inferring": "배경 제거 중..."
   },
 
   "dialog": {
@@ -297,7 +326,11 @@
     "folder_open_error_title": "오류",
     "folder_open_error_msg": "캐시 폴더를 열 수 없습니다:\n{error}",
     "cache_delete_error_title": "오류",
-    "cache_delete_error_msg": "캐시를 삭제하는 중 오류가 발생했습니다:\n{error}"
+    "cache_delete_error_msg": "캐시를 삭제하는 중 오류가 발생했습니다:\n{error}",
+    "render_cache_clear_title": "렌더 캐시 삭제",
+    "render_cache_clear_msg": "메모리에 저장된 지도 렌더 캐시를 삭제합니다.\n계속하시겠습니까?",
+    "render_cache_cleared_title": "삭제 완료",
+    "render_cache_cleared_msg": "렌더 캐시가 삭제되었습니다."
   },
 
   "status": {
@@ -610,6 +643,7 @@
     "ai_panel_tip": "AI 도구 패널 열기/닫기",
     "resize_tip":   "이미지 크기 조절",
     "shapes_tip":   "도형 / 텍스트 삽입",
+    "watermark_tip":   "메타데이터 워터마크 삽입",    
     "shape": {
       "None":           "─ 도형 선택 ─",    
       "rect":           "⬜ 사각형",
@@ -973,7 +1007,73 @@
     "text_edit_title":   "텍스트 편집",
     "text_label":        "텍스트",
     "default_text":      "텍스트"
-  }
+  },
+  "watermark_panel": {
+    "header_title":          "WATERMARK",
+    "sec_template":          "TEMPLATE",
+    "sec_tokens":            "INSERT TOKENS",
+    "sec_preview":           "RESOLVED PREVIEW",
+    "sec_style":             "STYLE",
+    "sec_position":          "POSITION",
+    "sec_band":              "BAND",
+    "template_placeholder":  "예)  {make} {model}\n     {date_taken}\n     {focal_length}  {f_stop}  {iso}",
+    "template_hint":         "플레이스홀더 예: {model}  {date_taken}  {gps_display}",
+    "fmt_label":             "서식",
+    "align_label":           "정렬",
+    "size_label":            "크기",
+    "line_spacing_label":    "줄간격",
+    "margin_label":          "여백",
+    "band_enable":           "밴드 사용",
+    "band_inside":           "Inside",
+    "band_outside":          "Outside",
+    "band_color_label":      "색",
+    "band_opacity_label":    "투명도",
+    "band_height_label":     "높이",
+    "band_height_auto":      "자동",
+    "band_height_manual":    "수동",
+    "apply_btn":             "▶  워터마크 적용",
+    "no_metadata":           "사용 가능한 메타데이터가 없습니다.",
+    "color_dialog_text":     "텍스트 색상",
+    "color_dialog_band":     "밴드 색상",
+    "token_filename":        "파일명",
+    "token_resolution":      "해상도",
+    "token_size":            "크기",
+    "token_format":          "포맷",
+    "token_modified":        "수정일시",
+    "token_make":            "제조사",
+    "token_model":           "모델",
+    "token_lens_model":      "렌즈",
+    "token_date_taken":      "촬영일시",
+    "token_focal_length":    "초점거리",
+    "token_f_stop":          "조리개",
+    "token_exposure_time":   "셔터속도",
+    "token_iso":             "ISO",
+    "token_flash":           "플래시",
+    "token_software":        "소프트웨어",
+    "token_white_balance":   "화이트밸런스",
+    "token_metering_mode":   "측광모드",
+    "token_exposure_program":"노출프로그램",
+    "token_gps_display":     "GPS",
+    "token_gps_altitude":    "고도"
+  },
+   "map_loader": {
+    "validate": {
+      "not_exists":     "파일이 존재하지 않습니다",
+      "not_file":       "경로가 파일이 아닙니다",
+      "wrong_ext":      "확장자가 .pmtiles가 아닙니다: {ext}",
+      "too_small":      "파일이 너무 작습니다 ({size} bytes, 최소 {min})",
+      "invalid_header": "유효하지 않은 PMTiles 파일 (헤더 파싱 실패)"
+    },
+    "error": {
+      "no_pmtiles_set":    "PMTiles 파일이 설정되지 않았습니다.\n설정 → 지도 탭에서 파일 경로를 지정하세요.",
+      "no_webengine":      "PySide6-WebEngine 미설치 (pip install PySide6-Addons)",
+      "pmtiles_file_error":"PMTiles 파일 오류: {reason}",
+      "render_error":      "지도 렌더링 오류: {msg}",
+      "capture_null":      "화면 캡처 실패 (null pixmap)",
+      "capture_empty":     "지도 캡처 실패 (빈 이미지)",
+      "render_timeout":    "렌더링 타임아웃 ({sec}초)"
+    }
+  } 
 
 
 }
