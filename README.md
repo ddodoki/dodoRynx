@@ -160,6 +160,11 @@ Licenses/
     - Licenses/third_party/
 - and must accompany any redistribution.
 
+## 📩 Contact
+For other inquiries, please contact
+- Email: [ddodoki.lab@gmail.com](mailto:ddodoki.lab@gmail.com)
+
+<br>
 
 # 🇰🇷 한국어 버전
 도도링스 (이미지 뷰어)
@@ -312,3 +317,7 @@ Licenses/
 - 서드파티 라이선스는 다음 경로에 포함되어 있습니다:
     - Licenses/third_party/
 - 배포 시 반드시 함께 포함해야 합니다.
+
+## 📩 기타 문의
+문의사항이 있으시면 아래 이메일로 연락해주세요.
+- Email: [ddodoki.lab@gmail.com](mailto:ddodoki.lab@gmail.com)
