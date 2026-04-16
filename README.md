@@ -12,15 +12,13 @@
   <img src="screenshot_01.jpg" width="250">
   <img src="screenshot_02.jpg" width="250">
   <img src="screenshot_03.jpg" width="250">
-<<<<<<< HEAD
 </p>  
 <br>
-=======
   <img src="screenshot_04.jpg" width="250">
   <img src="screenshot_05.jpg" width="250">
   <img src="screenshot_06.jpg" width="250">
 </p>
->>>>>>> d9beb9b (0.1.6.20260416)
+
 
 **Map Feature Change (Online → Offline)**
 - The map service has been changed from an online mode to an offline mode.
