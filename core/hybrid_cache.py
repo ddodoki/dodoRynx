@@ -3,10 +3,6 @@
 
 """
 범용 하이브리드 LRU 캐시 (메모리 + 디스크)
-
-지원 용도:
-  thumbnails : 로컬 파일 소스, source_mtime 변경 감지
-  기타 QPixmap 키-값 저장 목적
 """
 
 import hashlib
@@ -91,7 +87,7 @@ class HybridCache:
                 "CREATE INDEX IF NOT EXISTS idx_lru ON entries(accessed_at)"
             )
             conn.commit()
-            # 기존 설치본에 etag/last_modified 컬럼이 있으면 자동 마이그레이션
+
             self._migrate_db(conn)
 
 
@@ -333,6 +329,45 @@ class HybridCache:
         return self._db_get_meta(key)
 
 
+    def get_raw(self, key: str) -> Optional[bytes]:
+        """
+        디스크 캐시 파일에서 raw bytes를 직접 반환한다.
+
+        - QPixmap / QImage 변환이 전혀 없어 CPU 비용이 0에 가깝다.
+        - put() 시 저장한 raw_data(JPEG bytes)를 그대로 돌려준다.
+        - HTTP 썸네일 서버처럼 bytes 자체가 필요한 경우 전용 경로.
+
+        Returns
+        -------
+        bytes  : 캐시 파일 내용 (JPEG bytes)
+        None   : 미등록 키, 파일 없음, 읽기 오류
+        """
+        meta = self._db_get_meta(key)
+        if not meta:
+            return None
+
+        path = self._cache_dir / meta["file_name"]
+        if not path.exists():
+            self.invalidate(key)
+            return None
+
+        try:
+            data = path.read_bytes()
+        except OSError as e:
+            warning_print(
+                f"[{self.namespace}] get_raw 읽기 오류 "
+                f"({key[:20]}…): {e}"
+            )
+            self.invalidate(key)
+            return None
+
+        if not data:
+            return None
+
+        self._db_touch(key)
+        return data
+
+
     def put(
         self,
         key:     str,
@@ -489,7 +524,6 @@ class HybridCache:
         ok  = q_image.save(buf, fmt.upper(), quality)   # type: ignore[arg-type]
         buf.close()
         if not ok or ba.size() == 0:
-            # JPEG 실패 → PNG 폴백
             ba  = QByteArray()
             buf = QBuffer(ba)
             buf.open(QIODevice.OpenModeFlag.WriteOnly)

@@ -135,20 +135,29 @@ class LangManager:
 
     def _load_lang(self, code: str) -> Optional[dict]:
         """
-        단일 파일 우선, 없으면 디렉터리 방식으로 로드.
-        디렉터리 방식이면 모든 JSON을 깊은 병합(deep merge)으로 합침.
+        단일 파일(ko.json)과 디렉터리(ko/)가 동시에 존재하면 둘 다 로드해 병합.
+        디렉터리 내용이 단일 파일을 오버라이드 (더 구체적인 값 우선).
         """
-        # 1. 단일 파일 시도
+        merged: dict = {}
+        found = False
+
+        # 1. 단일 파일
         single = self._langs_dir / f'{code}.json'
         if single.exists():
-            return self._load_file(single)
+            data = self._load_file(single)
+            if data:
+                self._deep_merge(merged, data)
+                found = True
 
-        # 2. 디렉터리 방식 시도
+        # 2. 디렉터리 (단일 파일 위에 오버레이)
         lang_dir = self._langs_dir / code
         if lang_dir.is_dir():
-            return self._load_directory(lang_dir)
+            data = self._load_directory(lang_dir)
+            if data:
+                self._deep_merge(merged, data)
+                found = True
 
-        return None
+        return merged if found else None
 
     def _load_file(self, path: Path) -> Optional[dict]:
         """단일 JSON 파일 로드"""

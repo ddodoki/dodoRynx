@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<link href="http://127.0.0.1:${PORT}/assets/maplibre-gl.css" rel="stylesheet">
+<script src="http://127.0.0.1:${PORT}/assets/maplibre-gl.js"></script>
+<script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body, #map { width: 100%; height: 100%; background: #1a1a1a; }
+  .split-marker {
+    width: 18px; height: 18px;
+    background: #ff4444; border: 2.5px solid #fff;
+    border-radius: 50%; cursor: pointer;
+    box-shadow: 0 1px 4px rgba(0,0,0,.6);
+    transition: transform .15s;
+  }
+  .split-marker:hover { transform: scale(1.3); }
+  #split-hint {
+    position: fixed; bottom: 12px; left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,.72); color: #fff;
+    font: 12px/1.4 sans-serif; padding: 6px 14px;
+    border-radius: 20px; pointer-events: none;
+    display: none;
+  }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="split-hint">${SPLIT_HINT}</div>
+<script>
+'use strict';
+
+var bridge       = null;
+var map          = null;
+var splitMode    = false;
+var allPoints    = [];   
+var splitMarkers = {};     
+var trackLayers  = [];    
+var hoverPin     = null;
+
+// ── QWebChannel 초기화 ─────────────────────────────────────
+new QWebChannel(qt.webChannelTransport, function(ch) {
+  bridge = ch.objects.gpxBridge;
+  initMap();
+});
+
+// ── MapLibre 초기화 ────────────────────────────────────────
+function initMap() {
+  map = new maplibregl.Map({
+    container: 'map',
+    style: {
+      version: 8,
+      sources: {
+        raster: {
+          type: 'raster',
+          tiles: ['http://127.0.0.1:${PORT}/tiles/{z}/{x}/{y}.webp'],
+          tileSize:    ${TILESIZE},
+          scheme:      '${SCHEME}',
+          minzoom:     ${MINZOOM},
+          maxzoom:     ${MAXZOOM},
+        }
+      },
+      layers: [{
+        id: 'raster-layer', type: 'raster', source: 'raster',
+        paint: { 'raster-fade-duration': 0 }
+      }]
+    },
+    center: [10, 30], zoom: 2,
+    attributionControl: false,
+    fadeDuration: 0, antialias: false,
+    maxZoom: ${MAXZOOM}, minZoom: ${MINZOOM}
+  });
+
+  map.addControl(new maplibregl.NavigationControl(), 'top-right');
+  map.addControl(new maplibregl.ScaleControl({ maxWidth: 100 }), 'bottom-left');  
+  map.addControl(new maplibregl.AttributionControl({                             
+    compact: false,
+    customAttribution: [
+      '<a href="https://github.com/ddodoki/dodoRynx"        target="_blank">dodoRynx</a>',
+      '<a href="https://github.com/protomaps/basemaps"      target="_blank">Protomaps</a>',
+      '<a href="https://github.com/maplibre/maplibre-gl-js" target="_blank">MapLibre GL JS</a>',
+      '© <a href="https://openstreetmap.org"                target="_blank">OpenStreetMap</a> contributors',
+    ].join(' · '),
+  }), 'bottom-right');
+
+  map.on('load', function() {
+    bridge.onMapReady();
+  });
+
+  map.on('click', function(e) {
+    if (!splitMode) return;
+    var idx = findNearestIdx(e.lngLat);
+    if (idx >= 0) bridge.onSplitPointAdded(idx);
+  });
+}
+
+// ── 트랙 로드 ──────────────────────────────────────────────
+function loadTracks(data) {
+  clearHoverPin(); 
+  allPoints = data.allPoints || [];
+
+  trackLayers.forEach(function(id) {
+    if (map.getLayer(id)) map.removeLayer(id);
+  });
+  trackLayers.forEach(function(id) {
+    if (map.getSource(id)) map.removeSource(id);
+  });
+  trackLayers = [];
+
+  data.tracks.forEach(function(t) {
+    var srcId   = 'src-'   + t.id;
+    var lineId  = 'line-'  + t.id;
+    var hoverId = 'hover-' + t.id;
+
+    map.addSource(srcId, {
+      type: 'geojson',
+      data: {
+        type: 'Feature',
+        geometry: { type: 'LineString', coordinates: t.coords },
+        properties: { name: t.name, color: t.color, trackId: t.id }
+      }
+    });
+
+    // 선택 하이라이트용 하위 레이어
+    map.addLayer({
+      id: hoverId, type: 'line', source: srcId,
+      paint: { 'line-color': '#ffffff', 'line-width': 7, 'line-opacity': 0 }
+    });
+
+    map.addLayer({
+      id: lineId, type: 'line', source: srcId,
+      paint: {
+        'line-color': t.color,
+        'line-width': 3,
+        'line-opacity': 0.9
+      }
+    });
+
+    trackLayers.push(srcId, hoverId, lineId);
+  });
+
+  if (data.bounds) fitBounds(data.bounds);
+}
+
+// ── 분할 포인트 마커 ────────────────────────────────────────
+function setSplitPoints(indices) {
+  Object.values(splitMarkers).forEach(function(m) { m.remove(); });
+  splitMarkers = {};
+
+  indices.forEach(function(origIdx) {
+    var pt = allPoints.find(function(p) { return p.orig_idx === origIdx; });
+    if (!pt) return;
+
+    var el       = document.createElement('div');
+    el.className = 'split-marker';
+    el.title = '${SPLIT_MARKER_TITLE}';
+    el.addEventListener('click', function(e) {
+      e.stopPropagation();
+      bridge.onSplitPointRemoved(origIdx);
+    });
+
+    splitMarkers[origIdx] = new maplibregl.Marker({ element: el })
+      .setLngLat([pt.lon, pt.lat])
+      .addTo(map);
+  });
+}
+
+// ── 세그먼트 강조 ──────────────────────────────────────────
+function highlightSegment(segIdx) {
+  trackLayers.filter(function(id) { return id.startsWith('line-'); })
+    .forEach(function(id, i) {
+      map.setPaintProperty(id, 'line-opacity', i === segIdx ? 1.0 : 0.25);
+      map.setPaintProperty(id, 'line-width',   i === segIdx ? 5   : 2);
+    });
+}
+
+function clearHighlight() {
+  trackLayers.filter(function(id) { return id.startsWith('line-'); })
+    .forEach(function(id) {
+      map.setPaintProperty(id, 'line-opacity', 0.9);
+      map.setPaintProperty(id, 'line-width', 3);
+    });
+}
+
+// ── 수동 분할 모드 ─────────────────────────────────────────
+function setSplitMode(enabled) {
+  splitMode = enabled;
+  map.getCanvas().style.cursor = enabled ? 'crosshair' : '';
+  document.getElementById('split-hint').style.display = enabled ? 'block' : 'none';
+}
+
+// ── 뷰 조정 ────────────────────────────────────────────────
+function fitBounds(bounds) {
+  var minLon = bounds[0], minLat = bounds[1],
+      maxLon = bounds[2], maxLat = bounds[3];
+  if (Math.abs(maxLon - minLon) < 0.0002 && Math.abs(maxLat - minLat) < 0.0002) {
+    map.jumpTo({ center: [(minLon + maxLon) / 2, (minLat + maxLat) / 2], zoom: 14 });
+  } else {
+    map.fitBounds([[minLon, minLat], [maxLon, maxLat]], { padding: 50, duration: 400 });
+  }
+}
+
+// Math.apply → reduce (100,000개 배열에서 call stack 오버플로우 방지)
+function fitAll() {
+  if (allPoints.length === 0) return;
+  var minLon = allPoints.reduce(function(a, p) { return Math.min(a, p.lon); },  180);
+  var maxLon = allPoints.reduce(function(a, p) { return Math.max(a, p.lon); }, -180);
+  var minLat = allPoints.reduce(function(a, p) { return Math.min(a, p.lat); },   90);
+  var maxLat = allPoints.reduce(function(a, p) { return Math.max(a, p.lat); },  -90);
+  fitBounds([minLon, minLat, maxLon, maxLat]);
+}
+
+// ── Nearest point (split 클릭용) ───────────────────────────
+function findNearestIdx(lngLat) {
+  var zoom      = map.getZoom();
+  var snapDeg   = 0.05 / Math.pow(2, zoom - 10);  
+  var snapDistSq = snapDeg * snapDeg;
+  var minD = Infinity, idx = -1;
+  for (var i = 0; i < allPoints.length; i++) {
+    var cosLat = Math.cos(lngLat.lat * Math.PI / 180);
+    var dx = (allPoints[i].lon - lngLat.lng) * cosLat;
+    var dy = allPoints[i].lat - lngLat.lat;
+    var d  = dx * dx + dy * dy;
+    if (d < minD) { minD = d; idx = allPoints[i].orig_idx; }
+  }
+  return (minD <= snapDistSq) ? idx : -1; 
+}
+
+// ── 호버 핀 ────────────────────────────────────────────────
+function showHoverPin(lat, lon) {
+  if (!map) return;
+  var lngLat = [lon, lat];
+  if (hoverPin) {
+    hoverPin.setLngLat(lngLat);
+    return;
+  }
+  var el = document.createElement('div');
+  el.style.cssText = [
+    'width:12px', 'height:12px',
+    'background:#78c8ff', 'border:2px solid #fff',
+    'border-radius:50%',
+    'pointer-events:none',    
+    'box-shadow:0 0 6px rgba(120,200,255,.8)',
+  ].join(';');
+  hoverPin = new maplibregl.Marker({ element: el, anchor: 'center' })
+    .setLngLat(lngLat)
+    .addTo(map);
+}
+
+function clearHoverPin() {
+  if (hoverPin) { hoverPin.remove(); hoverPin = null; }
+}
+
+</script>
+</body>
+</html>
+

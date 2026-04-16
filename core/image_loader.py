@@ -25,7 +25,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QImage, QMovie, QPixmap, QTransform
 
 from core.rotation_manager import get_raw_sidecar_rotation
-from utils.debug import debug_print, error_print, info_print, warning_print
+from utils.debug import debug_print, error_print, warning_print
 
 try:
     import rawpy
@@ -104,7 +104,6 @@ def _read_thumb_orientation_deg(raw_obj) -> int:
     """
     try:
         thumb = raw_obj.extract_thumb()
-        # rawpy.ThumbFormat에 타입 스텁 없음 → str 비교로 Pylance 오류 회피
         if not str(thumb.format).upper().endswith('JPEG'):
             return 0
         with Image.open(io.BytesIO(thumb.data)) as thumb_img:
@@ -239,10 +238,8 @@ class ImageLoader:
             with rawpy.imread(str(file_path)) as raw:
                 flip = raw.sizes.flip
 
-                # postprocess 전에 썸네일 추출 (libraw 제약)
                 thumb_deg = _read_thumb_orientation_deg(raw)
 
-                # 그 다음 postprocess
                 rgb = raw.postprocess(
                     use_camera_wb=True,
                     half_size=False,
@@ -278,7 +275,7 @@ class ImageLoader:
                 if base_angle:
                     debug_print(f"RAW EXIF 폴백: {file_path.name} {base_angle}°")
                 else:
-                    # ② 내장 JPEG 썸네일 (Nikon NEF 등) — 이미 추출해둔 값 사용
+                    # ② 내장 JPEG 썸네일 (Nikon NEF 등) 
                     base_angle = thumb_deg
                     if base_angle:
                         debug_print(f"RAW 썸네일 폴백: {file_path.name} {base_angle}°")
@@ -352,7 +349,7 @@ class ImageLoader:
         try:
             with Image.open(file_path) as img:
                 img.load()
-                # 16-bit PNG → 8-bit 변환
+
                 if img.mode == 'I':
                     img = img.point(lambda x: x * (1 / 256)).convert('L')
                 elif img.mode == 'I;16':
@@ -630,7 +627,7 @@ class ImageLoader:
         try:
             ext = file_path.suffix.lower()
 
-            # RAW는 _load_raw()에서 이미 flip + XMP 회전이 적용됨 → 추가 회전 불필요
+            # RAW는 _load_raw()에서 이미 flip + XMP 회전이 적용됨 추가 회전 불필요
             if ext in ('.cr2', '.cr3', '.nef', '.arw', '.dng',
                        '.orf', '.rw2', '.pef', '.srw', '.raf'):
                 return 0
@@ -804,7 +801,6 @@ class ImageLoader:
             fmt = self._detect_format(file_path)
 
             if fmt in (ImageFormat.HEIF, ImageFormat.AVIF):
-                # WinRT로 크기 읽기 — Image.open() 절대 호출하지 않음
                 w, h = 0, 0
                 if _WINRT_AVAILABLE:
                     try:

@@ -41,6 +41,82 @@ Windows Runtime (HEIF/HEIC/AVIF 디코딩 지원):
 - winrt-Windows.Storage (MIT)
 - winrt-Windows.Storage.Streams (MIT)
 
+- certifi (MPL 2.0)
+  - SSL/TLS CA 인증서 번들 (Mozilla 큐레이션)
+  - Provider: Kenneth Reitz & Certifi Contributors
+  - License: Mozilla Public License 2.0
+  - Website: https://github.com/certifi/python-certifi
+
+- gpxpy (Apache 2.0)
+  - GPX 파일 파싱 및 GPS 트랙 처리
+  - 제공: Tomo Krajina
+  - Copyright (c) 2011 Tomo Krajina
+  - 웹사이트: https://github.com/tkrajina/gpxpy
+
+- qasync (BSD 2-Clause)
+  - Qt 이벤트 루프와 asyncio 통합
+  - Copyright (c) 2019 Sam McCormack
+  - Copyright (c) 2018 Gerard Marull-Paretas
+  - Copyright (c) 2014-2018 Mark Harviston, Arve Knudsen
+  - 웹사이트: https://github.com/CabbageDevelopment/qasync
+
+- aiohttp (Apache 2.0)
+  - 비동기 HTTP 클라이언트/서버 프레임워크
+  - 제공: aio-libs contributors
+  - 웹사이트: https://github.com/aio-libs/aiohttp
+
+- aiofiles (Apache 2.0)
+  - asyncio 기반 비동기 파일 I/O
+  - 제공: Tin Tvrtković and Contributors
+  - 웹사이트: https://github.com/Tinche/aiofiles
+
+- httpx (BSD-3-Clause)
+  - 동기/비동기 HTTP 클라이언트
+  - Copyright (c) 2019 Tom Christie
+  - 웹사이트: https://github.com/encode/httpx
+
+- PyYAML (MIT)
+  - YAML 파서 및 에미터
+  - Copyright (c) 2017-2021 Ingy döt Net
+  - Copyright (c) 2006-2016 Kirill Simonov
+  - 웹사이트: https://github.com/yaml/pyyaml
+
+- timezonefinder (MIT)
+  - GPS 좌표 기반 시간대 조회
+  - 라이선스: MIT (소스코드), ODbL v1.0 (시간대 데이터)
+  - Copyright (c) Jannik Michelfeit
+  - 웹사이트: https://github.com/jannikmi/timezonefinder
+  ※ 내장 시간대 데이터는 evansiroky/timezone-boundary-builder 기반이며
+    ODbL v1.0 라이선스가 적용됩니다.
+
+- h3 (Apache 2.0)
+  - 지리 공간 인덱싱 라이브러리 (Uber H3)
+  - 제공: Uber Technologies, Inc.
+  - Copyright (c) Uber Technologies, Inc.
+  - 웹사이트: https://github.com/uber/h3-py
+
+- tqdm (MIT / MPL 2.0)
+  - 진행 표시줄 라이브러리
+  - Copyright (c) 2013 noamraph
+  - Copyright (c) 2015 Casper da Costa-Luis
+  - 웹사이트: https://github.com/tqdm/tqdm
+
+- rich (MIT)
+  - 터미널 텍스트 포맷팅 및 로깅 라이브러리
+  - Copyright (c) 2020 Will McGuire
+  - 웹사이트: https://github.com/Textualize/rich
+
+- colorama (BSD-3-Clause)
+  - Windows 터미널 ANSI 컬러 지원
+  - Copyright (c) 2010 Jonathan Hartley & Arnon Sztajnberg
+  - 웹사이트: https://github.com/tartley/colorama
+
+- protobuf (BSD-3-Clause)
+  - Protocol Buffers 직렬화 라이브러리 (onnxruntime 의존성)
+  - 제공: Google LLC
+  - Copyright (c) Google LLC
+  - 웹사이트: https://github.com/protocolbuffers/protobuf
+
 지도 데이터 및 타일 서비스:
 
 - Protomaps / PMTiles
@@ -88,6 +164,18 @@ Windows Runtime (HEIF/HEIC/AVIF 디코딩 지원):
 
 AI 배경 제거 기능 (선택적, 최초 사용 시 자동 다운로드):
 
+- huggingface_hub (Apache 2.0)
+  - AI 모델 파일 다운로드 및 캐시 관리
+  - 제공: Hugging Face, Inc.
+  - Copyright (c) Hugging Face, Inc.
+  - 웹사이트: https://github.com/huggingface/huggingface_hub
+  ※ BEN2 모델 최초 다운로드 시 사용됩니다.
+
+- hf-xet (Apache 2.0)
+  - HuggingFace Hub 대용량 파일 전송 가속 라이브러리
+  - 제공: Hugging Face, Inc.
+  - 웹사이트: https://github.com/huggingface/xet-core
+
 - onnxruntime (MIT)
   - 제공: Microsoft Corporation
   - Copyright (c) Microsoft Corporation
@@ -104,6 +192,18 @@ AI 배경 제거 기능 (선택적, 최초 사용 시 자동 다운로드):
 
 AI 지우개 기능 (선택적, 최초 사용 시 자동 다운로드):
 
+- huggingface_hub (Apache 2.0)
+  - AI 모델 파일 다운로드 및 캐시 관리
+  - 제공: Hugging Face, Inc.
+  - Copyright (c) Hugging Face, Inc.
+  - 웹사이트: https://github.com/huggingface/huggingface_hub
+  ※ LaMa ONNX 모델 최초 다운로드 시 사용됩니다.
+
+- hf-xet (Apache 2.0)
+  - HuggingFace Hub 대용량 파일 전송 가속 라이브러리
+  - 제공: Hugging Face, Inc.
+  - 웹사이트: https://github.com/huggingface/xet-core
+
 - LaMa (Large Mask Inpainting) 모델 가중치 (Apache 2.0)
   - 원본 모델 제공: advimman (Samsung Research)
   - Copyright (c) Samsung Research, Samsung Electronics
@@ -117,6 +217,44 @@ AI 지우개 기능 (선택적, 최초 사용 시 자동 다운로드):
   - HuggingFace: https://huggingface.co/Carve/LaMa-ONNX
   - ※ 본 모델은 프로그램에 포함되지 않으며, AI 지우개 기능
     최초 사용 시 HuggingFace에서 사용자 기기에 다운로드됩니다.
+
+
+- LibRaw (LGPL 2.1 / CDDL 1.0)
+  - RAW 이미지 디코딩 C++ 라이브러리 (rawpy 의존성)
+  - 제공: LibRaw LLC
+  - Copyright (c) 2008-2024 LibRaw LLC
+  - 라이선스: GNU Lesser General Public License v2.1
+  - 웹사이트: https://www.libraw.org
+  ※ raw_r.dll 형태로 배포되며, DLL 분리 배포 방식으로 LGPL 2.1
+    동적 링크 의무를 준수합니다.
+
+- OpenBLAS (BSD-3-Clause)
+  - 고성능 선형대수 연산 라이브러리 (numpy/scipy 의존성)
+  - 제공: The OpenBLAS Project
+  - Copyright (c) 2011-2024 The OpenBLAS Project
+  - 웹사이트: https://github.com/OpenMathLib/OpenBLAS
+
+- Mesa / llvmpipe (MIT / LGPL 2.1)
+  - 소프트웨어 OpenGL 렌더러 (Qt 번들, opengl32sw.dll)
+  - 제공: The Mesa 3D Graphics Library Contributors
+  - Copyright (c) 1999-2024 Brian Paul and Mesa contributors
+  - 웹사이트: https://mesa3d.org
+  ※ Qt6가 하드웨어 GPU 가속을 사용할 수 없는 환경을 위해
+    소프트웨어 폴백으로 포함한 컴포넌트입니다.
+
+Microsoft Visual C++ 런타임 라이브러리:
+
+본 프로그램은 Microsoft Visual C++ Redistributable 라이브러리를 포함합니다.
+
+- msvcp140.dll / MSVCP140.dll / MSVCP140_1.dll / MSVCP140_2.dll
+- vcruntime140.dll / VCRUNTIME140.dll / VCRUNTIME140_1.dll
+- VCOMP140.DLL (OpenMP 런타임)
+- mfc140u.dll (MFC 라이브러리)
+
+위 파일들은 Microsoft Visual Studio Redistributable 약관에 따라
+재배포가 허용됩니다.
+웹사이트: https://learn.microsoft.com/ko-kr/cpp/windows/redistributing-visual-cpp-files
+
 
 HEVC / H.265 관련 고지:
 
@@ -188,6 +326,82 @@ Windows Runtime (HEIF/HEIC/AVIF decoding support):
 - winrt-Windows.Storage (MIT)
 - winrt-Windows.Storage.Streams (MIT)
 
+- certifi (MPL 2.0)
+  - SSL/TLS CA certificate bundle (curated by Mozilla)
+  - Provider: Kenneth Reitz & Certifi Contributors
+  - License: Mozilla Public License 2.0
+  - Website: https://github.com/certifi/python-certifi
+  
+- gpxpy (Apache 2.0)
+  - GPX file parsing and GPS track manipulation
+  - Author: Tomo Krajina
+  - Copyright (c) 2011 Tomo Krajina
+  - Website: https://github.com/tkrajina/gpxpy
+
+- qasync (BSD 2-Clause)
+  - Qt event loop and asyncio integration
+  - Copyright (c) 2019 Sam McCormack
+  - Copyright (c) 2018 Gerard Marull-Paretas
+  - Copyright (c) 2014-2018 Mark Harviston, Arve Knudsen
+  - Website: https://github.com/CabbageDevelopment/qasync
+
+- aiohttp (Apache 2.0)
+  - Asynchronous HTTP client/server framework
+  - Provider: aio-libs contributors
+  - Website: https://github.com/aio-libs/aiohttp
+
+- aiofiles (Apache 2.0)
+  - Asynchronous file I/O for asyncio
+  - Provider: Tin Tvrtković and Contributors
+  - Website: https://github.com/Tinche/aiofiles
+
+- httpx (BSD-3-Clause)
+  - Synchronous and asynchronous HTTP client
+  - Copyright (c) 2019 Tom Christie
+  - Website: https://github.com/encode/httpx
+
+- PyYAML (MIT)
+  - YAML parser and emitter
+  - Copyright (c) 2017-2021 Ingy döt Net
+  - Copyright (c) 2006-2016 Kirill Simonov
+  - Website: https://github.com/yaml/pyyaml
+
+- timezonefinder (MIT)
+  - Timezone lookup from GPS coordinates
+  - License: MIT (source code), ODbL v1.0 (timezone data)
+  - Copyright (c) Jannik Michelfeit
+  - Website: https://github.com/jannikmi/timezonefinder
+  Note: The bundled timezone boundary data is based on
+    evansiroky/timezone-boundary-builder and is licensed under ODbL v1.0.
+
+- h3 (Apache 2.0)
+  - Geospatial indexing library (Uber H3)
+  - Provider: Uber Technologies, Inc.
+  - Copyright (c) Uber Technologies, Inc.
+  - Website: https://github.com/uber/h3-py
+
+- tqdm (MIT / MPL 2.0)
+  - Progress bar library
+  - Copyright (c) 2013 noamraph
+  - Copyright (c) 2015 Casper da Costa-Luis
+  - Website: https://github.com/tqdm/tqdm
+
+- rich (MIT)
+  - Terminal text formatting and logging library
+  - Copyright (c) 2020 Will McGuire
+  - Website: https://github.com/Textualize/rich
+
+- colorama (BSD-3-Clause)
+  - ANSI color support for Windows terminal
+  - Copyright (c) 2010 Jonathan Hartley & Arnon Sztajnberg
+  - Website: https://github.com/tartley/colorama
+
+- protobuf (BSD-3-Clause)
+  - Protocol Buffers serialization library (onnxruntime dependency)
+  - Provider: Google LLC
+  - Copyright (c) Google LLC
+  - Website: https://github.com/protocolbuffers/protobuf
+
 Map services and data:
 
 - Protomaps / PMTiles
@@ -235,6 +449,18 @@ Map services and data:
 
 AI Background Removal (optional, downloaded on first use):
 
+- huggingface_hub (Apache 2.0)
+  - AI model file download and cache management
+  - Provider: Hugging Face, Inc.
+  - Copyright (c) Hugging Face, Inc.
+  - Website: https://github.com/huggingface/huggingface_hub
+  Note: Used for downloading the BEN2 model on first use.
+
+- hf-xet (Apache 2.0)
+  - High-speed large file transfer accelerator for HuggingFace Hub
+  - Provider: Hugging Face, Inc.
+  - Website: https://github.com/huggingface/xet-core
+
 - onnxruntime (MIT)
   - Provider: Microsoft Corporation
   - Copyright (c) Microsoft Corporation
@@ -252,6 +478,18 @@ AI Background Removal (optional, downloaded on first use):
 
 AI Eraser (optional, downloaded on first use):
 
+- huggingface_hub (Apache 2.0)
+  - AI model file download and cache management
+  - Provider: Hugging Face, Inc.
+  - Copyright (c) Hugging Face, Inc.
+  - Website: https://github.com/huggingface/huggingface_hub
+  Note: Used for downloading the LaMa ONNX model on first use.
+
+- hf-xet (Apache 2.0)
+  - High-speed large file transfer accelerator for HuggingFace Hub
+  - Provider: Hugging Face, Inc.
+  - Website: https://github.com/huggingface/xet-core
+  
 - LaMa (Large Mask Inpainting) model weights (Apache 2.0)
   - Original model by: advimman (Samsung Research)
   - Copyright (c) Samsung Research, Samsung Electronics
@@ -266,7 +504,45 @@ AI Eraser (optional, downloaded on first use):
   - Note: This model is NOT bundled with the application.
     It is downloaded from HuggingFace to the user's device
     on first use of the AI Eraser feature.
-    
+
+
+- LibRaw (LGPL 2.1 / CDDL 1.0)
+  - C++ library for RAW image decoding (rawpy dependency)
+  - Provider: LibRaw LLC
+  - Copyright (c) 2008-2024 LibRaw LLC
+  - License: GNU Lesser General Public License v2.1
+  - Website: https://www.libraw.org
+  Note: Distributed as raw_r.dll. Deployed as a separate shared
+    library (DLL), satisfying the LGPL 2.1 dynamic linking requirement.
+
+- OpenBLAS (BSD-3-Clause)
+  - High-performance linear algebra library (numpy/scipy dependency)
+  - Provider: The OpenBLAS Project
+  - Copyright (c) 2011-2024 The OpenBLAS Project
+  - Website: https://github.com/OpenMathLib/OpenBLAS
+
+- Mesa / llvmpipe (MIT / LGPL 2.1)
+  - Software OpenGL renderer (bundled by Qt, opengl32sw.dll)
+  - Provider: The Mesa 3D Graphics Library Contributors
+  - Copyright (c) 1999-2024 Brian Paul and Mesa contributors
+  - Website: https://mesa3d.org
+  Note: Included by Qt6 as a software fallback renderer
+    for environments where hardware GPU acceleration is unavailable.
+
+Microsoft Visual C++ Runtime Libraries:
+
+This program includes Microsoft Visual C++ Redistributable libraries.
+
+- msvcp140.dll / MSVCP140.dll / MSVCP140_1.dll / MSVCP140_2.dll
+- vcruntime140.dll / VCRUNTIME140.dll / VCRUNTIME140_1.dll
+- VCOMP140.DLL (OpenMP runtime)
+- mfc140u.dll (MFC library)
+
+These files are redistributable under the terms of the
+Microsoft Visual Studio Redistributable License.
+Website: https://learn.microsoft.com/en-us/cpp/windows/redistributing-visual-cpp-files
+
+
 HEVC / H.265 Notice:
 
 This program may call the Windows operating system's

@@ -12,8 +12,15 @@
   <img src="screenshot_01.jpg" width="250">
   <img src="screenshot_02.jpg" width="250">
   <img src="screenshot_03.jpg" width="250">
+<<<<<<< HEAD
 </p>  
 <br>
+=======
+  <img src="screenshot_04.jpg" width="250">
+  <img src="screenshot_05.jpg" width="250">
+  <img src="screenshot_06.jpg" width="250">
+</p>
+>>>>>>> d9beb9b (0.1.6.20260416)
 
 **Map Feature Change (Online → Offline)**
 - The map service has been changed from an online mode to an offline mode.
@@ -115,6 +122,27 @@
 9. i18n
     - Korean
     - English
+
+10. GPS Photo Map
+    - Displays photos on an interactive map based on embedded GPS metadata
+    - Visualize shooting locations across an entire folder at a glance
+    - Click a photo marker on the map to navigate to that image in the viewer
+
+
+11. GPX Merge / Split
+    - Merge multiple GPX files into a single unified track
+    - Split a single GPX file into multiple segments
+    - Useful for organizing GPS logs from long trips or multi-day hikes
+
+
+12. Tile Downloader
+    - Downloads raster map tiles from a Tile Server GL-compatible server
+    - Select any bounding box and zoom range to download only what you need
+    - Supports multiple output formats: WebP, PNG, JPG
+    - Configurable tile size modes: 256 px / @2x / 512 px
+    - Job queue with sequential batch execution
+    - Resume support — already downloaded tiles are automatically skipped
+    - Post-completion actions: none / sleep / shutdown
 
 ## 🛠 Install (from source)
 - Recommended: Python 3.10+
@@ -275,6 +303,27 @@ For other inquiries, please contact
     - 한국어
     - 영어
 
+10. GPS 포토맵
+    - 사진에 포함된 GPS 메타데이터를 기반으로 촬영 위치를 지도에 표시
+    - 폴더 전체의 촬영 위치를 한눈에 확인 가능
+    - 지도의 사진 마커를 클릭하면 뷰어에서 해당 이미지로 이동
+
+
+11. GPX 합치기 / 나누기
+    - 여러 GPX 파일을 하나의 트랙으로 병합
+    - 하나의 GPX 파일을 여러 구간으로 분할
+    - 장거리 이동이나 다일 트래킹 기록 정리에 유용
+
+
+12. 타일 다운로더
+    - Tile Server GL 호환 서버에서 래스터 지도 타일 다운로드
+    - 원하는 범위(바운딩 박스)와 줌 레벨을 지정해 필요한 타일만 다운로드
+    - 출력 포맷 선택: WebP / PNG / JPG
+    - 타일 크기 모드 선택: 256px / @2x / 512px
+    - 작업 큐 기반 순차 실행 지원
+    - 이어받기 지원 — 이미 다운로드된 타일은 자동으로 건너뜀
+    - 완료 후 동작 설정: 없음 / 절전 / 종료
+    
 ## 🛠 설치 방법 (소스 기준)
 - 권장: Python 3.10 이상
 

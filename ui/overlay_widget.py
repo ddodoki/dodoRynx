@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from core.map_loader import PMTilesMapLoader, glyph_signals
+from core.map_loader import RasterTileMapLoader, get_raster_zoom_range
 from utils.debug import debug_print, error_print, info_print, warning_print
 from utils.lang_manager import t
 
@@ -52,19 +52,22 @@ class OverlayWidget(QWidget):
         self.metadata: Dict[str, Any] = {}
         
         # 지도 관련
-        self.map_loader: Optional[PMTilesMapLoader] = None
+        self.map_loader:  Optional[RasterTileMapLoader] = None  
         self.current_map: Optional[QPixmap] = None
         self.current_gps: Optional[Tuple[float, float]] = None
-        self.current_zoom: int = 15
+        self._map_loader_id: Optional[int] = None
+
+        # 동적 줌 범위
+        _mn, _mx           = get_raster_zoom_range()
+        self._min_zoom: int = _mn
+        self._max_zoom: int = _mx
+        self.current_zoom:  int = _mx 
 
         self._zoom_debounce_timer = QTimer(self)
         self._zoom_debounce_timer.setSingleShot(True)
         self._zoom_debounce_timer.setInterval(_ZOOM_DEBOUNCE_MS)
         self._zoom_debounce_timer.timeout.connect(self._on_zoom_debounced)        
-        glyph_signals.download_done.connect(
-            self._on_glyph_ready,
-            Qt.ConnectionType.QueuedConnection   # 반드시 QueuedConnection (백그라운드 스레드 발신)
-        )
+
         # 스케일 팩터
         self.scale_factor = 1.0
         
@@ -189,7 +192,7 @@ class OverlayWidget(QWidget):
         # show_map이 켜졌고 GPS가 있으면 지도도 갱신
         if enabled and show_map:
             self._refresh_map()        
-            
+ 
 
     def set_scale(self, scale: float) -> None:
         """오버레이 전체 크기 조절"""
@@ -225,15 +228,12 @@ class OverlayWidget(QWidget):
 
         _MAP_BASE_W, _MAP_BASE_H = 400, 300
         if self.current_map and not self.current_map.isNull():
-            scaled_map_width = int(_MAP_BASE_W * self.scale_factor)
+            scaled_map_width  = int(_MAP_BASE_W * self.scale_factor)
             scaled_map_height = int(_MAP_BASE_H * self.scale_factor)
 
-            original_pixmap = self.map_label.pixmap()
-
-            if original_pixmap is None or original_pixmap.isNull():
-                original_pixmap = self.current_map
-
-            scaled_pixmap = original_pixmap.scaled(
+            # ── 항상 self.current_map(원본)을 소스로 사용 ──
+            # map_label.pixmap()은 이미 스케일된 버전이므로 사용 금지
+            scaled_pixmap = self.current_map.scaled(
                 scaled_map_width, scaled_map_height,
                 Qt.AspectRatioMode.KeepAspectRatio,
                 Qt.TransformationMode.SmoothTransformation,
@@ -241,10 +241,8 @@ class OverlayWidget(QWidget):
             self.map_label.setPixmap(scaled_pixmap)
 
         if self.file_path and self.metadata:
-            debug_print("스케일 변경 → _refresh_display() 호출")
             self._refresh_display()
 
-        debug_print("오버레이 스케일 적용 완료")
 
     # ============================================
     # 데이터 설정 및 표시
@@ -252,23 +250,21 @@ class OverlayWidget(QWidget):
 
     def set_data(
         self,
-        file_path: Optional[Path],
-        metadata: Dict[str, Any],
-        initial_zoom: Optional[int] = None,
+        file_path:    Optional[Path],
+        metadata:     Dict[str, Any],
+        initial_zoom: Optional[int] = None,  
     ) -> None:
         """데이터 설정"""
         debug_print(f"[overlay] camera keys: {list(metadata.get('camera', {}).keys())}")
-        debug_print(f"[overlay] camera values sample: {dict(list(metadata.get('camera', {}).items())[:3])}")
 
-        # 기존 로더 완전 정리 (시그널 해제 + cancel + deleteLater)
         self.stop_map_loader()
 
         self.file_path = file_path
-        self.metadata = metadata or {}
+        self.metadata  = metadata or {}
 
-        # debounce 없이 zoom 즉시 적용 (이미지 전환 시 호출되므로)
-        if initial_zoom is not None and (1 <= initial_zoom <= 18):
-            self.current_zoom = initial_zoom
+        # initial_zoom 즉시 반영 (debounce 없음 — 이미지 전환 시 호출)
+        if initial_zoom is not None:
+            self.current_zoom = max(self._min_zoom, min(initial_zoom, self._max_zoom))
             debug_print(f"[overlay] initial_zoom 적용: {self.current_zoom}")
 
         # GPS 정보 저장
@@ -278,11 +274,10 @@ class OverlayWidget(QWidget):
             debug_print(f"GPS 정보 저장: {self.current_gps}")
         else:
             self.current_gps = None
-            debug_print(f"GPS 정보 없음")
+            debug_print("GPS 정보 없음")
 
         self._refresh_map()
         self._refresh_display()
-
         debug_print(f"OverlayWidget.isVisible(): {self.isVisible()}")
 
 
@@ -300,7 +295,23 @@ class OverlayWidget(QWidget):
             self.info_label.hide()
             self.map_label.hide()
             return
-        
+
+        # ── self를 부모 크기에 맞춤 ──────────────────
+        parent = self.parent()
+        if parent and isinstance(parent, QWidget):
+            parent_width  = parent.width()
+            parent_height = parent.height()
+            # OverlayWidget 자신이 부모를 완전히 덮어야 레이블이 클립 안 됨
+            if self.size() != parent.size():
+                self.resize(parent_width, parent_height)
+        else:
+            screen = QGuiApplication.primaryScreen()
+            if screen:
+                geo = screen.geometry()
+                parent_width, parent_height = geo.width(), geo.height()
+            else:
+                parent_width, parent_height = 1920, 1080
+
         lines = []
         
         # 파일 정보
@@ -536,6 +547,12 @@ class OverlayWidget(QWidget):
                 else:
                     map_y = scaled_margin
             
+            # ── 하단 클립 방어 ──────────────────────
+            max_map_bottom = parent_height - scaled_margin
+            if map_y + scaled_map_height > max_map_bottom:
+                map_y = max(scaled_margin, max_map_bottom - scaled_map_height)
+
+
             debug_print(f"  map_x={content_x}, map_y={map_y}")
             
             self.map_label.setGeometry(content_x, map_y, scaled_map_width, scaled_map_height)
@@ -562,18 +579,18 @@ class OverlayWidget(QWidget):
             self.raise_()
             debug_print(f"  오버레이 표시됨!")
 
+
     # ============================================
     # 지도 관련
     # ============================================
 
-    def _on_glyph_ready(self) -> None:
-        """Glyph 폰트 다운로드 완료 → 지도 강제 재로드."""
-        if self.enabled and self.show_map and self.current_gps:
-            debug_print("[PMTiles] Glyph 완료 — 오버레이 지도 재로드")
-            self._load_map(*self.current_gps)
-
     def _refresh_map(self) -> None:
-        """지도 갱신 (GPS 정보 기반 재로드)"""
+        # 앱 초기화 순서와 무관하게 항상 최신 범위 유지
+        _mn, _mx = get_raster_zoom_range()
+        self._min_zoom = _mn
+        self._max_zoom = _mx
+        self.current_zoom = max(_mn, min(self.current_zoom, _mx))  # clamp
+
         if not self.enabled:
             self.current_map = None
             self.map_label.hide()
@@ -588,11 +605,12 @@ class OverlayWidget(QWidget):
 
 
     def update_map_zoom(self, zoom: int) -> None:
-        if not (1 <= zoom <= 18):
-            warning_print(f"잘못된 줌 레벨: {zoom}")
+        # 하드코딩 1~18 → 동적 범위
+        if not (self._min_zoom <= zoom <= self._max_zoom):
+            warning_print(f"잘못된 줌 레벨: {zoom} (유효 범위: {self._min_zoom}~{self._max_zoom})")
             return
         self.current_zoom = zoom
-        self._zoom_debounce_timer.start() 
+        self._zoom_debounce_timer.start()
 
 
     def _on_zoom_debounced(self) -> None:
@@ -603,27 +621,19 @@ class OverlayWidget(QWidget):
 
 
     def _load_map(self, latitude: float, longitude: float) -> None:
-        """
-        지도 로드 시작.
-        캐시 HIT: 로딩 UI 없이 즉시 표시.
-        캐시 MISS: 로딩 UI 표시 후 QWebEngineView 렌더링.
-        """
         debug_print(f"지도 로드 시작: ({latitude:.6f}, {longitude:.6f}), 줌={self.current_zoom}")
 
-        # ── 렌더 캐시 선행 확인 ──────────────────────────────────────
-        pix = PMTilesMapLoader.get_cached_pixmap(
+        # PMTilesMapLoader → RasterTileMapLoader
+        pix = RasterTileMapLoader.get_cached_pixmap(
             latitude, longitude, self.current_zoom, 400, 300
         )
         if pix is not None:
             self.stop_map_loader()
             self._show_map_pixmap(pix)
-            self._refresh_display() 
-            debug_print("[PMTiles] 오버레이 캐시 HIT — 즉시 표시")
+            debug_print("[RasterTiles] 오버레이 캐시 HIT — 즉시 표시")
             return
 
-        # ── 캐시 MISS → 로딩 UI + WebView 시작 ──────────────────────
         self.stop_map_loader()
-
         self.map_label.clear()
         self.map_label.setText(t("overlay.map_loading"))
         self.map_label.setStyleSheet("""
@@ -639,12 +649,14 @@ class OverlayWidget(QWidget):
         self.map_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.map_label.show()
 
-        self.map_loader = PMTilesMapLoader(
+        # ← PMTilesMapLoader → RasterTileMapLoader
+        self.map_loader = RasterTileMapLoader(
             latitude, longitude,
             zoom   = self.current_zoom,
             width  = 400,
             height = 300,
         )
+        self._map_loader_id = id(self.map_loader)
         self.map_loader.map_loaded.connect(
             self._on_map_loaded, Qt.ConnectionType.QueuedConnection
         )
@@ -652,7 +664,7 @@ class OverlayWidget(QWidget):
             self._on_map_failed, Qt.ConnectionType.QueuedConnection
         )
         self.map_loader.start()
-        debug_print("[PMTiles] 오버레이 지도 로더 시작됨")
+        debug_print("[RasterTiles] 오버레이 지도 로더 시작됨")
 
 
     def _show_map_pixmap(self, pix: "QPixmap") -> None:
@@ -678,17 +690,29 @@ class OverlayWidget(QWidget):
 
 
     def _on_map_loaded(self, q_image: QImage) -> None:
-        if self.map_loader is None:
+        sender = self.sender()
+        # isinstance로 타입 좁히기 → Pylance가 map_loaded/load_failed 인식
+        if not isinstance(sender, RasterTileMapLoader) \
+                or id(sender) != getattr(self, "_map_loader_id", None):
+            if isinstance(sender, RasterTileMapLoader):
+                try:
+                    sender.map_loaded.disconnect(self._on_map_loaded)
+                    sender.load_failed.disconnect(self._on_map_failed)
+                except RuntimeError:
+                    pass
+                sender.deleteLater()
             return
 
         loader = self.map_loader
         self.map_loader = None
-        try:
-            loader.map_loaded.disconnect(self._on_map_loaded)
-            loader.load_failed.disconnect(self._on_map_failed)
-        except RuntimeError:
-            pass
-        loader.deleteLater()
+        self._map_loader_id = None
+        if loader is not None:                         
+            try:
+                loader.map_loaded.disconnect(self._on_map_loaded)
+                loader.load_failed.disconnect(self._on_map_failed)
+            except RuntimeError:
+                pass
+            loader.deleteLater()
 
         if q_image is None or q_image.isNull():
             return
@@ -699,12 +723,25 @@ class OverlayWidget(QWidget):
         self._refresh_display()    
         
 
-    def _on_map_failed(self, error):
+    def _on_map_failed(self, error) -> None:
         warning_print(f"지도 로드 실패: {error}")
-        self.current_map = None
 
-        loader = self.map_loader
-        self.map_loader = None
+        sender = self.sender()
+        if not isinstance(sender, RasterTileMapLoader) \
+                or id(sender) != getattr(self, "_map_loader_id", None):
+            if isinstance(sender, RasterTileMapLoader):
+                try:
+                    sender.map_loaded.disconnect(self._on_map_loaded)
+                    sender.load_failed.disconnect(self._on_map_failed)
+                except RuntimeError:
+                    pass
+                sender.deleteLater()
+            return
+
+        self.current_map    = None
+        loader              = self.map_loader
+        self.map_loader     = None
+        self._map_loader_id = None
         if loader:
             try:
                 loader.map_loaded.disconnect(self._on_map_loaded)
@@ -770,11 +807,7 @@ class OverlayWidget(QWidget):
 
     def stop_map_loader(self) -> None:
         """
-        현재 PMTilesMapLoader를 안전하게 취소하고 참조를 해제한다.
-
-        - cancel()      : _cancelled 플래그 설정 + QWebEngineView hide/deleteLater
-        - deleteLater() : QObject C++ 메모리 이벤트 루프에서 안전 해제
-        - self.map_loader = None 으로 QueuedConnection 지연 콜백 무효화
+        현재 RasterTileMapLoader를 안전하게 취소하고 참조를 해제한다.
         """
         if self.map_loader is None:
             return
@@ -793,10 +826,16 @@ class OverlayWidget(QWidget):
 
         loader.cancel()
         loader.deleteLater()
-        debug_print("[PMTiles] 오버레이 맵 로더 취소 완료")
+        debug_print("[RasterTiles] 오버레이 맵 로더 취소 완료")
 
 
     def hideEvent(self, event) -> None:
         """부모 윈도우 닫힘 or 숨김 시 WebView 정리"""
         self.stop_map_loader()
         super().hideEvent(event)
+
+    def resizeEvent(self, event) -> None: 
+        super().resizeEvent(event)
+        # 자신이 리사이즈될 때 내부 레이블 재배치
+        if self.file_path and self.metadata:
+            self._refresh_display()

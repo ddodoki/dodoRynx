@@ -203,6 +203,8 @@ def ensure_licenses_in_exe_dir() -> None:
     except Exception as e:
         error_print(f"Licenses 폴더 복사 실패: {e}")
 
+def norm_path(p: "Path | str") -> str:
+    return str(p).replace("\\", "/")
 
 # ============================================
 # 경로 검증

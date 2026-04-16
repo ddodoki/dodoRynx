@@ -1,0 +1,342 @@
+{
+  "tile_downloader": {
+    "meta": { "language": "English" },
+
+    "window": { "title": "Tile Downloader" },
+
+    "state": {
+      "idle":        "Idle",
+      "calculating": "Calculating...",
+      "ready":       "Ready to Start",
+      "running":     "Downloading",
+      "paused":      "Paused",
+      "cancelling":  "Cancelling..."
+    },
+    "badge": {
+      "idle":        "● Idle",
+      "calculating": "● Calculating",
+      "ready":       "● Ready",
+      "running":     "● Downloading",
+      "paused":      "● Paused",
+      "cancelling":  "● Cancelling"
+    },
+
+    "toolbar": {
+      "btn_calc":        "⟳ Estimate",
+      "btn_calc_count":  "🔢 Count Tiles",
+      "btn_calc_cancel": "⏹ Cancel Estimate",
+      "btn_save_preset": "💾 Save Preset",
+      "btn_load_preset": "📂 Load Preset",
+      "btn_start":  "▶ Start Download",
+      "btn_pause":  "⏸ Pause",
+      "btn_resume": "▶ Resume",
+      "btn_cancel": "✕ Cancel"
+    },
+
+    "grp_server": {
+      "title":        "Server",
+      "label_url":    "Base URL(TileServer GL)",
+      "label_style":  "Style ID",
+      "btn_conn":     "🔌 Test Connection",
+      "conn_testing": "Connecting...",
+      "conn_no_url":  "Please enter a URL",
+      "conn_ok":      "✅ {msg}",
+      "conn_fail":    "❌ {msg}",
+      "style_ok":     "✓",
+      "style_miss":   "✗ Style not found",
+      "fmt_none":     "Not configured (using defaults)",
+      "fmt_legacy":   "webp={webp} / jpeg={jpeg} ⚠️legacy",
+      "fmt_new":      "webp={webp} / jpeg={jpeg}",
+      "result_ok":    "✓ Connected\nStyle '{style}': {style_mark}\nAvailable: {styles}\nQuality: {fmt}",
+      "result_fail":  "Server unreachable: {e}"
+    },
+
+    "grp_tile": {
+      "title":      "Tile Settings",
+      "label_fmt":  "Format",
+      "label_size": "Tile Size",
+      "fmt_webp": "WebP",
+      "fmt_png":  "PNG",
+      "fmt_jpg":  "JPEG",
+      "size_256": "256px (Standard)",
+      "size_2x":  "512px (@2x Retina)",
+      "size_512": "512px (Native /512/)"
+    },
+
+    "grp_area": {
+      "title":          "Download Area",
+      "label_preset":   "Country / Region Preset",
+      "btn_map_sel":    "🗺️ Select on Map",
+      "btn_map_tip":    "Drag to select area on MapLibre map",
+      "label_lon_min":  "Lon Min",
+      "label_lat_min":  "Lat Min",
+      "label_lon_max":  "Lon Max",
+      "label_lat_max":  "Lat Max",
+      "antimer_warn":   "⚠️ Crosses antimeridian — split into 2 regions"
+    },
+
+    "grp_zoom": {
+      "title":     "Zoom Levels",
+      "label_min": "Min",
+      "label_max": "Max",
+      "rec_max":   "(Recommended max: Z{z_max})"
+    },
+
+    "grp_output": {
+      "title":       "Output Path",
+      "placeholder": "Select output root folder...",
+      "dlg_title":   "Select Output Folder",
+      "path_preview":"e.g. {path}"
+    },
+
+    "grp_advanced": {
+      "title":      "Advanced",
+      "label_conc": "Concurrency:"
+    },
+
+    "grp_estimate": {
+      "title":           "Estimate",
+      "msg_initial":     "Run estimate to see info",
+      "msg_calculating": "Calculating...",
+      "msg_done":        "Estimate complete",
+      "msg_changed":     "Settings changed. Please re-run estimate.",
+      "msg_error":       "Error: {msg}",
+      "msg_cancelled":   "Estimate cancelled",
+      "label_total":     "Total tiles:",
+      "label_new":       "New / existing:",
+      "label_size":      "Est. size:",
+      "label_disk":      "Free disk:",
+      "label_eta":       "Est. time:",
+      "label_tmp":       "Temp files:",
+      "val_total":       "Total tiles: {count}",
+      "val_new":         "Resumable: {exist} done → remaining: {new}",
+      "val_size":        "Additional est. size: {mb} MB",
+      "val_disk":        "Free disk: {icon} {gb} GB",
+      "val_disk_fail":   "Disk check failed",
+      "val_eta":         "Est. time: {eta} (at {conc} concurrent)",
+      "val_tmp":         "Temp files to recover: {n} (auto-deleted on start)",
+      "warn_large":      "Large Download Warning",
+      "warn_large_msg":  "About to download {total} tiles. Continue?",
+      "calc_bbox":  "Splitting BBOX...",
+      "calc_z":     "Counting tiles per zoom...",
+      "calc_scan":  "{total} tiles found. Scanning existing files..."      
+    },
+
+    "tabs": {
+      "progress": "📥 Progress",
+      "queue":    "📋 Queue",
+      "log":      "📋 Log",
+      "history":  "🕘 History"
+    },
+
+    "tab_progress": {
+      "label_overall":   "Overall Progress",
+      "card_success":    "Success",
+      "card_skip":       "Skip",
+      "card_fail":       "Fail",
+      "card_speed":      "tiles/s",
+      "eta_initial":     "ETA: --",
+      "label_zoom":      "Per-Zoom Progress",
+      "zoom_col_z":      "Z",
+      "zoom_col_bar":    "Progress",
+      "zoom_col_count":  "Tiles",
+      "zoom_col_status": "Status",
+      "zoom_done":       "✓",
+      "zoom_running":    "…",
+      "btn_retry":       "❌ Retry Failed Tiles",
+      "lbl_speed":       "Speed: {speed} t/s",
+      "lbl_eta":         "Remaining: {eta}",
+      "lbl_success":     "Success: {n}",
+      "lbl_skip":        "Skip: {n}",
+      "lbl_fail":        "Fail: {n}"
+    },
+
+    "tab_queue": {
+      "btn_add":      "➕ Add Current",
+      "btn_run_all":  "▶▶ Run All",
+      "btn_stop":     "⏹ Stop",
+      "btn_up":       "▲",
+      "btn_down":     "▼",
+      "btn_del":      "🗑 Delete",
+      "btn_clr_done": "Clear Done",
+      "btn_retry":    "Retry Failed",
+      "btn_save":     "💾 Save",
+      "label_after":  "After all:",
+      "after_none":   "Do nothing",
+      "after_sleep":  "Sleep",
+      "after_shutdown":"Shutdown",
+      "label_delay":  " Inter-job delay:",
+      "col_name":     "Name",
+      "col_z":        "Z range",
+      "col_fmt":      "Format",
+      "col_tiles":    "Tiles",
+      "col_prog":     "Progress",
+      "col_status":   "Status",
+      "col_elapsed":  "Elapsed",
+      "col_error":    "Error",
+      "dlg_no_pending_title": "Notice",
+      "dlg_no_pending_msg":   "No pending jobs.",
+      "dlg_del_running_title":"Error",
+      "dlg_del_running_msg":  "Cannot delete a running job.",
+      "dlg_add_error_title":  "Error",
+      "dlg_add_error_msg":    "Please fill in Base URL, Style ID, and Output path.",
+      "dlg_all_done_title":   "Queue Done",
+      "dlg_all_done_msg":     "All jobs completed.",
+      "dlg_sleep_title":      "Sleep",
+      "dlg_sleep_msg":        "Switching to sleep mode.",
+      "dlg_shutdown_title":   "Shutdown",
+      "dlg_shutdown_msg":     "System will shut down in 30 seconds.",
+      "calc_error": "Calc error: {e}"
+    },
+
+    "tab_log": {
+      "chk_info":        "INFO",
+      "chk_warn":        "WARN",
+      "chk_err":         "ERROR",
+      "chk_autoscroll":  "Auto-scroll",
+      "btn_clear":       "Clear",
+      "btn_export":      "Export",
+      "dlg_export_title":"Export Log",
+      "export_filename": "tiledownloader.log"
+    },
+
+    "tab_history": {
+      "col_date":    "Date",
+      "col_style":   "Style",
+      "col_preset":  "Preset",
+      "col_z":       "Z range",
+      "col_fmt":     "Format",
+      "col_total":   "Total",
+      "col_success": "Success",
+      "col_fail":    "Fail",
+      "col_elapsed": "Elapsed",
+      "btn_load":    "Load Settings",
+      "btn_del":     "Delete"
+    },
+
+    "statusbar": {
+      "idle":          "Idle",
+      "disk_initial":  "Disk: --",
+      "disk":          "Disk: {gb} GB",
+      "speed_initial": "Speed: --",
+      "speed":         "Speed: {speed} t/s"
+    },
+
+    "engine": {
+      "dlg_done_title":      "Done",
+      "dlg_cancelled_title": "Cancelled",
+      "dlg_done_msg":        "Done\nSuccess: {success}  Skip: {skip}  Fail: {fail}\nElapsed: {dur}",
+      "dlg_cancelled_msg":   "Cancelled\nSuccess: {success}  Skip: {skip}  Fail: {fail}\nElapsed: {dur}",
+      "dlg_retry_title":     "Retry Failed Tiles",
+      "dlg_retry_msg":       "Re-download {count} failed tiles?",
+      "log_error":         "Engine error: {e}",
+      "log_sentinel_fail": "SENTINEL {placed}/{concurrency} sent — forced exit needed",
+      "log_http_skip":     "[{status}] {url}",
+      "log_http_retry":    "[{status}] retry {attempt}/3 → {url}",
+      "log_timeout":       "[TIMEOUT] retry {attempt}/3 → {url}",
+      "log_io":            "[IO] {e}",
+      "log_net":           "[NET] {e}  retry {attempt}/3",
+      "log_fail":          "[FAIL] {url}",
+      "log_disk_low":      "Low disk space ({mb} MB) — auto paused",
+      "log_disk_ok":       "Disk space restored ({mb} MB) — resumed",
+      "log_disk_err":      "Disk check failed: {e}"      
+    },
+
+    "preset": {
+      "dlg_save_title":  "Save Preset",
+      "dlg_save_label":  "Preset name:",
+      "dlg_load_title":  "Load Preset",
+      "dlg_load_empty":  "No saved presets.",
+      "dlg_load_select": "Select a preset to load:",
+      "dlg_load_error":  "Failed to load settings: {e}",
+      "err_version":     "Unsupported preset version.",
+      "err_field":       "Missing preset field: {k}",
+      "err_zoom":        "Zoom level range error: z_min={z_min}, z_max={z_max}",
+      "err_format":      "Unsupported format: {fmt}",
+      "err_size_mode":   "Unsupported tile size mode: {mode}",
+      "err_concurrency": "Concurrency out of range: {val}"      
+    },
+
+    "close": {
+      "dlg_title": "Confirm Exit",
+      "dlg_msg":   "Download is in progress. Exit anyway?"
+    },
+    "bbox_map": {
+    "btn_draw":      "✏️ Draw Area",
+    "btn_clear":     "🗑️ Clear",
+    "btn_fit":       "🎯 Fit to Selection",
+    "btn_world":     "🌍 World View",
+    "hint_initial":  "Select an area",
+    "dlg_title":     "Select Download Area on Map",
+    "no_webengine":  "WebEngine not installed\npip install PySide6-Addons"
+    },
+    "job_status": {
+    "pending":   "Pending",
+    "running":   "Running",
+    "done":      "Done",
+    "failed":    "Failed",
+    "cancelled": "Cancelled",
+    "skipped":   "Skipped"
+    },
+    "presets": {
+        "world":   "World",
+        "KR":      "South Korea",
+        "KR_N":    "Korean Peninsula",
+        "JP":      "Japan",
+        "CN":      "China",
+        "TW":      "Taiwan",
+        "US":      "USA (Contiguous)",
+        "US_ALL":  "USA (All)",
+        "RU":      "Russia",
+        "EU":      "Europe",
+        "DE":      "Germany",
+        "GB":      "United Kingdom",
+        "FR":      "France",
+        "IN":      "India",
+        "AU":      "Australia",
+        "BR":      "Brazil",
+        "SA":      "Southeast Asia",
+        "custom":  "Custom"
+    },
+    "job": {
+        "custom_area": "Custom"
+    },
+    "logic": {
+    "gpxpy_missing":         "gpxpy not installed: pip install gpxpy",
+    "parse_fail":            "GPX parse failed: {name}",
+    "warn_encoding":         "Parsed with encoding {enc}",
+    "warn_coord_fail":       "Coordinate conversion failed (track={ti} seg={si} pt={pi}) → removed",
+    "warn_coord_range":      "Out-of-range coordinate ({lat:.4f},{lon:.4f}) → removed",
+    "warn_time_reverse":     "Timestamp reversal (track={ti} seg={si} pt={pi}) → nullified",
+    "warn_time_dup":         "Duplicate timestamp (track={ti} seg={si} pt={pi})",
+    "warn_empty_seg":        "Empty segment removed (track={ti} seg={si})",
+    "warn_empty_track":      "Empty track removed (track={ti})",
+    "warn_no_track":         "No tracks found",
+    "merge_empty":           "No files to merge",
+    "split_no_ts_gap":       "No timestamps → cannot split by time gap",
+    "split_gap_zero":        "Gap time must be greater than 0",
+    "split_no_ts_date":      "No timestamps → cannot split by date",
+    "split_dist_zero":       "Distance must be greater than 0",
+    "split_pts_zero":        "Point count must be at least 1",
+    "save_no_gpxpy":         "gpxpy not installed",
+    "save_src_conflict":     "Overwriting source file blocked: {name}",
+    "save_exists":           "File already exists: {name}",
+    "save_no_permission":    "No write permission: {folder}"
+    },
+    "analyzer": {
+    "anomaly_speed":    "Instant speed {spd:.0f} km/h (limit: {max_spd})",
+    "anomaly_dup_time": "Duplicate timestamp: {time}",
+    "err_max_speed":    "max_speed_kmh must be greater than 0",
+    "err_window":       "window must be at least 1"
+    },
+    "map_preview": {
+    "webengine_missing": "WebEngine not installed\npip install PySide6-Addons",
+    "webengine_init_fail": "GpxMapPreview: WebEngine initialization failed"
+    },
+    "map_html": {
+    "split_hint":         "Click on the map to add a split point",
+    "split_marker_title": "Click to remove split point"
+    }    
+
+  }
+}

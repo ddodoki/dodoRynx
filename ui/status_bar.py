@@ -162,6 +162,7 @@ class StatusMessageOverlay(QLabel):
         y = sb_local.y() - self.height() - 6
         self.move(max(0, x), max(0, y))
 
+
     def _start_fadeout(self) -> None:
         self._fade_anim.stop()
         self._disconnect_hidden()
@@ -173,9 +174,11 @@ class StatusMessageOverlay(QLabel):
         self._anim_connected = True
         self._fade_anim.start()
 
+
     def _on_hidden(self) -> None:
         self._disconnect_hidden()
         self.setVisible(False)
+
 
     def _disconnect_hidden(self) -> None:
         if not self._anim_connected:     
@@ -186,6 +189,78 @@ class StatusMessageOverlay(QLabel):
             pass
         finally:
             self._anim_connected = False   
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ToolsMenuButton
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+class ToolsMenuButton(QPushButton):
+
+    _STYLE = """
+        QPushButton {
+            color: #ccc; font-size: 11px; font-weight: bold;
+            padding: 0px 10px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.10);
+            border-radius: 4px;
+        }
+        QPushButton:hover   { background: rgba(74,158,255,0.18); border-color: rgba(74,158,255,0.60); color: #fff; }
+        QPushButton:pressed { background: rgba(74,158,255,0.30); }
+    """
+
+    _MENU_STYLE = """
+        QMenu {
+            background-color: #1e1e1e;
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 6px;
+            padding: 4px 0;
+            min-width: 160px;
+            font-size: 12px;
+        }
+        QMenu::item {
+            padding: 7px 20px 7px 28px;
+            color: #ccc;
+            background-color: transparent;
+        }
+        QMenu::item:selected {
+            background-color: rgba(74,158,255,0.25);
+            color: #fff;
+            border-radius: 3px;
+        }
+        QMenu::indicator { width: 0px; }
+        QMenu::separator {
+            height: 1px;
+            background: rgba(255,255,255,0.08);
+            margin: 3px 8px;
+        }
+    """
+
+    def __init__(self, parent=None, widget_height: int = 30) -> None:
+        super().__init__("🌐", parent)
+        self.setToolTip(t("statusbar.tools.tooltip"))
+        self.setStyleSheet(self._STYLE)
+        self.setFixedSize(37, widget_height)
+
+        self._menu = self._build_menu()
+        self.clicked.connect(self._show_menu)
+
+
+    def _build_menu(self) -> QMenu:
+        m = QMenu(self)
+        m.setStyleSheet(self._MENU_STYLE)
+        self._act_gps  = m.addAction(t("statusbar.tools.gps_photomap"))
+        m.addSeparator()
+        self._act_gpx  = m.addAction(t("statusbar.tools.gpx_tool"))
+        self._act_tile = m.addAction(t("statusbar.tools.tile_dl"))
+        return m
+
+
+    def _show_menu(self) -> None:
+        pos = self.mapToGlobal(QPoint(0, 0))
+        mh  = self._menu.sizeHint().height()
+        self._menu.exec(QPoint(pos.x(), pos.y() - mh))
+
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # SortMenuButton
@@ -347,7 +422,7 @@ class SortMenuButton(QPushButton):
         super().paintEvent(event)  
         if not self._dirty:
             return
-        # 우상단 코너에 점만 추가
+
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(Qt.PenStyle.NoPen)
@@ -471,7 +546,6 @@ class FloatingToast(QLabel):
 
     finished = Signal(object) 
 
-
     def __init__(
         self,
         text:   str,
@@ -550,7 +624,6 @@ class ToastManager:
     MAX_TOASTS  = 3
     GAP         = 4    # 토스트 사이 여백 px
     BOTTOM_MARGIN = 4  # 상태바 상단과의 여백 px
-
 
     def __init__(self, main_window: QWidget, anchor_widget: QWidget) -> None:
         self._mw     = main_window
@@ -679,13 +752,11 @@ class PulseGaugeWidget(QWidget):
         self._fill_color = QColor(fill)
 
         if total == 0:
-            # 불확정 → Pulse 시작
             self._elapsed_ms = 0
             self._pulse_opacity = self._PULSE_MAX  
             if not self._pulse_timer.isActive():
                 self._pulse_timer.start()
         else:
-            # 확정 → Pulse 정지
             self._pulse_timer.stop()
             self._pulse_opacity = self._PULSE_MAX
 
@@ -855,7 +926,6 @@ class StatusProgressWidget(QWidget):
         t.current = current
         t.total   = total
 
-        # 현재 표시 중인 태스크만 즉시 갱신
         if priority == self._current_priority:
             self._gauge.update_progress(text, current, total)
 
@@ -873,7 +943,6 @@ class StatusProgressWidget(QWidget):
         if priority == self._current_priority:
             self._gauge.finish(finish_text, priority)
 
-            # 현재 TaskInfo 인스턴스를 캡처해서 전달
             finished_task = self._queue.get(priority)
             QTimer.singleShot(
                 1500,
@@ -913,7 +982,6 @@ class StatusProgressWidget(QWidget):
         finished_task: Optional[TaskInfo] = None,
     ) -> None:
         if finished_priority in self._queue:
-            # 인스턴스가 교체됐으면 건드리지 않음 (새 태스크 보호)
             if finished_task is not None and self._queue[finished_priority] is not finished_task:
                 return
             del self._queue[finished_priority]
@@ -1095,6 +1163,10 @@ class AppStatusBar:
         self.sort_btn = SortMenuButton()
         lay.addWidget(self.sort_btn)
 
+        # 도구
+        self.tools_btn = ToolsMenuButton(widget_height=self._WIDGET_H)
+        lay.addWidget(self.tools_btn) 
+
         # 듀얼 뷰
         self.dual_view_btn = QPushButton("🪟")
         self.dual_view_btn.setFixedSize(self._WIDGET_H, self._WIDGET_H)
@@ -1253,6 +1325,9 @@ class StatusBarController:
         sb.rotate_reset_btn.clicked.connect(mw._on_rotate_reset)
         sb.rotate_apply_btn.clicked.connect(mw._on_rotate_apply)
         sb.edit_mode_btn.clicked.connect(mw.enter_edit_mode)
+        sb.tools_btn._act_gps.triggered.connect(self._on_gps_photomap)
+        sb.tools_btn._act_gpx.triggered.connect(self._on_gpx_tool)
+        sb.tools_btn._act_tile.triggered.connect(self._on_tile_downloader)
 
         mw.navigator.sort_order_changed.connect(self._on_sort_order_changed)
 
@@ -1312,6 +1387,51 @@ class StatusBarController:
         info_print(f"상태바: {'표시' if visible else '숨김'}")
 
 
+    def _on_gps_photomap(self) -> None:
+        try:
+            self._mw.open_gps_map()
+        except Exception as e:
+            error_print(f"GPS 포토맵 오류: {e}")
+            self._sb.show_message(t("statusbar.tools.gps_open_fail"), 3000)
+
+
+    def _on_gpx_tool(self) -> None:
+        existing = getattr(self, '_gpx_window', None)
+        if existing is not None and existing.isVisible():
+            existing.raise_()
+            existing.activateWindow()
+            return
+        try:
+            from tools.gpx_merger.gpx_merger_window import GpxMergerWindow
+            self._gpx_window = GpxMergerWindow(parent=self._mw)
+            self._gpx_window.show()
+        except ImportError as e:
+            self._sb.show_message(t("statusbar.tools.gpx_load_fail", e=e), 3000)
+        except Exception as e:
+            error_print(f"GPX 도구 오류: {e}")
+            self._sb.show_message(t("statusbar.tools.gpx_open_fail"), 3000)
+
+
+    def _on_tile_downloader(self) -> None:
+        existing = getattr(self, '_tile_dl_window', None)
+        if existing is not None and existing.isVisible():
+            existing.raise_()
+            existing.activateWindow()
+            return
+        try:
+            from tools.tile_downloader.tile_downloader_window import TileDownloaderWindow
+            self._tile_dl_window = TileDownloaderWindow(
+                parent=self._mw,
+                main_cfg=self._mw.config, 
+            )
+            self._tile_dl_window.show()
+        except ImportError as e:
+            self._sb.show_message(t("statusbar.tools.tile_load_fail", e=e), 3000)
+        except Exception as e:
+            error_print(f"타일 다운로더 오류: {e}")
+            self._sb.show_message(t("statusbar.tools.tile_open_fail"), 3000)
+
+
     def update_progress(self) -> None:
         if not self._mw._current_file:
             return
@@ -1347,7 +1467,6 @@ class StatusBarController:
         if not self._mw.navigator.image_files:
             return
 
-        # ← 가드를 여기서: task_start 이전에 체크
         if self._mw.navigator._scan_in_progress:
             self._sb.sort_btn.update_active_sort(sort_type, reverse)
             self.show_message(t('statusbar.sort_scan_busy'), 1500)

@@ -52,8 +52,8 @@ class MetadataReader:
         RAW 파일 방향각 탐색 (4단계):
         1. XMP 사이드카
         2. rawpy sizes.flip
-        3. EXIF tag 274 (piexif)  ← Sony DNG 등
-        4. 내장 JPEG 썸네일 EXIF  ← Nikon NEF 등
+        3. EXIF tag 274 (piexif)  Sony DNG 등
+        4. 내장 JPEG 썸네일 EXIF  Nikon NEF 등
         
         ⚠️ rawpy: extract_thumb()는 postprocess() 없이 호출해야 함
         (여기서는 postprocess 호출 없으므로 안전)
@@ -90,7 +90,6 @@ class MetadataReader:
                     pass
 
                 # 4단계: 내장 JPEG 썸네일 EXIF (Nikon NEF 등 IFD0에 orientation 없는 포맷)
-                # postprocess() 호출 전이므로 extract_thumb() 사용 가능
                 try:
                     thumb = raw.extract_thumb()
                     if str(thumb.format).upper().endswith('JPEG'):
@@ -133,8 +132,6 @@ class MetadataReader:
         
         # ===== 1. 캐시 키 안전하게 생성 =====
         try:
-            # resolve()는 파일이 없어도 작동하지만, 느릴 수 있음
-            # 대신 absolute() 사용 (더 빠름)
             key = str(file_path.absolute()).lower()
         except Exception as e:
             error_print(f"파일 경로 처리 실패: {e}")
@@ -147,16 +144,14 @@ class MetadataReader:
                     cached = self._cache[key]
                     try:
                         current_mtime = file_path.stat().st_mtime
-                        cached_mtime  = cached.get("_mtime")          # ← 저장된 mtime
+                        cached_mtime  = cached.get("_mtime") 
                         if cached_mtime is not None and current_mtime <= cached_mtime:
-                            # 파일 미변경 → 캐시 히트
                             self._cache.move_to_end(key)
                             debug_print(f"캐시 히트: {file_path.name}")
                             result = cached.copy()
                             result.pop("_mtime", None)   
                             return result
                         else:
-                            # mtime 변경 → 캐시 자동 무효화
                             del self._cache[key]
                             debug_print(
                                 f"mtime 변경 → 캐시 무효화: {file_path.name} "
@@ -190,7 +185,7 @@ class MetadataReader:
         if self.use_cache and 'file' in metadata and 'error' not in metadata['file']:
             with self._cache_lock:
                 try:
-                    metadata["_mtime"] = file_path.stat().st_mtime   # ← mtime 저장
+                    metadata["_mtime"] = file_path.stat().st_mtime 
                 except OSError:
                     metadata["_mtime"] = None
 
@@ -251,18 +246,18 @@ class MetadataReader:
                     metadata['gps']    = gps
                 except Exception as e:
                     debug_print(f"HEIF 메타데이터 읽기 실패 ({file_path.name}): {e}")
-            return metadata   # ← 아래 Image.open() 코드는 건너뜀
+            return metadata  
 
         # ===== EXIF 읽기 (타임아웃 추가) =====
         try:
             # PIL 이미지 열기 (타임아웃 없음 - 주의!)
             with Image.open(file_path) as img:
-                # ===== 중요: load()를 조건부로만 호출 =====
+
                 # RAW 파일이나 큰 파일은 스킵
                 try:
                     # 파일 크기 제한 (50MB 이상은 EXIF만 읽기)
                     file_size = file_path.stat().st_size
-                    if file_size < 50 * 1024 * 1024:  # 50MB
+                    if file_size < 50 * 1024 * 1024:
                         img.load()
                     else:
                         info_print(f"큰 파일 - EXIF만 읽기: {file_path.name} ({file_size / 1024 / 1024:.1f}MB)")
@@ -304,8 +299,6 @@ class MetadataReader:
                 # ===== RAW: PIL EXIF(274)가 비어있는 경우가 흔하므로 orientation 보강 =====
                 if file_path.suffix.lower() in _RAW_EXTS:
                     # RAW는 항상 실제 방향 재탐색
-                    # 이유: NEF처럼 EXIF tag 274=1(Normal)이지만 실제로는 회전이 필요한 경우가 있음
-                    # (내장 썸네일 EXIF에 실제 orientation이 저장됨)
                     deg = self._get_raw_rotation_degrees(file_path)
                     if deg:
                         orient_map = {
@@ -340,7 +333,6 @@ class MetadataReader:
         try:
             stat = file_path.stat()
             
-            # 파일명 줄바꿈 처리
             filename = file_path.name
             if len(filename) > 25:
                 stem = file_path.stem
@@ -802,7 +794,6 @@ class MetadataReader:
                     return 0.0
                 return float(numerator) / float(denominator)
             
-            # 기타 타입은 float 변환 시도
             try:
                 return float(value)  # type: ignore
             except (TypeError, ValueError):
@@ -889,7 +880,7 @@ class MetadataReader:
                 try:
                     current_mtime = filepath.stat().st_mtime
                     if cached.get("_mtime") is not None and current_mtime > cached["_mtime"]:
-                        del self._cache[key]   # mtime 변경 → 무효화
+                        del self._cache[key]  
                         return None
                 except OSError:
                     pass
@@ -977,14 +968,6 @@ class MetadataReader:
 
             prop_set = await props.get_properties_async(requested)
 
-            # ──────────────────────────────────────────────────────
-            # WinRT IPropertyValue 언박싱
-            # PropertyType 값 (Windows.Foundation.PropertyType):
-            #   UInt8=1  Int16=2  UInt16=3  Int32=4  UInt32=5
-            #   Int64=6  UInt64=7  Single=8  Double=9
-            #   Boolean=11  String=12  DateTime=14
-            #   Array = base + 1024  (DoubleArray=1033)
-            # ──────────────────────────────────────────────────────
             def safe_get(name: str) -> Any:
                 try:
                     tv = prop_set.lookup(name)
@@ -1009,7 +992,7 @@ class MetadataReader:
                     elif pt_val ==  8:   return float(pv.get_single())
                     elif pt_val ==  9:   return float(pv.get_double())
                     elif pt_val == 14:   return pv.get_date_time()
-                    elif pt_val == 1033: return list(pv.get_double_array())  # GPS DMS 배열
+                    elif pt_val == 1033: return list(pv.get_double_array()) 
                     else:
                         debug_print(f"WinRT PropertyType {pt_val} 미지원: {name}")
                         return None
@@ -1046,7 +1029,6 @@ class MetadataReader:
                 if focal and float(focal) > 0:
                     camera['focal_length']  = f"{round(float(focal))}mm"
 
-            # 촬영일시: WinRT DateTime 또는 Python datetime 양쪽 처리
             date_taken = safe_get("System.Photo.DateTaken")
             if date_taken is not None:
                 try:
@@ -1054,7 +1036,6 @@ class MetadataReader:
                         camera['date_taken'] = date_taken.strftime('%Y-%m-%d %H:%M:%S')
                     elif hasattr(date_taken, 'universal_time'):
                         import datetime as _dt
-                        # universal_time: 1601-01-01 기준 100ns 단위
                         ts = (date_taken.universal_time - 116444736000000000) / 10_000_000
                         camera['date_taken'] = _dt.datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S')
                     else:
@@ -1095,7 +1076,6 @@ class MetadataReader:
                 exif['exposure_program'] = programs.get(int(program), str(program))
 
             # ── GPS 정보 ──────────────────────────────────────
-            # DoubleArray [도, 분, 초] 형태로 반환됨
             lat_arr = safe_get("System.GPS.Latitude")
             lat_ref = safe_get("System.GPS.LatitudeRef")
             lon_arr = safe_get("System.GPS.Longitude")

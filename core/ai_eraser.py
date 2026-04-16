@@ -31,6 +31,7 @@ def _get_session():
 
 
 class AIModelPreloader(QThread):
+    
     all_ready   = Signal()          # type: ignore[assignment]
     one_ready   = Signal(str)       # type: ignore[assignment]   로딩 완료
     one_loading = Signal(str)       # type: ignore[assignment]   로딩 시작 (파일 있음)
@@ -45,16 +46,15 @@ class AIModelPreloader(QThread):
                 _get_session as ben2_load,
             )
             if ben2_cached():
-                self.one_loading.emit("ben2")   # 파일 있음 → 로딩 시작 알림
+                self.one_loading.emit("ben2")
                 ben2_load()
+                self.one_ready.emit("ben2")    
             else:
-                self.one_no_model.emit("ben2")  # 파일 없음 → 다운로드 유도
+                self.one_no_model.emit("ben2")
                 debug_print("[BEN2] 모델 미설치")
         except Exception as e:
             error_print(f"[BEN2] preload 실패: {e}")
             self.one_failed.emit("ben2", str(e))
-        else:
-            self.one_ready.emit("ben2")         # 성공 시만 emit (finally 제거)
 
         # ── LaMa ──────────────────────────────────────────────────
         try:
@@ -62,7 +62,6 @@ class AIModelPreloader(QThread):
             if lama_cached("lama"):
                 self.one_loading.emit("lama")
                 sess = _get_session()
-                # 워밍업
                 dummy_img  = np.full((1, 3, FIXED_SIZE, FIXED_SIZE), 0.5, dtype=np.float32)
                 dummy_mask = np.zeros((1, 1, FIXED_SIZE, FIXED_SIZE), dtype=np.float32)
                 dummy_mask[0, 0, 200:300, 200:300] = 1.0
@@ -70,19 +69,19 @@ class AIModelPreloader(QThread):
                     sess.get_inputs()[0].name: dummy_img,
                     sess.get_inputs()[1].name: dummy_mask,
                 })
+                self.one_ready.emit("lama")     
             else:
                 self.one_no_model.emit("lama")
                 debug_print("[LaMa] 모델 미설치")
         except Exception as e:
             error_print(f"[LaMa] preload 실패: {e}")
             self.one_failed.emit("lama", str(e))
-        else:
-            self.one_ready.emit("lama")
 
         self.all_ready.emit()
 
 
 class AIEraserWorker(QThread):
+
     progress: Signal = Signal(str)     # type: ignore[assignment]
     finished: Signal = Signal(QPixmap) # type: ignore[assignment]
     failed:   Signal = Signal(str)     # type: ignore[assignment]
@@ -133,7 +132,6 @@ class AIEraserWorker(QThread):
                 return
 
             result_rgb = self._inpaint(sess, pil_rgb, mask_arr)
-            # _inpaint() 내부에서 feather 블렌딩 완료 → 여기서 중복 적용 없음
 
             result_rgba = np.dstack(
                 [result_rgb, arr_rgba[:, :, 3]]
@@ -157,37 +155,33 @@ class AIEraserWorker(QThread):
         self,
         sess,
         pil_rgb:  Image.Image,
-        mask_arr: np.ndarray,   # (H, W) float32 {0, 1}
-    ) -> np.ndarray:            # (H, W, 3) uint8
+        mask_arr: np.ndarray,  
+    ) -> np.ndarray:          
         w, h    = pil_rgb.size
-        img_arr = np.array(pil_rgb, dtype=np.float32) / 255.0  # (H,W,3)
+        img_arr = np.array(pil_rgb, dtype=np.float32) / 255.0 
 
         if w <= FIXED_SIZE and h <= FIXED_SIZE:
             inpainted_raw = self._run_inference(sess, img_arr, mask_arr)
             inpainted_out = inpainted_raw.astype(np.float32) / 255.0
-            # else 분기와 동일하게 마스크 보호 추가
+
             m3 = mask_arr[:, :, np.newaxis]
             inpainted = inpainted_out * m3 + img_arr * (1.0 - m3)
 
         else:
-            # 마스크 bbox 전체를 패치로 사용 (512 고정 패치 방식 폐기)
-            # 이유: 512 고정 패치가 마스크보다 작으면 패치가 93%+ 채워져 사각형 경계 발생
             ys, xs = np.where(mask_arr > 0)
 
-            PAD = 32  # bbox 주변 여유 (경계 자연스럽게)
+            PAD = 32 
             bx1 = max(0, int(xs.min()) - PAD)
             bx2 = min(w, int(xs.max()) + PAD)
             by1 = max(0, int(ys.min()) - PAD)
             by2 = min(h, int(ys.max()) + PAD)
 
-            patch_img  = img_arr[by1:by2, bx1:bx2]   # (bh, bw, 3) float32
-            patch_mask = mask_arr[by1:by2, bx1:bx2]  # (bh, bw) float32
+            patch_img  = img_arr[by1:by2, bx1:bx2]  
+            patch_mask = mask_arr[by1:by2, bx1:bx2] 
 
-            # _run_inference 내부에서 512 리사이즈 → 추론 → 원본 크기 복원
             inpainted_patch = self._run_inference(sess, patch_img, patch_mask)
             patch_out = inpainted_patch.astype(np.float32) / 255.0
 
-            # 마스크 내부만 적용, 마스크 밖은 원본 유지
             pm3 = patch_mask[:, :, np.newaxis]
             safe_patch = patch_out * pm3 + patch_img * (1.0 - pm3)
 
@@ -208,9 +202,9 @@ class AIEraserWorker(QThread):
     def _run_inference(
         self,
         sess,
-        img_arr:  np.ndarray,   # (H, W, 3) float32 [0,1]
-        mask_arr: np.ndarray,   # (H, W)    float32 {0,1}
-    ) -> np.ndarray:            # (H, W, 3) uint8
+        img_arr:  np.ndarray,  
+        mask_arr: np.ndarray,
+    ) -> np.ndarray:       
         ph, pw = img_arr.shape[0], img_arr.shape[1]
 
         pil_img  = Image.fromarray((img_arr  * 255).astype(np.uint8))
@@ -222,18 +216,17 @@ class AIEraserWorker(QThread):
         img_in  = np.array(pil_img_512,  dtype=np.float32) / 255.0
         mask_in = (np.array(pil_mask_512, dtype=np.float32) / 255.0 > 0.5).astype(np.float32)
 
-        inp_img  = img_in.transpose(2, 0, 1)[np.newaxis]  # (1,3,512,512)
-        inp_mask = mask_in[np.newaxis, np.newaxis]         # (1,1,512,512)
+        inp_img  = img_in.transpose(2, 0, 1)[np.newaxis]
+        inp_mask = mask_in[np.newaxis, np.newaxis]     
 
         inputs = {
             sess.get_inputs()[0].name: inp_img,
             sess.get_inputs()[1].name: inp_mask,
         }
 
-        raw = np.asarray(sess.run(None, inputs)[0])  # (1,3,512,512)
-        out = raw[0].transpose(1, 2, 0)              # (512,512,3)
+        raw = np.asarray(sess.run(None, inputs)[0])
+        out = raw[0].transpose(1, 2, 0)            
 
-        # 출력 범위 자동 감지 (lama_fp32.onnx → [0,255] float)
         if out.max() > 2.0:
             out_u8 = out.clip(0, 255).astype(np.uint8)
         else:

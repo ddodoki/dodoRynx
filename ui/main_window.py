@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# ui/main_window.py
+# ui\main_window.py
 
 """
 메인 윈도우 - 전체 UI 구성 및 이벤트 핸들링
@@ -8,11 +8,6 @@
 import traceback
 from pathlib import Path
 from typing import List, Optional
-
-import numpy as np
-import piexif
-from PIL import Image
-from PIL.Image import Exif
 
 from PySide6.QtCore import (
     QObject,
@@ -25,15 +20,13 @@ from PySide6.QtCore import (
     Signal,
     Slot,
 )
-from PySide6.QtGui import QColor, QImage, QPalette, QPixmap, QGuiApplication
+from PySide6.QtGui import QColor, QPalette, QGuiApplication
 from PySide6.QtWidgets import (
     QApplication,
-    QFileDialog,
+    QDialog,
     QLabel,
     QMainWindow,
     QMenu,
-    QMessageBox,
-    QProgressDialog,
     QSplitter,
     QVBoxLayout,
     QWidget,
@@ -45,29 +38,33 @@ from core.folder_navigator import FolderNavigator
 from core.folder_watcher import FolderWatcher
 from core.image_loader import ImageLoader
 from core.map_loader import (
-    configure_pmtiles,
     configure_render_cache,
-    PMTilesMapLoader,
-    prefetcher as _map_prefetcher, 
+    RasterTileMapLoader,  
+    prefetcher as _map_prefetcher,
 )
 from core.metadata_reader import MetadataReader
-from core.map_loader import schedule_font_download
 from core.rotation_manager import RotationManager
 
-from ui.about_dialog import AboutDialog
-from ui.folder_explorer import FolderExplorer
-from ui.image_viewer import ImageViewer
+from ui.dialogs.about_dialog import AboutDialog
+from ui.panels.folder_explorer import FolderExplorer
+from ui.viewer.image_viewer import ImageViewer
 from ui.menu_shortcuts import MenuShortcutController
-from ui.metadata_panel import MetadataPanel
+from ui.panels.metadata_panel import MetadataPanel
 from ui.overlay_widget import OverlayWidget
 from ui.status_bar import AppStatusBar, StatusBarController
-from ui.system_info_dialog import SystemInfoDialog
-from ui.thumbnail_bar import ThumbnailBar
+from ui.dialogs.system_info_dialog import SystemInfoDialog
+from ui.panels.thumbnail_bar import ThumbnailBar
+
+from ui.mw_file_op_mixin import MwFileOpMixin
+from ui.mw_edit_save_mixin import MwEditSaveMixin
+
 
 from utils.app_meta import APP_NAME, APP_VERSION
 from utils.config_manager import ConfigManager
 from utils.debug import debug_print, error_print, info_print, warning_print
 from utils.lang_manager import LangManager, t
+from utils.dark_dialog import DarkMessageBox as _DarkMessageBox
+from PySide6.QtWidgets import QProgressDialog
 from utils.paths import get_icon_path
 from utils.performance_monitor import PerformanceMonitor
 
@@ -146,9 +143,10 @@ class _GpsReader(QRunnable):
                 pass   
 
 
-class MainWindow(QMainWindow):
+class MainWindow(MwEditSaveMixin, MwFileOpMixin, QMainWindow):
     """메인 윈도우"""
 
+        
     # ── 상태바 위젯 하위 호환 프로퍼티 ──────────────────────────
     @property
     def progress_label(self):           return self.status_bar.progress_label
@@ -197,7 +195,6 @@ class MainWindow(QMainWindow):
         self._post_init()
         self.menu_ctrl = MenuShortcutController(self)
         self.menu_ctrl.setup()
-        schedule_font_download(delay_ms=8_000)
 
 
     def _init_core(self) -> None:
@@ -248,7 +245,7 @@ class MainWindow(QMainWindow):
             Qt.ConnectionType.QueuedConnection
         )
 
-        # ── PMTiles 렌더 캐시 + 파일 경로 초기화 ──────────────────
+        # ── RasterTiles 렌더 캐시 + 파일 경로 초기화 ──────────────────
         self._init_map()
         self._prefetch_timers: list[QTimer] = []
 
@@ -256,24 +253,10 @@ class MainWindow(QMainWindow):
 
 
     def _init_map(self) -> None:
-        """
-        PMTiles 렌더 캐시 및 파일 경로를 config에서 읽어 초기화한다.
-
-        configure_render_cache() : _MemRenderCache 크기 설정
-        configure_pmtiles()      : PMTiles 파일 경로 + 최대 줌 설정
-        """
-        render_mb    = self.config.get('cache.render_memory_mb', 50)
-        pmtiles_path = self.config.get('map.pmtiles_path', '').strip()
-        max_zoom     = self.config.get('map.max_zoom', 14)
-
+        """렌더 캐시 크기만 적용. 타일 경로는 main.py _init_map()에서 처리."""
+        render_mb = self.config.get('cache.render_memory_mb', 50)
         configure_render_cache(render_mb)
-        configure_pmtiles(pmtiles_path if pmtiles_path else None, max_zoom)
-
-        info_print(
-            f"지도 초기화: PMTiles={pmtiles_path or '(미설정)'} "
-            f"최대줌={max_zoom} 렌더캐시={render_mb}MB"
-        )
-
+        info_print(f"렌더 캐시 크기 적용: {render_mb}MB")
 
     def _init_ui(self) -> None:
         """
@@ -317,7 +300,7 @@ class MainWindow(QMainWindow):
         viewer_layout.setContentsMargins(0, 0, 0, 0)
         viewer_layout.setSpacing(0)
 
-        from ui.dual_view_panel import DualViewPanel
+        from ui.panels.dual_view_panel import DualViewPanel
 
         # 1) primary ImageViewer 생성 (기존과 동일)
         self.image_viewer = ImageViewer(
@@ -363,8 +346,8 @@ class MainWindow(QMainWindow):
         self._thumb_lock_overlay = QWidget(self.thumbnail_bar)
         self._thumb_lock_overlay.setStyleSheet("background: rgba(0, 0, 0, 170);")
         self._thumb_lock_overlay.setVisible(False)
-        from PySide6.QtWidgets import QLabel as _QL
-        _lbl = _QL("🔒 Move after exiting Edit Mode.", self._thumb_lock_overlay)
+
+        _lbl = QLabel("🔒 Move after exiting Edit Mode.", self._thumb_lock_overlay)
         _lbl.setStyleSheet("color: #aaaaaa; font-size: 12px; background: transparent;")
         _lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._thumb_lock_label = _lbl
@@ -531,7 +514,6 @@ class MainWindow(QMainWindow):
 
         self.folder_explorer.setVisible(fe_visible)
 
-        from PySide6.QtWidgets import QApplication
         _app = QApplication.instance()
         if _app is not None:
             _app.aboutToQuit.connect(self._on_app_about_to_quit)
@@ -539,24 +521,11 @@ class MainWindow(QMainWindow):
 
     def _on_app_about_to_quit(self) -> None:
         """
-        앱 종료 직전 정리 작업.
-        - ThumbnailBar HybridCache VACUUM (DB 파편화 제거)
-        - PMTiles 렌더 캐시 해제 (메모리 반환)
+        aboutToQuit은 위젯 소멸 이후 발생.
+        위젯 의존 정리는 closeEvent()에서 완료되었으므로
+        여기서는 프로세스 수준 안전망만 유지.
         """
-        try:
-            if hasattr(self, 'thumbnail_bar') and self.thumbnail_bar._thumb_cache:
-                self.thumbnail_bar._thumb_cache.vacuum()
-        except Exception as e:
-            warning_print(f"썸네일 캐시 VACUUM 실패: {e}")
-
-        from core.map_loader import _release_shared_profile
-        try:
-            PMTilesMapLoader.clear_cache()
-            _release_shared_profile() 
-        except Exception as e:
-            warning_print(f"PMTiles 정리 실패: {e}")
-
-        debug_print("_on_app_about_to_quit() 완료")
+        debug_print("_on_app_about_to_quit() — 추가 정리 없음")
 
 
     def _start_perf_monitoring(self) -> None:
@@ -654,7 +623,7 @@ class MainWindow(QMainWindow):
         self._prefetch_timers.clear()
 
         # 메타 프리페치 풀 종료
-        if hasattr(self, '_meta_prefetch_pool'):
+        if getattr(self, '_meta_prefetch_pool', None) is not None:
             try:
                 self._meta_prefetch_pool.shutdown(wait=False)       # type: ignore[attr-defined]
                 debug_print("메타 프리페치 풀 종료")
@@ -753,6 +722,14 @@ class MainWindow(QMainWindow):
         # 10. 글로벌 스레드 풀 정리
         QThreadPool.globalInstance().clear()
         QThreadPool.globalInstance().waitForDone(500)
+
+        # ── 11. 맵 로더 전역 리소스 해제 ──────────────────── 
+        from core.map_loader import _release_shared_profile
+        try:
+            RasterTileMapLoader.clear_cache()
+            _release_shared_profile()
+        except Exception as e:
+            warning_print(f"래스터 타일 정리 실패: {e}")
 
         debug_print("========== 프로그램 종료 완료 ==========")
         event.accept()
@@ -1035,7 +1012,6 @@ class MainWindow(QMainWindow):
     def _load_current_image(self) -> None:
         """현재 이미지 로드"""
 
-        # ← 삭제 진행 중이면 이미지 로딩 완전 스킵
         if getattr(self, '_is_deleting', False):
             return
 
@@ -1125,6 +1101,11 @@ class MainWindow(QMainWindow):
         # ── 프리페치: 앞뒤 2장 백그라운드 캐싱 ──────────────
         self._prefetch_metadata_neighbors()        
 
+        # GPS 포토맵이 열려있으면 현재 사진 핀 갱신
+        from tools.gps_map.gps_map_window import _instance as _gps_win
+        if _gps_win and _gps_win.isVisible() and self._current_file:
+            _gps_win.set_current_file(self._current_file)
+
         debug_print(f"_load_current_image 완료")
 
 
@@ -1142,8 +1123,8 @@ class MainWindow(QMainWindow):
             filepath = self.navigator.image_files[target_idx]
             delay = (i + 1) * 80
 
-            t = QTimer(self)
-            t.setSingleShot(True)
+            timer = QTimer(self)
+            timer.setSingleShot(True)
 
             def _make_slot(p, s, _t):
                 def _slot():
@@ -1154,9 +1135,9 @@ class MainWindow(QMainWindow):
                         pass
                 return _slot
 
-            t.timeout.connect(_make_slot(filepath, idx, t))
-            t.start(delay)
-            self._prefetch_timers.append(t)
+            timer.timeout.connect(_make_slot(filepath, idx, timer))
+            timer.start(delay)
+            self._prefetch_timers.append(timer)
 
 
     def _prefetch_single_metadata(self, filepath: Path,
@@ -1222,18 +1203,19 @@ class MainWindow(QMainWindow):
 
 
     def _trigger_map_prefetch(self, current_index: int) -> None:
-        _map_prefetcher.cancel()                          # ← 수정
+        _map_prefetcher.cancel()
 
         file_list = self.navigator.image_files
         if not file_list or len(file_list) < 2:
             return
 
+        # 앞 3장 우선, 뒤 2장 — 총 5개 (사용자는 보통 앞으로 넘김)
+        offsets = [1, 2, 3, -1, -2]
         adjacent_files = []
-        for offset in range(-5, 6):
-            if offset != 0:
-                i = current_index + offset
-                if 0 <= i < len(file_list):
-                    adjacent_files.append(file_list[i])
+        for offset in offsets:
+            i = current_index + offset
+            if 0 <= i < len(file_list):
+                adjacent_files.append(file_list[i])
 
         if not adjacent_files:
             return
@@ -1375,171 +1357,6 @@ class MainWindow(QMainWindow):
                 
                 debug_print(f"ThumbnailBar 임시 하이라이트 해제: {count}개")
 
-# ============================================
-# 파일 작업
-# ============================================
-
-    def _delete_file(self):               
-        self.file_manager.delete_file()
-
-
-    def _cut_file(self):                  
-        self.file_manager.cut_file()
-
-
-    def _paste_file(self) -> None:
-        """
-        Ctrl+V / 메뉴 Paste 공용 진입점.
-        - FolderExplorer에 포커스가 있으면: 폴더 탐색기 기준 붙여넣기
-        - 아니면: 기존대로 파일 뷰어 기준 붙여넣기
-        """
-        try:
-            if hasattr(self, "folder_explorer") and self.folder_explorer.isVisible():
-                if self._focus_is_in_folder_explorer():
-                    # FolderExplorer 쪽 붙여넣기 (현재 선택/현재 위치 폴더)
-                    # NOTE: folder_explorer.py에 _paste_folder(dst) 존재
-                    self.folder_explorer._paste_folder(None)  # pylint: disable=protected-access
-                    return
-        except Exception:
-            pass
-
-        if hasattr(self, "file_manager"):
-            if hasattr(self.file_manager, "paste_file"):
-                self.file_manager.paste_file()
-
-
-    def _copy_file(self):                 
-        self.file_manager.copy_file()
-
-
-    def _copy_file_path(self):            
-        self.file_manager.copy_file_path()
-
-
-    def _rename_file(self):               
-        self.file_manager.rename_file()
-
-
-    def _open_file_location(self):        
-        self.file_manager.open_file_location()
-
-
-    def _show_file_properties(self):      
-        self.file_manager.show_file_properties()
-
-
-    def _set_op_status(self, text: str, current: int = 0, total: int = 0) -> None:
-        if not text:
-            self.status_ctrl.on_file_op_finished()
-            return
-
-        display = text if len(text) <= 42 else f"...{text[-39:]}"
-
-        if current == 0 and total == 0:
-            self.status_ctrl.on_file_op_started(display)
-        else:
-            self.status_ctrl.on_file_op_progress(display, current, total)
-
-
-    def _clear_op_status(self, done_msg: str = "", duration: int = 2500) -> None:
-        # "진행 표시 숨기고 완료 토스트 표시"
-        self._set_op_status("")
-        if done_msg:
-            self._show_status_message(done_msg, duration)
-
-
-    def _run_file_worker(self, operation, files, target_folder=None):
-        self.file_manager.run_file_worker(operation, files, target_folder)
-
-
-    @Slot(Path)
-    def _on_fs_file_added(self, file_path: Path) -> None:
-
-        # 현재 폴더 소속 검증 추가
-        if file_path.parent != self.navigator.current_folder:
-            return        
-        
-        # 1) 기존 동작 유지: 파일매니저 쪽 디바운스/리로드 로직
-        self.file_manager.on_file_added(file_path)
-
-        # 2) FolderExplorer의 X(빈폴더) 상태 즉시 갱신
-        if hasattr(self, "folder_explorer") and self.folder_explorer:
-            self.folder_explorer.on_files_changed(file_path)
-
-
-    @Slot(Path)
-    def _on_fs_file_deleted(self, file_path: Path) -> None:
-        self.file_manager.on_file_deleted(file_path)
-        if hasattr(self, "folder_explorer") and self.folder_explorer:
-            self.folder_explorer.on_files_changed(file_path)
-
-
-    @Slot(Path)
-    def _on_fs_file_modified(self, file_path: Path) -> None:
-        self.file_manager.on_file_modified(file_path)
-        if hasattr(self, "folder_explorer") and self.folder_explorer:
-            self.folder_explorer.on_files_changed(file_path)
-
-
-    @Slot(Path, Path)
-    def _on_fs_file_moved(self, src_path: Path, dest_path: Path) -> None:
-        self.file_manager.on_file_moved(src_path, dest_path)
-        if hasattr(self, "folder_explorer") and self.folder_explorer:
-            # moved는 (src,dst)라서 FolderExplorer에는 각각 1개씩 알려줘야 안전
-            self.folder_explorer.on_files_changed(src_path)
-            self.folder_explorer.on_files_changed(dest_path)
-
-
-    @Slot(list)
-    def _on_fs_batch_deleted(self, deleted_files: list) -> None:
-        self.file_manager.on_batch_deleted(deleted_files)
-
-        if hasattr(self, "folder_explorer") and self.folder_explorer:
-            # 삭제된 파일들의 부모 폴더들만 갱신(중복 제거)
-            parents = set()
-            for fp in deleted_files:
-                try:
-                    parents.add(fp.parent)
-                except Exception:
-                    pass
-            for p in parents:
-                try:
-                    self.folder_explorer.refresh_empty_state(p)
-                except Exception:
-                    pass
-
-
-    @Slot(list)
-    def _on_fs_batch_added(self, added_files: list) -> None:
-        """파일 배치 추가 이벤트 (FolderWatcher.batch_added)"""
-        if not added_files:
-            return
-        info_print(f"파일 배치 추가 감지: {len(added_files)}개")
-        # 이미지 목록 재스캔으로 반영
-        self.navigator.reload_async()
-        # FolderExplorer 빈폴더 상태 갱신
-        for fp in added_files:
-            self.folder_explorer.on_files_changed(fp)
-
-
-    @Slot(Path)
-    def _on_folder_selected_from_explorer(self, folder_path: Path) -> None:
-        """
-        FolderExplorer에서 폴더를 선택했을 때 호출.
-        """
-        if not folder_path or not folder_path.is_dir():
-            warning_print(f"folder_selected: 유효하지 않은 경로 — {folder_path}")
-            return
-
-        # 현재 폴더와 동일하면 재스캔 없이 현재 상태 유지
-        if self.navigator.current_folder == folder_path and self.navigator.image_files:
-            info_print(f"folder_selected: 동일 폴더 재선택 — 재스캔 건너뜀: {folder_path.name}")
-            # FolderExplorer UI만 동기화
-            self.folder_explorer.navigate_to_folder(folder_path)
-            return
-
-        # 다른 폴더이면 open_folder()로 위임
-        self.open_folder(folder_path)
 
 # ============================================
 # 하이라이트 기능
@@ -1633,14 +1450,6 @@ class MainWindow(QMainWindow):
             except ValueError:
                 warning_print(f"하이라이트 동기화: 썸네일 목록에 없음 — {file_path.name}")
 
-
-    def _sync_highlights_to_thumbnail_bar(self) -> None:
-        """
-        (Deprecated) Navigator의 하이라이트 상태를 ThumbnailBar에 동기화
-        대신 _sync_highlight_state()를 사용하세요
-        """
-        warning_print(f"_sync_highlights_to_thumbnail_bar()는 deprecated입니다. _sync_highlight_state()를 사용하세요.")
-        self._sync_highlight_state(force_full_sync=True)
 
 # ============================================
 # UI 토글
@@ -2166,12 +1975,12 @@ class MainWindow(QMainWindow):
 
     @Slot(int)
     def _on_cache_hit(self, index: int) -> None:
-            self._update_performance_info()
+        self._update_performance_info()
     
 
     @Slot(int)
     def _on_cache_miss(self, index: int) -> None:
-            self._update_performance_info()
+        self._update_performance_info()
 
 # ============================================
 # GPS 기능
@@ -2212,7 +2021,7 @@ class MainWindow(QMainWindow):
         """미리보기 영역(오버레이 포함)을 클립보드에 복사 (듀얼 모드면 양쪽 포함)"""
         try:
             if not self.image_viewer:
-                QMessageBox.warning(self, t('capture.fail_title'), t('capture.no_viewer'))
+                _DarkMessageBox(self, kind='warning', title=t('capture.fail_title'), body=t('capture.no_viewer')).exec()
                 return
 
             def viewport_global_rect(viewer) -> QRect:
@@ -2229,7 +2038,7 @@ class MainWindow(QMainWindow):
 
             screen = QGuiApplication.screenAt(capture_rect.center()) or QApplication.primaryScreen()
             if not screen:
-                QMessageBox.warning(self, t('capture.fail_title'), t('capture.no_capture'))
+                _DarkMessageBox(self, kind='warning', title=t('capture.fail_title'), body=t('capture.no_capture')).exec()
                 return
 
             pixmap = screen.grabWindow(
@@ -2241,7 +2050,7 @@ class MainWindow(QMainWindow):
             )
 
             if not pixmap or pixmap.isNull():
-                QMessageBox.warning(self, t('capture.fail_title'), t('capture.no_capture'))
+                _DarkMessageBox(self, kind='warning', title=t('capture.fail_title'), body=t('capture.no_capture')).exec()
                 return
 
             clipboard = QApplication.clipboard()
@@ -2254,7 +2063,7 @@ class MainWindow(QMainWindow):
             info_print(f"클립보드 복사: {pixmap.width()}×{pixmap.height()}")
 
         except Exception as e:
-            QMessageBox.critical(self, t('capture.error_title'), t('capture.error_msg', error=e))
+            _DarkMessageBox(self, kind='danger', title=t('capture.error_title'), body=t('capture.error_msg', error=e)).exec()
             error_print(f"클립보드 복사 실패: {e}")
 
 
@@ -2262,11 +2071,11 @@ class MainWindow(QMainWindow):
         """미리보기 영역(오버레이 포함)을 파일로 저장 (듀얼 모드면 양쪽 포함)"""
         try:
             if not self._current_file:
-                QMessageBox.warning(self, t('capture.no_file_title'), t('capture.no_file_msg'))
+                _DarkMessageBox(self, kind='warning', title=t('capture.no_file_title'), body=t('capture.no_file_msg')).exec()
                 return
 
             if not self.image_viewer:
-                QMessageBox.warning(self, t('capture.fail_title'), t('capture.no_viewer'))
+                _DarkMessageBox(self, kind='warning', title=t('capture.fail_title'), body=t('capture.no_viewer')).exec()
                 return
 
             def viewport_global_rect(viewer) -> QRect:
@@ -2283,7 +2092,7 @@ class MainWindow(QMainWindow):
 
             screen = QGuiApplication.screenAt(capture_rect.center()) or QApplication.primaryScreen()
             if not screen:
-                QMessageBox.warning(self, t('capture.fail_title'), t('capture.no_capture'))
+                _DarkMessageBox(self, kind='warning', title=t('capture.fail_title'), body=t('capture.no_capture')).exec()
                 return
 
             pixmap = screen.grabWindow(
@@ -2295,7 +2104,7 @@ class MainWindow(QMainWindow):
             )
 
             if not pixmap or pixmap.isNull():
-                QMessageBox.warning(self, t('capture.fail_title'), t('capture.no_capture'))
+                _DarkMessageBox(self, kind='warning', title=t('capture.fail_title'), body=t('capture.no_capture')).exec()
                 return
 
             original_path = self._current_file
@@ -2307,20 +2116,20 @@ class MainWindow(QMainWindow):
 
                 self.navigator.reload_async()
 
-                QMessageBox.information(
-                    self,
-                    t('capture.save_ok_title'),
-                    t('capture.save_ok_msg', name=save_path.name, width=pixmap.width(), height=pixmap.height()),
-                )
+                _DarkMessageBox(
+                    self, kind='info',
+                    title=t('capture.save_ok_title'),
+                    body=t('capture.save_ok_msg', name=save_path.name, width=pixmap.width(), height=pixmap.height()),
+                ).exec()
             else:
-                QMessageBox.critical(
-                    self,
-                    t('capture.save_fail_title'),
-                    t('capture.save_fail_msg', path=save_path),
-                )
+                _DarkMessageBox(
+                    self, kind='danger',
+                    title=t('capture.save_fail_title'),
+                    body=t('capture.save_fail_msg', path=save_path),
+                ).exec()
 
         except Exception as e:
-            QMessageBox.critical(self, t('capture.error_title'), t('capture.save_error_msg', error=e))
+            _DarkMessageBox(self, kind='danger', title=t('capture.error_title'), body=t('capture.save_error_msg', error=e)).exec()
             error_print(f"캡쳐 저장 실패: {e}")
 
 
@@ -2348,14 +2157,14 @@ class MainWindow(QMainWindow):
 
     def _open_settings(self) -> None:
         """설정 열기"""
-        from ui.settings_dialog import SettingsDialog
+        from ui.dialogs.settings_dialog import SettingsDialog
         dialog = SettingsDialog(self.config, self)
 
         # ── 시그널 연결 ────────────────────────────────────────────
         dialog.cache_settings_changed.connect(self._on_cache_settings_changed)
         dialog.overlay_settings_changed.connect(self._on_overlay_settings_changed)
         dialog.rendering_settings_changed.connect(self._on_rendering_settings_changed)
-        dialog.map_settings_changed.connect(self._on_map_settings_changed)   # ← 신규
+        dialog.map_settings_changed.connect(self._on_map_settings_changed)  
 
         # ── 썸네일 캐시 메모리 해제 ───────────────────────────────
         dialog.thumbnail_cache_clear_requested.connect(
@@ -2366,23 +2175,32 @@ class MainWindow(QMainWindow):
 
 
     def _on_map_settings_changed(self) -> None:
-        """PMTiles 경로 또는 최대 줌이 변경됐을 때 런타임 즉시 반영."""
-        pmtiles_path = self.config.get('map.pmtiles_path', '').strip()
-        max_zoom     = self.config.get('map.max_zoom', 14)
-
-        configure_pmtiles(pmtiles_path if pmtiles_path else None, max_zoom)
-        PMTilesMapLoader.clear_cache()
-
-        self.metadata_panel.refresh_max_zoom()
-        
-        info_print(
-            f"PMTiles 설정 적용: 경로={pmtiles_path or '(미설정)'} 최대줌={max_zoom}"
+        """타일 디렉터리 또는 기본 줌이 변경됐을 때 런타임 즉시 반영."""
+        from utils.paths import app_resources_dir
+        from core.map_loader import (
+            configure_raster_tiles, get_raster_zoom_range, RasterTileMapLoader
         )
 
-        # 현재 표시 중인 지도를 새 설정으로 재요청
+        tiles_dir = self.config.get(
+            'map.tiles_dir',
+            str(app_resources_dir() / "tiles")
+        ).strip()
+
+        # 새 경로 즉시 반영 + 렌더 캐시 무효화
+        configure_raster_tiles(Path(tiles_dir) if tiles_dir else None, tile_size=512)
+        RasterTileMapLoader.clear_cache()
+
+        mn, mx = get_raster_zoom_range()
+        info_print(
+            f"래스터 타일 설정 적용: 경로={tiles_dir or '(기본값)'} 줌범위={mn}~{mx}"
+        )
+
+        # MetadataPanel 줌 상한 갱신
+        self.metadata_panel.refresh_max_zoom()
+
+        # 현재 표시 중인 지도 재요청
         if self._current_file:
             metadata = self.metadata_panel.get_current_metadata()
-            # metadata는 dict, GPS는 'gps' 키 하위에 존재
             has_gps = (
                 isinstance(metadata, dict)
                 and isinstance(metadata.get('gps'), dict)
@@ -2390,10 +2208,25 @@ class MainWindow(QMainWindow):
             )
             if has_gps:
                 self.metadata_panel.refresh_map()
-                # 오버레이 지도도 갱신
                 if self.overlay_widget.show_map and self.overlay_widget.current_gps:
                     self.overlay_widget._refresh_map()
                 debug_print("지도 이미지 재요청 완료")
+
+            from core.map_loader import get_raster_zoom_range
+            mn, mx = get_raster_zoom_range()
+            self.overlay_widget._min_zoom = mn
+            self.overlay_widget._max_zoom = mx
+            self.overlay_widget.current_zoom = max(mn, min(self.overlay_widget.current_zoom, mx))
+            if self.overlay_widget.show_map and self.overlay_widget.current_gps:
+                self.overlay_widget._refresh_map()
+
+            # overlay_widget_b도 동일 처리
+            if hasattr(self, 'overlay_widget_b') and self.overlay_widget_b:
+                self.overlay_widget_b._min_zoom = mn
+                self.overlay_widget_b._max_zoom = mx
+                self.overlay_widget_b.current_zoom = max(
+                    mn, min(self.overlay_widget_b.current_zoom, mx)
+                )
 
 
     def _on_overlay_settings_changed(self):
@@ -2501,135 +2334,6 @@ class MainWindow(QMainWindow):
 
         return self.menu_ctrl.build_context_menu(parent_widget)
 
-# ============================================
-# 회전기능
-# ============================================
-
-    @Slot()
-    def _on_rotate_left(self):
-        current = self._current_file
-        if not current:
-            return
-
-        state = self.rotation_manager.get_state()
-        if not state or state.file_path != current:
-            loader = self.imageloader
-            is_anim = loader.is_animated(current)
-            self.rotation_manager.set_current_file(current, is_anim)
-            state = self.rotation_manager.get_state()
-
-        if not state:
-            return
-
-        if state.has_animation:
-            QMessageBox.warning(self, t('rotate.blocked_title'), t('rotate.blocked_msg'))
-            return
-
-        self.rotation_manager.rotate_left()
-        self._apply_rotation_to_view_only()
-
-
-    @Slot()
-    def _on_rotate_right(self):
-        current = self._current_file
-        if not current:
-            return
-        state = self.rotation_manager.get_state()
-        if not state or state.file_path != current:
-            loader = self.imageloader
-            is_anim = loader.is_animated(current)
-            self.rotation_manager.set_current_file(current, is_anim)
-        state = self.rotation_manager.get_state()
-        if not state:
-            return
-        if state.has_animation:
-            QMessageBox.warning(self, t('rotate.blocked_title'), t('rotate.blocked_msg'))
-            return
-        self.rotation_manager.rotate_right()
-        self._apply_rotation_to_view_only()
-
-
-    @Slot()
-    def _on_rotate_apply(self):
-        if not self._current_file:
-            return
-
-        state = self.rotation_manager.get_state()
-        if not state or state.file_path != self._current_file:
-            # 다른 파일에서 생성된 회전 상태는 무시 (요구사항)
-            QMessageBox.information(
-                self, t('rotate.no_change_title'), t('rotate.no_change_msg')
-            )
-            return
-
-        if state.has_animation:
-            QMessageBox.warning(self, t('rotate.blocked_title'), t('rotate.blocked_msg'))
-            return
-
-        # 사용자 안내
-        reply = QMessageBox.question(
-            self,
-            t('rotate.apply_title'),
-            t('rotate.apply_msg'),
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
-        )
-        if reply != QMessageBox.StandardButton.Yes:
-            return
-
-        success = self.rotation_manager.apply()
-        if success:
-            self._show_status_message(t('msg.rotate_saved'), 2000)
-            # 캐시/썸네일 무효화 & 재로딩
-            self._invalidate_after_rotation(self._current_file)
-            #self._reload_current_image()
-            # 현재 파일의 회전 상태는 리셋 (요구사항: 파일 이동하면 이전 것은 무시)
-            self.rotation_manager.set_current_file(self._current_file, state.has_animation)
-        else:
-            self._show_status_message(t('msg.rotate_no_change'), 2000)
-
-
-    @Slot()
-    def _on_rotate_reset(self):
-        current = self._current_file
-        if not current:
-            return
-        self.rotation_manager.reset()
-        # 원본 다시 로드
-        self._load_current_image()
-
-
-    def _apply_rotation_to_view_only(self) -> None:
-        """회전 미리보기만 뷰에 적용. XMP 저장 없음."""
-        state = self.rotation_manager.get_state()
-        if not state:
-            return
-        if not self.image_viewer:
-            return
-        pix = self.image_viewer.get_current_pixmap()
-        if not pix:
-            return
-        rotated = self.rotation_manager.get_preview_pixmap(pix)
-        if rotated is None or rotated.isNull():
-            return
-        self.image_viewer.set_rotation_preview(rotated)
-
-
-    def _invalidate_after_rotation(self, path: Path) -> None:
-        self.cache_manager.clear()
-        self.navigator.reload_async()
-
-
-    def _reload_current_image(self):
-        """현재 파일을 다시 읽어서 뷰/썸네일 모두 갱신."""
-        if not self._current_file:
-            return
-        # 캐시 무효화
-        idx = self.navigator.current_index
-        if idx >= 0:
-            self.cache_manager.invalidate(idx)
-        # 썸네일 캐시도 삭제 (hash 기반이라 mtime 변경되면 자동으로 새 생성되지만, 확실히 하려면 캐시 폴더 제거도 고려)
-        self.navigator.reload_async()  # 또는 현재 파일만 다시 로드하는 경량 함수가 있으면 사용
 
 # ============================================
 # 인쇄 기능
@@ -2643,14 +2347,14 @@ class MainWindow(QMainWindow):
                 
                 # 단계별 import로 어디서 에러나는지 확인
                 try:
-                    import printing
-                    info_print(f"✅ printing 모듈 import 성공: {printing}")
+                    import tools.printing
+                    info_print(f"✅ printing 모듈 import 성공: ")
                 except ImportError as e:
                     error_print(f"❌ printing 모듈 import 실패: {e}")
                     raise
                 
                 try:
-                    from printing import PrintManager
+                    from tools.printing import PrintManager
                     info_print(f"✅ PrintManager 클래스 import 성공")
                 except ImportError as e:
                     error_print(f"❌ PrintManager import 실패: {e}")
@@ -2664,9 +2368,11 @@ class MainWindow(QMainWindow):
                 error_detail = traceback.format_exc()
                 error_print(f"인쇄 모듈 로딩 실패:\n{error_detail}")
                 
-                QMessageBox.critical(
-                    self, t('print_dialog.error_title'), t('print_dialog.error_msg', error=e)
-                )
+                _DarkMessageBox(
+                    self, kind='danger',
+                    title=t('print_dialog.error_title'),
+                    body=t('print_dialog.error_msg', error=e),
+                ).exec()
                 return False
         
         return True
@@ -2675,16 +2381,18 @@ class MainWindow(QMainWindow):
     def _show_print_dialog(self, image_paths: list, metadata_list: list):
         """인쇄 다이얼로그 표시"""
         try:
-            from printing.print_dialog import PrintDialog
+            from tools.printing.print_dialog import PrintDialog
             
             dialog = PrintDialog(image_paths, metadata_list, self)
             dialog.exec()
         
         except Exception as e:
             error_print(f"인쇄 다이얼로그 오류: {e}")
-            QMessageBox.critical(
-                self, t('print_dialog.error_title'), t('print_dialog.dialog_error_msg', error=e)
-            )
+            _DarkMessageBox(
+                self, kind='danger',
+                title=t('print_dialog.error_title'),
+                body=t('print_dialog.dialog_error_msg', error=e),
+            ).exec()
 
 
     def _on_print_current(self):
@@ -2694,7 +2402,6 @@ class MainWindow(QMainWindow):
         
         # 현재 파일 가져오기
         try:
-            current_file = self.navigator.current()
             current_file: Optional[Path] = self.navigator.current()
 
         except AttributeError:
@@ -2702,9 +2409,9 @@ class MainWindow(QMainWindow):
             current_file = None
         
         if not current_file or not isinstance(current_file, Path):
-            QMessageBox.warning(self, t('print_dialog.warn_title'), t('print_dialog.no_file_msg'))
+            _DarkMessageBox(self, kind='warning', title=t('print_dialog.warn_title'), body=t('print_dialog.no_file_msg')).exec()
             return
-        
+
         debug_print(f"현재 파일: {current_file} (타입: {type(current_file)})")
         
         # 메타데이터 읽기
@@ -2728,9 +2435,9 @@ class MainWindow(QMainWindow):
         
         # Path 객체인지 확인
         if not highlighted or not all(isinstance(f, Path) for f in highlighted):
-            QMessageBox.warning(self, t('print_dialog.warn_title'), t('print_dialog.no_highlight_msg'))
+            _DarkMessageBox(self, kind='warning', title=t('print_dialog.warn_title'), body=t('print_dialog.no_highlight_msg')).exec()
             return
-        
+
         debug_print(f"하이라이트 파일 수: {len(highlighted)}")
         
         # 메타데이터 읽기
@@ -2754,18 +2461,16 @@ class MainWindow(QMainWindow):
         
         # Path 객체인지 확인
         if not all_files or not all(isinstance(f, Path) for f in all_files):
-            QMessageBox.warning(self, t('print_dialog.warn_title'), t('print_dialog.no_file_msg'))
+            _DarkMessageBox(self, kind='warning', title=t('print_dialog.warn_title'), body=t('print_dialog.no_file_msg')).exec()
             return
-        
+
         # 확인 메시지
-        reply = QMessageBox.question(
-            self,
-            t('print_dialog.confirm_all_title'),
-            t('print_dialog.confirm_all_msg', count=len(all_files)),
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        _confirm = _DarkMessageBox(
+            self, kind='question',
+            title=t('print_dialog.confirm_all_title'),
+            body=t('print_dialog.confirm_all_msg', count=len(all_files)),
         )
-        
-        if reply != QMessageBox.StandardButton.Yes:
+        if _confirm.exec() != QDialog.DialogCode.Accepted:
             return
         
         # 메타데이터 읽기 (진행 표시)
@@ -2775,6 +2480,26 @@ class MainWindow(QMainWindow):
             0, len(all_files), self,
         )
         progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.setStyleSheet("""
+            QProgressDialog { background-color: #1e1e1e; }
+            QLabel { color: #cccccc; font-size: 11px; }
+            QProgressBar {
+                background-color: #2a2a2a;
+                border: 1px solid rgba(255,255,255,0.14);
+                border-radius: 4px;
+                text-align: center;
+                color: #cccccc;
+            }
+            QProgressBar::chunk { background-color: #4a9eff; border-radius: 3px; }
+            QPushButton {
+                background-color: #2a2a2a;
+                color: #cccccc;
+                border: 1px solid rgba(255,255,255,0.14);
+                border-radius: 4px;
+                padding: 4px 12px;
+            }
+            QPushButton:hover { background-color: rgba(74,158,255,0.18); }
+        """)
         progress.show()
         
         try:
@@ -2803,365 +2528,30 @@ class MainWindow(QMainWindow):
         
         self._show_print_dialog(all_files, metadata_list)
 
-# ============================================
-# 편집 모드
-# ============================================
 
-    def enter_edit_mode(self) -> None:
-        if not self._current_file:
+    def open_gps_map(self) -> None:
+        if not self.navigator.image_files:
+            self._show_status_message("No open folder", 1500)
             return
 
-        if getattr(self.image_viewer, '_edit_mode', False):
-            self.image_viewer._edit_cancel()
-            self._show_status_message(t('msg.edit_exited'), 1500)
-        else:
-            cp = self.image_viewer.current_pixmap
-            if not cp or cp.isNull():
-                pi = getattr(self.image_viewer, 'pixmap_item', None)
-                if pi is not None and not pi.pixmap().isNull():
-                    self.image_viewer.current_pixmap = pi.pixmap()
+        from tools.gps_map.gps_map_window import open_gps_map as _open
 
-            if not self.image_viewer.current_pixmap or \
-                    self.image_viewer.current_pixmap.isNull():
-                self._show_status_message(t('msg.edit_auto_exit'), 2000)
-                return
-            self.image_viewer.enter_edit_mode()
-
-
-    def _edit_lock_guard(self, action: str = "이동") -> bool:
-        """편집 모드 중 동작 차단. 차단됐으면 True 반환."""
-        if getattr(self, '_edit_locked', False):
-            self._show_status_message(
-                t('msg.edit_blocked', action=action), 2500
-            )
-            return True
-        return False
-
-
-    def _on_edit_mode_changed(self, active: bool) -> None:
-        """편집 모드 진입/종료 시 UI 잠금 처리"""
-        self._edit_locked = active
-
-        # ── 썸네일바 오버레이 ──────────────────────────────
-        overlay = self._thumb_lock_overlay
-        overlay.setGeometry(0, 0,
-                            self.thumbnail_bar.width(),
-                            self.thumbnail_bar.height())
-        if hasattr(self, '_thumb_lock_label'):
-            self._thumb_lock_label.setGeometry(
-                0, 0,
-                self.thumbnail_bar.width(),
-                self.thumbnail_bar.height()
-            )
-        overlay.setVisible(active)
-        overlay.raise_()
-
-        if active:
-            debug_print("편집 모드: UI 잠금")
-            self._show_status_message(t('msg.edit_nav_blocked'), 3000)
-        else:
-            debug_print("편집 모드 해제: UI 잠금 풀림")
-
-
-    def _on_edit_save_requested(self, pixmap: QPixmap) -> None:
-        """편집 완료 후 저장 방식 선택"""
-
-        msg = QMessageBox(self)
-        msg.setWindowTitle(t('edit_dialog.save_title'))
-        msg.setText(t('edit_dialog.save_text'))
-        msg.setInformativeText(t('edit_dialog.save_info'))
-        btn_same  = msg.addButton(t('edit_dialog.btn_same_folder'), QMessageBox.ButtonRole.AcceptRole)
-        btn_other = msg.addButton(t('edit_dialog.btn_save_as'),     QMessageBox.ButtonRole.ActionRole)
-        btn_disc  = msg.addButton(t('edit_dialog.btn_discard'),     QMessageBox.ButtonRole.RejectRole)
-        msg.setDefaultButton(btn_disc)
-        msg.exec()
-
-        clicked = msg.clickedButton()
-
-        if clicked == btn_same:
-            self._save_edit_same_folder(pixmap)
-
-        elif clicked == btn_other:
-            self._save_edit_choose_path(pixmap)
-
-        else:
-            self._restore_viewer_after_discard()
-
-        if hasattr(self.image_viewer, '_edit_original_pixmap'):
-            del self.image_viewer._edit_original_pixmap
-
-
-    def _restore_viewer_after_discard(self) -> None:
-        """편집 저장 취소 시 뷰어 원본 복원"""
-        viewer = self.image_viewer
-        original = getattr(viewer, '_edit_original_pixmap', None)
-
-        if original is not None and not original.isNull():
-            # replace_pixmap_in_place: lock/크기비교 로직 없이 강제 교체
-            viewer._replace_pixmap_inplace(original)
-        else:
-            # 백업이 없으면 현재 파일을 디스크에서 재로드
-            if self._current_file:
-                self._load_current_image()
-                
-
-    def _build_save_exif(self, filepath: Optional[Path]) -> Optional[bytes]:
-
-        from utils.app_meta import APP_VERSION as app_version
-        software_tag = f"dodoRynx v{app_version}"
-
-        # ── piexif 경로 ──────────────────────────────────────
-        try:
-            if filepath and filepath.exists():
-                exif_dict = piexif.load(str(filepath))
-            else:
-                exif_dict = {'0th': {}, 'Exif': {}, 'GPS': {}, '1st': {}}
-
-            ifd_0th = exif_dict.setdefault('0th', {})
-            ifd_0th.pop(piexif.ImageIFD.Orientation, None)
-            ifd_0th[piexif.ImageIFD.Software] = software_tag.encode('utf-8')  
-
-            SKIP_TAGS = {
-                piexif.ExifIFD.ComponentsConfiguration,
-                piexif.ExifIFD.ExifVersion,
-                piexif.ExifIFD.SceneType,
-            }
-            exif_ifd = exif_dict.get('Exif', {})
-            for tag in SKIP_TAGS:
-                if isinstance(exif_ifd.get(tag), (tuple, list)):
-                    exif_ifd.pop(tag)
-
-            return piexif.dump(exif_dict)
-
-        except ImportError:
-            pass
-        except Exception as e:
-            debug_print(f"piexif 처리 실패: {e} → Pillow fallback")
-
-        # ── Pillow fallback ──────────────────────────────────
-        try:
-            if filepath and filepath.exists():
-                with Image.open(str(filepath)) as img:
-                    exif = img.getexif()
-            else:
-                exif = Exif()
-
-            exif.pop(274, None)         
-            exif[305] = software_tag
-            return exif.tobytes()
-
-        except Exception as e:
-            debug_print(f"Pillow EXIF 처리 실패: {e}")
-            return None
-
-
-    def _get_exif_without_rotation(self, filepath: Optional[Path]) -> Optional[bytes]:
-        if not filepath or not filepath.exists():
-            return None
-
-        # ── piexif ───────────────────────────────────────────
-        try:
-            exif_dict = piexif.load(str(filepath))
-
-            # Orientation 제거
-            ifd_0th = exif_dict.get('0th', {})
-            ifd_0th.pop(piexif.ImageIFD.Orientation, None)
-
-            PROBLEMATIC_EXIF_TAGS = {
-                piexif.ExifIFD.ComponentsConfiguration,   # 37121
-                piexif.ExifIFD.ExifVersion,               # 36864
-                piexif.ExifIFD.SceneType,                 # 41729
-            }
-            exif_ifd = exif_dict.get('Exif', {})
-            for tag in PROBLEMATIC_EXIF_TAGS:
-                val = exif_ifd.get(tag)
-                if val is not None and isinstance(val, (tuple, list)):
-                    debug_print(f"piexif: 문제 태그 {tag} 제거 (tuple → skip)")
-                    exif_ifd.pop(tag)
-
-            # dump 전 검증 — 실패하면 즉시 Pillow fallback으로
-            exif_bytes = piexif.dump(exif_dict)
-            return exif_bytes
-
-        except ImportError:
-            debug_print("piexif 미설치 → Pillow fallback")
-        except Exception as e:
-            debug_print(f"piexif EXIF 처리 실패: {e} → Pillow fallback")
-
-        # ── Pillow fallback ──────────────────────────────────
-        try:
-            with Image.open(str(filepath)) as img:
-                exif = img.getexif()
-                if not exif:
-                    return None
-                exif.pop(274, None)   # Orientation
-                return exif.tobytes()
-        except Exception as e:
-            debug_print(f"Pillow EXIF 로드 실패: {e}")
-            return None
-
-
-    def _handle_empty_folder(self) -> None:
-        """모든 파일이 제거됐을 때 전체 UI 초기화 (단일 진입점)"""
-        info_print("폴더가 비어있음 - UI 전체 초기화")
-
-        # 1. 이미지 뷰어 클리어 (마지막 이미지 잔류 제거)
-        if hasattr(self, 'image_viewer') and self.image_viewer:
-            self.image_viewer.clear()
-
-        # 2. 오버레이 숨기기
-        if hasattr(self, 'overlay_widget') and self.overlay_widget:
-            self.overlay_widget.clear()
-
-        # 3. 썸네일바 완전 초기화
-        if hasattr(self, 'thumbnail_bar'):
-            self.thumbnail_bar.set_image_list([], -1)
-
-        # 4. 메타데이터 패널 클리어 (추가)
-        if hasattr(self, 'metadata_panel') and self.metadata_panel:
-            try:
-                self.metadata_panel.load_metadata(None)
-            except Exception as e:
-                warning_print(f"metadata_panel 클리어 실패: {e}")
-
-        # 5. 미니맵 숨기기
-        if hasattr(self, 'image_viewer') and hasattr(self.image_viewer, 'minimap'):
-            self.image_viewer.minimap.hide()
-
-        # 6. CacheManager 목록 초기화
-        if hasattr(self, 'cache_manager'):
-            self.cache_manager.set_image_list([])
-
-        # 7. 타이틀바 초기화
-        self.setWindowTitle("dodoRynx")
-
-
-    def _get_save_format(self) -> str:
-        """툴바에서 현재 선택된 저장 포맷 ('jpg' | 'webp')"""
-        tb = getattr(self.image_viewer, '_edit_toolbar', None)
-        if tb is not None and hasattr(tb, 'current_format'):
-            return tb.current_format()
-        return 'jpg'
-
-
-    def _get_save_quality(self) -> int:
-        """툴바에서 현재 저장 품질 (1-100)"""
-        tb = getattr(self.image_viewer, '_edit_toolbar', None)
-        if tb is not None and hasattr(tb, 'current_quality'):
-            return tb.current_quality()
-        return 85
-
-
-    def _save_edit_same_folder(self, pixmap: QPixmap) -> None:
-        """원본과 같은 폴더에 자동 저장 — 선택 포맷 적용"""
-        if not self._current_file:
-            return
-        try:
-            fmt  = self._get_save_format()
-            qual = self._get_save_quality()
-            ext  = '.webp' if fmt == 'webp' else '.jpg'
-
-            stem   = self._current_file.stem
-            parent = self._current_file.parent
-            save_path = parent / f"{stem}_edited{ext}"
-            counter = 1
-            while save_path.exists():
-                save_path = parent / f"{stem}_edited_{counter}{ext}"
-                counter += 1
-
-            self._do_save_image(pixmap, save_path, fmt, qual)
-        except Exception as e:
-            error_print(f"편집 저장 오류: {e}")
-            QMessageBox.critical(self, t('edit_dialog.error_title'), str(e))
-
-
-    def _save_edit_choose_path(self, pixmap: QPixmap) -> None:
-        """사용자가 직접 경로를 선택하여 저장 — 선택 포맷 적용"""
-        if not self._current_file:
-            return
-
-        fmt  = self._get_save_format()
-        qual = self._get_save_quality()
-        ext  = '.webp' if fmt == 'webp' else '.jpg'
-
-        default = str(
-            self._current_file.parent / f"{self._current_file.stem}_edited{ext}"
+        win = _open(
+            files=self.navigator.image_files,
+            current_file=self._current_file,
+            parent=self,
         )
-        save_path_str, _ = QFileDialog.getSaveFileName(
-            self,
-            t('edit_dialog.save_as_title'),
-            default,
-            t('edit_dialog.save_as_filter'), 
+        if win:
+            win.connect_navigation(self._on_gps_map_navigate)
+
+
+    @Slot(str)
+    def _on_gps_map_navigate(self, filepath: str) -> None:
+        """GPS 맵 핀 클릭 → 해당 사진으로 이동."""
+        p = Path(filepath)
+        idx = next(
+            (i for i, f in enumerate(self.navigator.image_files) if f == p),
+            -1,
         )
-        if not save_path_str:
-            return
-
-        try:
-            save_path = Path(save_path_str)
-            # 확장자 없으면 선택 포맷 강제 적용
-            if not save_path.suffix:
-                save_path = save_path.with_suffix(ext)
-
-            # 확장자로 최종 포맷 결정 (파일 대화상자에서 바꿀 수 있음)
-            suffix = save_path.suffix.lower()
-            if suffix == '.webp':
-                actual_fmt = 'webp'
-            else:
-                actual_fmt = 'jpg'
-                # .jpg/.jpeg 이외 확장자면 .jpg 로 강제 변경
-                if suffix not in ('.jpg', '.jpeg'):
-                    save_path = save_path.with_suffix('.jpg')
-            self._do_save_image(pixmap, save_path, actual_fmt, qual)
-        except Exception as e:
-            error_print(f"사본 저장 오류: {e}")
-            QMessageBox.critical(self, t('edit_dialog.error_title'), str(e))
-
-
-    def _do_save_image(
-        self,
-        pixmap:    QPixmap,
-        save_path: Path,
-        fmt:       str,   # 'jpg' | 'webp'
-        quality:   int,   # 1-100
-    ) -> None:
-        """
-        JPG / WEBP 통합 저장.
-        - JPG  : RGBA → 흰 배경 RGB 합성 후 JPEG 저장
-        - WEBP : RGBA 그대로 저장 (투명도 보존)
-        - EXIF : 두 포맷 모두 piexif/Pillow fallback 적용
-        """
-        qimg = pixmap.toImage().convertToFormat(QImage.Format.Format_RGBA8888)
-        w, h = qimg.width(), qimg.height()
-        arr  = np.frombuffer(qimg.bits(), dtype=np.uint8).reshape((h, w, 4)).copy()
-        pil_rgba = Image.fromarray(arr, 'RGBA')
-
-        exif_bytes = self._build_save_exif(self._current_file)
-
-        if fmt == 'webp':
-            save_kwargs: dict = {'quality': quality, 'method': 4}
-            if exif_bytes:
-                try:
-                    pil_rgba.save(str(save_path), 'WEBP', exif=exif_bytes, **{k:v for k,v in save_kwargs.items()})
-                except Exception:
-                    # EXIF 문제 시 EXIF 없이 재시도
-                    debug_print("WEBP EXIF 저장 실패 → EXIF 없이 재시도")
-                    pil_rgba.save(str(save_path), 'WEBP', **save_kwargs)
-            else:
-                pil_rgba.save(str(save_path), 'WEBP', **save_kwargs)
-
-        else:
-            # JPG — 알파 채널 흰 배경으로 합성
-            background = Image.new('RGB', (w, h), (255, 255, 255))
-            background.paste(pil_rgba, mask=pil_rgba.split()[3])
-            save_kwargs = {'quality': quality, 'optimize': True}
-            if exif_bytes:
-                save_kwargs['exif'] = exif_bytes
-            background.save(str(save_path), 'JPEG', **save_kwargs)
-
-        info_print(f"편집 저장: {save_path}  fmt={fmt.upper()}  quality={quality}")
-
-
-    # 기존 코드와의 하위 호환 — 예전 호출부가 남아있을 경우 대비
-    def _do_save_as_jpg(self, pixmap: QPixmap, save_path: Path) -> None:
-        self._do_save_image(pixmap, save_path, 'jpg', 85)
-
+        if idx >= 0:
+            self.navigator.go_to(idx)

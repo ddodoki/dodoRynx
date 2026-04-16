@@ -1,0 +1,471 @@
+<!-- VS Code JS validator: template placeholders ${...} are Python runtime substitutions -->
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<link href="${css_url}" rel="stylesheet"/>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body,#map{width:100%;height:100%;background:#1a1a1a;overflow:hidden;}
+
+/* ─ 팝업 ─ */
+.maplibregl-popup-content{
+    background:#242424!important;color:#ddd!important;
+    border-radius:8px!important;border:1px solid #3a3a3a!important;
+    box-shadow:0 4px 20px rgba(0,0,0,.7)!important;
+    padding:12px 14px!important;
+    font-family:-apple-system,"Segoe UI",sans-serif;
+    font-size:12px;line-height:1.75;min-width:220px;
+}
+.maplibregl-popup-tip{border-top-color:#242424!important;}
+.maplibregl-popup-close-button{
+    color:#888!important;font-size:16px!important;
+    right:6px!important;top:6px!important;
+}
+.maplibregl-popup-close-button:hover{color:#fff!important;background:none!important;}
+.maplibregl-popup{z-index:10!important;}
+
+.pp{display:flex;flex-direction:row;align-items:flex-start;gap:10px;}
+.pp-thumb{width:64px;height:64px;flex-shrink:0;object-fit:cover;border-radius:5px;background:#333;}
+.pp-thumb-placeholder{width:64px;height:64px;flex-shrink:0;border-radius:5px;background:#2e2e2e;}
+.pp-body{flex:1;min-width:0;}
+.pp b{
+    color:#7cc;font-size:12px;display:block;margin-bottom:3px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px;
+}
+.pp .meta{color:#888;font-size:11px;display:block;line-height:1.5;}
+.pp-actions{display:flex;gap:5px;margin-top:8px;}
+.ppbtn{
+    flex:1;padding:4px 6px;border-radius:4px;font-size:11px;
+    cursor:pointer;text-align:center;border:1px solid;background:transparent;
+}
+.ppbtn-nav{border-color:rgba(74,158,255,.40);color:#4a9eff;background:rgba(74,158,255,.12);}
+.ppbtn-nav:hover{background:rgba(74,158,255,.25);}
+.ppbtn-ext{border-color:rgba(80,200,120,.40);color:#5cb87a;background:rgba(80,200,120,.10);}
+.ppbtn-ext:hover{background:rgba(80,200,120,.25);}
+
+/* ─ 내비게이션 컨트롤 ─ */
+.maplibregl-ctrl-group{
+    background:#2e2e2e!important;border:1px solid #444!important;
+    border-radius:6px!important;overflow:hidden;
+}
+.maplibregl-ctrl-group button{
+    background:#2e2e2e!important;border-bottom:1px solid #444!important;
+}
+.maplibregl-ctrl-group button:hover{background:#3a3a3a!important;}
+.maplibregl-ctrl-group button span.maplibregl-ctrl-icon{filter:invert(0.7)!important;}
+.maplibregl-ctrl-attrib {
+    background: rgba(20, 25, 35, 0.72) !important;
+    color: #8a9aaa !important;
+    font-size: 10px !important;
+    border-radius: 4px !important;
+    backdrop-filter: blur(4px);
+    max-width: 480px;
+}
+.maplibregl-ctrl-attrib a {
+    color: #7ab8e8 !important;
+}
+
+
+/* ═══════════════════════════════════════════════
+   GPX 패널 — 도크(위치·숨김 제어) + 패널(내용)
+   ═══════════════════════════════════════════════ */
+
+.elevation-dock{
+    position:absolute;
+    left:14px; right:14px; bottom:14px;
+    z-index:30;
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+    pointer-events:none;
+}
+.elevation-dock.hidden{ display:none; }
+
+
+.elevation-panel {
+    height: 246px;
+    border: 1px solid rgba(255,255,255,.10);
+    border-radius: 14px;
+    background: rgba(20,20,20,.97); 
+    box-shadow: 0 16px 40px rgba(0,0,0,.45);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    pointer-events: auto;
+}
+.elevation-panel.hidden{ display:none; }
+
+/* ── attribution 이동 ── */
+.maplibregl-ctrl-bottom-right.elev-attr-floating{
+    right:18px!important;
+    top:auto!important;
+    z-index:31!important;
+    transition:bottom .16s ease;
+}
+
+/* ═══════════════════════════════════════════════
+   센서 토글 바
+   ═══════════════════════════════════════════════ */
+.elevation-sensor-bar {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    align-items: center;
+    padding: 5px 10px;
+    border: 1px solid rgba(255,255,255,.10);
+    border-radius: 10px;
+    background: rgba(18,18,18,.97);  
+    box-shadow: 0 6px 20px rgba(0,0,0,.30);
+    pointer-events: auto;
+    min-height: 38px;
+}
+.elevation-sensor-bar.hidden{ display:none; }
+
+/* 센서 칩 공통 */
+.sensor-chip{
+    display:inline-flex;
+    align-items:center;
+    gap:5px;
+    height:26px;
+    padding:0 10px;
+    border-radius:999px;
+    border:1px solid rgba(255,255,255,.12);
+    background:rgba(255,255,255,.05);
+    font-family:-apple-system,"Segoe UI",sans-serif;
+    font-size:11px;
+    cursor:pointer;
+    user-select:none;
+    transition:background .12s ease, border-color .12s ease, opacity .12s ease;
+}
+.sensor-chip:hover{
+    background:rgba(255,255,255,.10);
+}
+.sensor-chip input[type=checkbox]{
+    width:11px; height:11px;
+    margin:0;
+    cursor:pointer;
+    accent-color:currentColor;
+    flex-shrink:0;
+}
+/* 색상 — 센서별 */
+.sensor-chip--speed      { color:#5cb8ff; }
+.sensor-chip--heart_rate { color:#ff668a; }
+.sensor-chip--cadence    { color:#a98bff; }
+.sensor-chip--temperature{ color:#ffb454; }
+
+/* 활성 상태 */
+.sensor-chip.active{
+    background:rgba(255,255,255,.10);
+    border-color:currentColor;
+}
+/* 비활성(체크 해제) 상태에서 약하게 */
+.sensor-chip:not(.active){
+    opacity:0.65;
+}
+.sensor-chip:not(.active):hover{
+    opacity:0.90;
+}
+
+/* 센서 범례 레이블 (단위) */
+.sensor-chip .sensor-unit{
+    opacity:0.55;
+    font-size:10px;
+}
+
+/* ═══════════════════════════════════════════════
+   고도 패널 내부
+   ═══════════════════════════════════════════════ */
+
+/* ── 헤더 행 ── */
+#elevationHeader{
+    height:44px;
+    min-height:44px;
+    padding:0 14px;
+    display:flex;
+    align-items:center;
+    gap:12px;
+    border-bottom:1px solid rgba(255,255,255,.07);
+    flex-shrink:0;
+    overflow:hidden;
+}
+
+/* 좌측: 타이틀 + 선택 포인트 실시간 정보 */
+.elevation-head-left{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    min-width:0;
+    flex:0 1 auto;
+    overflow:hidden;
+}
+
+.elevation-title{
+    font-size:12px;
+    font-weight:700;
+    color:rgba(255,255,255,.50);
+    letter-spacing:.04em;
+    white-space:nowrap;
+    flex-shrink:0;
+}
+
+/*
+ *  구분선: JS가 elevationSub를 채울 때 hidden-when-empty 제거,
+ *  비울 때 추가하는 방식. CSS :has() 로 추가 보강.
+ */
+.elevation-head-sep{
+    width:1px;
+    height:14px;
+    background:rgba(255,255,255,.15);
+    flex-shrink:0;
+}
+/* JS 패치 전 fallback: hidden-when-empty 클래스 있으면 숨김 */
+.elevation-head-sep.hidden-when-empty{ display:none; }
+/*
+ *  CSS :has() 보강 (Chromium 105+, WebEngineView 지원):
+ *   Sub 텍스트가 기본값("선택 지점 없음")일 때 구분선 숨김 처리를
+ *   JS 없이도 처리할 수 있도록 선택자 추가.
+ *   단, 이 선택자는 최신 엔진에서만 동작하므로 JS 패치가 우선.
+ */
+.elevation-head-left:has(#elevationSub:empty) .elevation-head-sep{ display:none; }
+
+#elevationSub{
+    font-size:11px;
+    color:#7ec4ff;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    min-width:0;
+    opacity:0.85;
+}
+
+/* 우측: 통계 칩 묶음 */
+#elevationHeadRight{
+    display:flex;
+    align-items:center;
+    gap:5px;
+    margin-left:auto;
+    flex-shrink:0;
+    flex-wrap:nowrap;
+    overflow:hidden;
+    max-width:60%;  
+}
+
+/* 공통 칩 */
+.elevation-chip{
+    display:inline-flex;
+    align-items:center;
+    height:22px;
+    padding:0 9px;
+    border-radius:999px;
+    border:1px solid rgba(255,255,255,.10);
+    background:rgba(255,255,255,.05);
+    color:#c8d1d6;
+    font-size:11px;
+    white-space:nowrap;
+    flex-shrink:0;
+}
+.elev-chip-up{
+    color:#5cd6ff;
+    background:rgba(92,214,255,.10);
+    border-color:rgba(92,214,255,.28);
+    font-weight:600;
+}
+.elev-chip-dn{
+    color:#7effa9;
+    background:rgba(126,255,169,.10);
+    border-color:rgba(126,255,169,.28);
+    font-weight:600;
+}
+.elevation-chip--auto{
+    background:rgba(74,158,255,.15);
+    border-color:rgba(74,158,255,.35);
+    color:#7ec4ff;
+}
+.elevation-chip--manual{
+    background:rgba(255,193,74,.15);
+    border-color:rgba(255,193,74,.35);
+    color:#ffc14a;
+}
+
+/* ── 캔버스 ── */
+#elevationCanvas{
+    flex:1;
+    width:100%;
+    min-height:0;
+    display:block;
+    cursor:crosshair;
+}
+
+/* ── 구간 분석 카드 ── */
+.elevation-segment{
+    margin:0 14px 6px;
+    min-height:36px;
+    border:1px solid rgba(255,255,255,.08);
+    border-radius:10px;
+    background:rgba(255,255,255,.04);
+    padding:6px 10px;
+    display:flex;
+    flex-wrap:wrap;
+    align-items:center;
+    gap:6px;
+    font-family:-apple-system,"Segoe UI",sans-serif;
+    flex-shrink:0;
+}
+.elevation-segment.hidden{display:none;}
+.elevation-segment-title{
+    color:#ffe2b8;font-size:11px;font-weight:700;margin-right:4px;
+}
+.elevation-segment .elevation-chip{
+    background:rgba(255,154,47,.10);
+    border-color:rgba(255,154,47,.18);
+    color:#f3d8bc;
+}
+
+/* ─ GPX START / END 플래그 ─ */
+.gpx-flag-wrap{
+    display:flex;flex-direction:column;align-items:center;
+    user-select:none;pointer-events:none;
+    filter:drop-shadow(0 6px 16px rgba(0,0,0,.45));
+}
+.gpx-flag-badge{
+    padding:5px 10px;border-radius:999px;color:#fff;
+    font:700 11px/1 -apple-system,"Segoe UI",sans-serif;
+    border:1px solid rgba(255,255,255,.24);white-space:nowrap;
+}
+.gpx-flag-stem{width:2px;background:rgba(255,255,255,.72);margin-top:4px;}
+.gpx-flag-dot{width:10px;height:10px;border-radius:50%;border:2px solid #fff;margin-top:-1px;}
+.gpx-flag-wrap.start .gpx-flag-badge{background:linear-gradient(180deg,#26bf67,#1f9150);}
+.gpx-flag-wrap.end   .gpx-flag-badge{background:linear-gradient(180deg,#ec6868,#c74c4c);}
+.gpx-flag-wrap.start .gpx-flag-dot{background:#26bf67;}
+.gpx-flag-wrap.end   .gpx-flag-dot{background:#ec6868;}
+
+.gpx-selected-dot{
+    width:16px;height:16px;border-radius:50%;
+    background:#ff9a2f;border:3px solid #fff;
+    box-shadow:0 0 0 4px rgba(255,154,47,.24),0 6px 16px rgba(0,0,0,.45);
+}
+
+.maplibregl-ctrl-scale {
+    background: rgba(20, 25, 35, 0.75);
+    border-color: rgba(255, 255, 255, 0.45);
+    color: #d0dae4;
+    font-size: 10px;
+    padding: 1px 5px;
+    border-radius: 3px;
+    backdrop-filter: blur(4px);
+}
+.elevation-segment-sensor-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 3px 8px;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    flex-wrap: nowrap;
+}
+.elevation-segment-sensor-label {
+    font-size: 10px;
+    font-weight: bold;
+    min-width: 44px;
+    flex-shrink: 0;
+}
+.elevation-segment-sensor-stat {
+    font-size: 10px;
+    color: #8a9aaa;
+    white-space: nowrap;
+}
+.elevation-segment-sensor-stat b {
+    color: #d0dae4;
+}
+#elevationDock,
+#btb {
+    transform: translateZ(0);
+    will-change: transform;
+    contain: layout style;
+}
+#map {
+    contain: strict;    
+}
+#map canvas {
+    will-change: contents;
+    transform: translateZ(0);
+}
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+
+<!--
+     elevation-dock: 위치/숨김 제어 컨테이너 (새로 추가)
+     flex-column 으로 센서 바 → 패널 순서로 쌓임.
+     JS는 이 요소의 hidden 클래스를 토글함.
+
+  구조:
+    elevationDock          절대 위치, 숨김 단위
+      elevationSensorBar   센서 체크박스 바 (JS가 채움)
+      elevationPanel       기존 고도 패널 (위치 제어 없음)
+        elevationHeader
+          elevation-head-left
+            elevation-title
+            elevationHeadSep
+            elevationSub
+          elevationHeadRight
+        elevationSegmentCard
+        elevationCanvas
+-->
+<div id="elevationDock" class="elevation-dock hidden">
+
+  <!-- 센서 토글 바: JS _buildSensorDock() 이 innerHTML 채움 -->
+  <!-- 센서 없는 GPX 로드 시 JS가 hidden 유지 -->
+  <div id="elevationSensorBar" class="elevation-sensor-bar hidden"></div>
+
+  <!-- 고도/센서 패널 본체 -->
+  <!-- hidden 클래스 없음 — dock 이 숨김 제어 담당 -->
+  <div id="elevationPanel" class="elevation-panel">
+
+    <!-- 단일 헤더 행 -->
+    <div id="elevationHeader">
+
+      <!-- 좌측: 타이틀 | 선택 포인트 정보 -->
+      <div class="elevation-head-left">
+        <!--
+          elevation-title: 고도 있으면 "GPX 고도",
+          센서-only 면 JS가 "GPX 센서"로 교체
+        -->
+        <span id="elevationTitle" class="elevation-title">GPX Elevation</span>
+
+        <!--
+          구분선: JS 패치 후 _setElevationSub() 가
+          hidden-when-empty 클래스를 토글함.
+          패치 전에는 CSS :has() 선택자로 fallback.
+        -->
+        <span id="elevationHeadSep" class="elevation-head-sep hidden-when-empty"></span>
+
+        <span id="elevationSub">No selection</span>
+      </div>
+
+      <!-- 우측: 통계 칩 5종 + 선택 포인트 센서 칩 (JS 동적 업데이트) -->
+      <div id="elevationHeadRight"></div>
+
+    </div>
+
+    <!-- 구간 분석 카드 (Shift+클릭 선택 시 JS가 표시) -->
+    <div id="elevationSegmentCard" class="elevation-segment hidden"></div>
+
+    <!-- 고도/센서 캔버스 -->
+    <canvas id="elevationCanvas"></canvas>
+
+  </div><!-- /elevationPanel -->
+
+</div><!-- /elevationDock -->
+
+<script>window._I18N = ${i18n_json};</script>
+<script src="${js_url}"></script>
+<script>${script_map}</script>
+<script>${script_elevation}</script>
+<script>${toolbar_script}</script>
+</body>
+</html>

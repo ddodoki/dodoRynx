@@ -12,7 +12,7 @@ from typing import Any, Dict, Optional, Set
 from PySide6.QtCore import QObject, Qt, QTimer, Signal, SignalInstance, Slot
 from watchdog.events import FileSystemEvent, FileSystemEventHandler
 
-from utils.debug import debug_print, error_print, info_print, warning_print
+from utils.debug import debug_print, error_print, info_print
 
 
 class FolderWatcherHandler(FileSystemEventHandler):
@@ -26,6 +26,7 @@ class FolderWatcherHandler(FileSystemEventHandler):
         file_modified_signal: SignalInstance,
         file_moved_signal: SignalInstance,
     ) -> None:
+        
         super().__init__()
         self.supported_extensions = supported_extensions
         
@@ -112,15 +113,12 @@ class FolderWatcherHandler(FileSystemEventHandler):
 
         path_key = str(file_path)
 
-        # ── 신규 파일 판별 ──────────────────────────────────────
-        # known_files에 없으면 → 감시 시작 이후 새로 생긴 파일
-        # NAS/SMB는 on_created 없이 on_modified만 발생하는 경우가 있음
         if path_key not in self._known_files:
             if not file_path.exists():
-                return  # 아직 완전히 쓰여지지 않은 상태
+                return  
             if self._is_duplicate_event(file_path, "created"):
                 return
-            # known에 등록하고 added로 라우팅
+
             self._known_files.add(path_key)
             try:
                 stat = file_path.stat()
@@ -140,7 +138,6 @@ class FolderWatcherHandler(FileSystemEventHandler):
             new_sig = (stat.st_size, round(stat.st_mtime, 2))
             old_sig = self._file_stat_cache.get(path_key)
             if old_sig == new_sig:
-                # 크기·mtime 동일 → 읽기에 의한 가짜 이벤트
                 debug_print(f"가짜 modified 무시 (stat 동일): {file_path.name}")
                 return
             self._file_stat_cache[path_key] = new_sig
@@ -174,14 +171,12 @@ class FolderWatcherHandler(FileSystemEventHandler):
             self.file_moved_signal.emit(src_path, dest_path)
 
         elif src_is_image and not dest_is_image:
-            # 이미지가 비이미지 이름으로 변경 = 삭제와 동일
             src_key = str(src_path)
             self._known_files.discard(src_key)        
             self._file_stat_cache.pop(src_key, None)   
             self.file_deleted_signal.emit(src_path)
 
         elif not src_is_image and dest_is_image:
-            # 비이미지가 이미지 이름으로 변경 = 추가와 동일
             dst_key = str(dest_path)
             self._known_files.add(dst_key)        
             try:
@@ -207,6 +202,7 @@ class FolderWatcher(QObject):
 
 
     def __init__(self, supported_extensions: Set[str]) -> None:
+
         super().__init__()
         self.supported_extensions = supported_extensions
         self.observer: Any = None
@@ -283,7 +279,6 @@ class FolderWatcher(QObject):
         )
         debug_print(f"FolderWatcherHandler 생성 완료")
                 
-        # 감시 시작 시점의 파일 목록을 known으로 등록
         try:
             event_handler._known_files = {
                 str(p) for p in folder_path.iterdir()
@@ -293,7 +288,6 @@ class FolderWatcher(QObject):
         except Exception:
             pass
 
-        # 네트워크/클라우드 경로 debounce 강화
         path_str = str(folder_path).lower()
         is_network = (
             not Path(folder_path).drive.endswith(":")
@@ -411,7 +405,6 @@ class FolderWatcher(QObject):
         self.pending_deleted.add(file_path)
         info_print(f"   pending_deleted 크기: {len(self.pending_deleted)}개")
 
-        # 일시 중단 중이면 누적만 하고 타이머 시작 안 함
         if self._events_paused:
             info_print("   ⏸️ 일시 중단 중 — 타이머 보류")
             return
@@ -465,7 +458,7 @@ class FolderWatcher(QObject):
             deleted_list = sorted(self.pending_deleted)
             self.pending_deleted.clear()
             if self._suppress_batch_deleted:
-                self._suppress_batch_deleted = False   # 자동 초기화
+                self._suppress_batch_deleted = False 
                 debug_print(f"batch_deleted 억제됨: {len(deleted_list)}개 (직접 reload 처리)")
             else:
                 self.batch_deleted.emit(deleted_list)

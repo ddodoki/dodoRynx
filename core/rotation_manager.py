@@ -83,10 +83,8 @@ def get_raw_sidecar_rotation(raw_path: Path) -> Optional[int]:
         tree = ET.parse(xmp_path)
         root = tree.getroot()
 
-        # 네임스페이스 무시하고 모든 Description 찾기
         for desc in root.iter():
             if desc.tag.endswith('Description'):
-                # 모든 속성에서 'Rotation' 찾기
                 for key, val in desc.attrib.items():
                     if 'Rotation' in key:
                         angle = int(val) % 360
@@ -130,7 +128,6 @@ def _get_raw_initial_angle(file_path: Path) -> int:
                 pass
 
             # 3단계: 내장 JPEG 썸네일 (Nikon NEF 등)
-            # postprocess() 호출 없으므로 extract_thumb() 호출 가능
             try:
                 from PIL import Image as PILImage
                 thumb = raw.extract_thumb()
@@ -271,7 +268,7 @@ class RotationManager:
         ext = st.file_path.suffix.lower()
         
         # 원본과 비교하여 변경 여부 확인
-        original_angle = st.initial_angle   # set_current_file() 시점의 기준값 (None 없음)
+        original_angle = st.initial_angle 
 
         if angle == original_angle:
             debug_print(f"회전 각도 변경 없음: {angle}° (원본: {original_angle}°)")
@@ -435,9 +432,7 @@ class RotationManager:
     def _apply_pixel_rotation(self, st: RotationState, angle: int) -> bool:
         file_path = st.file_path
         with Image.open(file_path) as img:
-            # EXIF 적용된 상태로 로드하는 것이 좋으면 transpose 사용 가능
-            # 여기서는 그냥 rotate 사용 (expand=True)
-            rotated = img.rotate(-angle, expand=True)  # 화면 기준과 맞추려면 부호 조정
+            rotated = img.rotate(-angle, expand=True)
             rotated.save(file_path)
             info_print(f"{file_path.name} 픽셀 회전 저장: {angle}°")
         return True

@@ -39,7 +39,7 @@ class ConfigManager(QObject):
         "cache.max_memory_mb":   700,
         "cache.thumb_memory_mb": 100,
         "cache.thumb_disk_mb":   500,
-        "cache.render_memory_mb": 50,   # PMTiles 렌더 메모리 캐시 (MB)
+        "cache.render_memory_mb": 50, 
 
         # ── 렌더링 (nested) ──────────────────────────────────────
         "rendering": {
@@ -60,8 +60,8 @@ class ConfigManager(QObject):
         "browser.path":   "system_default",
 
         # ── 지도 (PMTiles) ────────────────────────────────────────
-        "map.pmtiles_path": "",    # 로컬 .pmtiles 파일 절대 경로
-        "map.max_zoom":     14,    # PMTiles 헤더에서 자동 파싱 후 덮어씀
+        "map.tiles_dir":  "",      
+        "map.tms":        False,  
 
         # ── 뷰어 (flat) ───────────────────────────────────────────
         "viewer.wheel_delay_ms": 100,
@@ -114,8 +114,15 @@ class ConfigManager(QObject):
         },
 
         # ── UI 언어 (flat) ────────────────────────────────────────
-        "ui.language": "auto",   # "auto" = OS 언어 자동 감지
+        "ui.language": "auto",   
+
+        # ── 타일 다운로더 ──────────────────────────────────────────
+        "tile_downloader": {
+            "last":            {},   
+            "window_geometry": None,  
+        },
     }
+
 
     def __init__(
         self, config_file: Optional[Path] = None, parent=None
@@ -151,7 +158,7 @@ class ConfigManager(QObject):
                 with open(self.config_file, "r", encoding="utf-8") as f:
                     loaded = json.load(f)
                 self._deep_update(self.config, loaded)
-                self._migrate_config()          # ← 추가
+                self._migrate_config()  
                 info_print(f"설정 로드: {self.config_file}")
             except Exception as e:
                 warning_print(f"설정 로드 실패: {e}, 기본값 사용")
@@ -159,18 +166,32 @@ class ConfigManager(QObject):
             info_print(f"설정 파일 없음 → 기본값 사용: {self.config_file}")
             self.save()
 
+
     def _migrate_config(self) -> None:
-        """
-        구버전 설정 키 정리.
-        OFM 관련 키를 제거하고 저장은 하지 않는다
-        (다음 save() 호출 시 자연스럽게 사라짐).
-        """
-        _OFM_KEYS = ("cache.ofm_memory_mb", "cache.ofm_disk_mb", "cache.ofm_expiry_days")
-        removed = [k for k in _OFM_KEYS if k in self.config]
+        _LEGACY_KEYS = (
+            "cache.ofm_memory_mb", "cache.ofm_disk_mb", "cache.ofm_expiry_days",
+            "map.pmtiles_path", "map.max_zoom",
+            "map.default_zoom", 
+        )
+        removed = [k for k in _LEGACY_KEYS if k in self.config]
         for k in removed:
             del self.config[k]
-        if removed:
-            info_print(f"설정 마이그레이션: 제거된 키 {removed}")
+
+        _migrated = bool(removed)
+
+        gps_map    = self.config.get("gps_map", {})
+        saved_zoom = gps_map.get("default_zoom", 9)
+        MAX_ZOOM = 16
+        if not isinstance(saved_zoom, int) or not (1 <= saved_zoom <= 16):
+            corrected = max(1, min(saved_zoom, 16)) if isinstance(saved_zoom, int) else 15
+            gps_map["default_zoom"] = corrected
+            self.config["gps_map"] = gps_map
+            warning_print(f"설정 마이그레이션: default_zoom {saved_zoom} → {corrected}")
+            _migrated = True
+
+        if _migrated:
+            self.save() 
+
 
     def save(self) -> None:
         try:
@@ -181,12 +202,14 @@ class ConfigManager(QObject):
         except Exception as e:
             error_print(f"설정 저장 실패: {e}")
 
+
     def save_immediate(self) -> None:
         """debounce 없이 즉시 저장 (앱 종료 등)"""
         if self._save_timer.isActive():
             self._save_timer.stop()
         self.save()
         self._pending_save = False
+
 
     def schedule_save(self) -> None:
         """1초 debounce 자동 저장"""
@@ -195,10 +218,12 @@ class ConfigManager(QObject):
             self._save_timer.stop()
         self._save_timer.start(1000)
 
+
     def _do_save(self) -> None:
         if self._pending_save:
             self.save()
             self._pending_save = False
+
 
     def reset(self) -> None:
         self.config = copy.deepcopy(self.DEFAULT_CONFIG)
@@ -210,14 +235,15 @@ class ConfigManager(QObject):
     def get(self, key: str, default: Any = None) -> Any:
         return self.config.get(key, default)
 
+
     def set(self, key: str, value: Any) -> None:
         self.config[key] = value
-        #debug_print(f"config.set [{key}] = {value}")
 
     # ─── UI 가시성 ───────────────────────────────────────────
 
     def get_ui_visibility(self, element: str) -> bool:
         return self.config.get("ui", {}).get(f"show_{element}", True)
+
 
     def set_ui_visibility(self, element: str, visible: bool) -> None:
         if "ui" not in self.config:
@@ -231,6 +257,7 @@ class ConfigManager(QObject):
     def get_overlay_setting(self, key: str, default: Any = None) -> Any:
         return self.config.get("overlay", {}).get(key, default)
 
+
     def set_overlay_setting(self, key: str, value: Any) -> None:
         if "overlay" not in self.config:
             self.config["overlay"] = {}
@@ -238,10 +265,11 @@ class ConfigManager(QObject):
         self.schedule_save()
         debug_print(f"overlay.{key} = {value}")
 
-    # 오버레이 스케일 (flat key, 50~200)
+
     def get_overlay_scale(self) -> int:
         """오버레이 크기 스케일 (50~200, 기본 100)"""
         return int(self.config.get("overlay.scale", 100))
+
 
     def set_overlay_scale(self, value: int) -> None:
         """오버레이 크기 스케일 저장 (범위 자동 보정)"""
@@ -254,6 +282,7 @@ class ConfigManager(QObject):
     def get_rendering_setting(self, key: str, default: Any = None) -> Any:
         return self.config.get("rendering", {}).get(key, default)
 
+
     def set_rendering_setting(self, key: str, value: Any) -> None:
         if "rendering" not in self.config:
             self.config["rendering"] = {}
@@ -265,6 +294,7 @@ class ConfigManager(QObject):
 
     def get_gps_map_setting(self, key: str, default: Any = None) -> Any:
         return self.config.get("gps_map", {}).get(key, default)
+
 
     def set_gps_map_setting(self, key: str, value: Any) -> None:
         if "gps_map" not in self.config:
@@ -279,6 +309,7 @@ class ConfigManager(QObject):
     def get_folder_explorer_setting(self, key: str, default: Any = None) -> Any:
         return self.config.get("folder_explorer", {}).get(key, default)
 
+
     def set_folder_explorer_setting(self, key: str, value: Any) -> None:
         if "folder_explorer" not in self.config:
             self.config["folder_explorer"] = {}
@@ -289,6 +320,7 @@ class ConfigManager(QObject):
 
     def is_folder_explorer_visible(self) -> bool:
         return self.get_folder_explorer_setting("visible", False)
+
 
     def set_folder_explorer_visible(self, visible: bool) -> None:
         self.set_folder_explorer_setting("visible", bool(visible))
@@ -303,3 +335,4 @@ class ConfigManager(QObject):
                 self._deep_update(target[key], value)
             else:
                 target[key] = value
+                

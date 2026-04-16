@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 # core/ai_bg_remover.py
+
 """
 BEN2 Base ONNX 추론 (MIT License)
 의존성: onnxruntime (~15MB) — torch / ben2 패키지 불필요
@@ -21,7 +22,6 @@ _BASE_URL   = f"https://huggingface.co/{_MODEL_ID}/resolve/main"
 _ONNX_FILE  = "BEN2_Base.onnx"      
 _INPUT_SIZE = 1024                     
 
-# ImageNet 정규화 (BEN2 학습 전처리와 동일)
 _MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
 _STD  = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 
@@ -66,7 +66,7 @@ def get_onnx_path() -> Path:
 
 def is_model_cached() -> bool:
     p = get_onnx_path()
-    return p.exists() and p.stat().st_size > 200_000_000  # 200MB (실제 크기 ~223MB)
+    return p.exists() and p.stat().st_size > 200_000_000 
 
 
 def check_dependencies() -> tuple[bool, list[str]]:
@@ -76,7 +76,7 @@ def check_dependencies() -> tuple[bool, list[str]]:
     """
     missing: list[str] = []
     try:
-        import onnxruntime  # noqa: F401
+        import onnxruntime
     except ImportError:
         missing.append("onnxruntime")
     return (len(missing) == 0), missing
@@ -142,7 +142,7 @@ class ModelDownloadWorker(QThread):
             resp.raise_for_status()
 
             with open(tmp_path, "wb") as f:
-                for chunk in resp.iter_content(chunk_size=131_072):  # 128 KB
+                for chunk in resp.iter_content(chunk_size=131_072): 
                     if self._stop:
                         tmp_path.unlink(missing_ok=True)
                         return
@@ -157,7 +157,7 @@ class ModelDownloadWorker(QThread):
         except Exception:
             msg = traceback.format_exc(limit=6)
             error_print(f"ONNX 다운로드 실패:\n{msg}")
-            # tmp 정리
+
             tmp = dest.parent / (dest.name + ".tmp")
             tmp.unlink(missing_ok=True)
             self.failed.emit(msg)
@@ -202,7 +202,6 @@ class BEN2Worker(QThread):
             from PIL import Image
 
             # ── 세션 초기화 ───────────────────────────────────────
-            # 캐시 없을 때만 "model_loading" 표시
             if str(get_onnx_path()) not in _BEN2_SESSION_CACHE:
                 self.progress.emit("model_loading")
 
@@ -239,7 +238,6 @@ class BEN2Worker(QThread):
             # ── 후처리 ────────────────────────────────────────────
             mask: np.ndarray = out[0, 0]
 
-            # logit 출력 여부 감지 — 음수 또는 1 초과면 sigmoid 적용
             if mask.min() < -0.1 or mask.max() > 1.1:
                 mask = 1.0 / (1.0 + np.exp(-mask))
 
@@ -265,3 +263,4 @@ class BEN2Worker(QThread):
             error_print(f"BEN2Worker 오류:\n{msg}")
             tmp_path.unlink(missing_ok=True)    
             self.failed.emit(msg)
+

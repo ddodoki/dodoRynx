@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# ui/menu_shortcuts.py
+# ui\menu_shortcuts.py
 """
 메뉴 & 단축키 모듈
 
@@ -15,7 +15,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Optional
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QGuiApplication, QKeySequence, QShortcut, QFont, QColor
+from PySide6.QtGui import QGuiApplication, QKeySequence, QShortcut, QFont
 from PySide6.QtWidgets import QMenu, QWidget
 
 from utils.debug import debug_print, error_print
@@ -185,6 +185,12 @@ class MenuBuilder:
             gps_act.setEnabled(has_gps)
             if has_gps:
                 gps_act.triggered.connect(mw._view_gps)
+
+            map_act = menu.addAction(t('menu.highlight.gps_photomap'))
+            map_act.setShortcut(QKeySequence("Ctrl+Shift+G"))
+            map_act.setEnabled(bool(mw.navigator.image_files))
+            map_act.triggered.connect(mw.open_gps_map)
+
             menu.addSeparator()
 
         hl_act = menu.addAction(t('menu.highlight.toggle'))
@@ -426,7 +432,7 @@ class MenuBuilder:
         파일 조작(삭제·이동·이름변경·하이라이트·회전·인쇄) 제외.
         뷰 제어·클립보드 복사·경로 복사·탐색기 열기만 허용.
         """
-        from ui.image_viewer import ImageViewer
+        from ui.viewer.image_viewer import ImageViewer
 
         mw = self._mw
         menu = _menu(parent=parent)
@@ -630,6 +636,7 @@ class ShortcutManager:
         reg("sysinfo",         "F4",              mw._show_system_info)
         reg("reload",          "F5",              mw._reload_current_image)
         reg("E",               "E",               mw.enter_edit_mode)
+        reg('gps_map', 'Ctrl+Shift+G', mw.open_gps_map)
 
         debug_print(f"ShortcutManager: {len(self._shortcuts)}개 단축키 등록 완료")
 

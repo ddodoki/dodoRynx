@@ -14,7 +14,7 @@ from PySide6.QtCore import QMutex, QObject, QRunnable, QThreadPool, Signal, Slot
 from PySide6.QtGui import QPixmap
 
 from core.image_loader import ImageLoader
-from utils.debug import debug_print, error_print, info_print, warning_print
+from utils.debug import debug_print, error_print, info_print
 
 
 # ============================================
@@ -208,19 +208,19 @@ class CacheManager(QObject):
         file_path = self.image_list[index]
         
         # 1. 고품질 캐시 확인
-        pixmap = None  # 명시적 초기화
+        pixmap = None 
         with self._lock(self.cache_mutex):
             if index in self.cache:
                 self.cache.move_to_end(index)
                 pixmap = self.cache[index]
         
-        if pixmap:  # locals() 대신 직접 체크
+        if pixmap:  
             self.hit_count += 1
             self.cache_hit.emit(index)
             return pixmap
         
         # 2. 프리뷰 캐시 확인
-        preview = None  # 명시적 초기화
+        preview = None  
         with self._lock(self.cache_mutex):
             if index in self.preview_cache:
                 preview = self.preview_cache[index]
@@ -293,7 +293,6 @@ class CacheManager(QObject):
         if not (0 <= index < len(self.image_list)):
             return
 
-        # stale worker 방어 — 폴더 교체 후 이전 워커 결과 무시
         if str(self.image_list[index]) != file_path:
             debug_print(
                 f"Stale worker 무시: idx={index} "
@@ -305,11 +304,9 @@ class CacheManager(QObject):
 
         with self._lock(self.cache_mutex):
             if is_preview:
-                # 프리뷰 프리페치 → preview_cache에만 저장 (풀캐시 오염 방지)
-                if index not in self.cache:          # 이미 풀이 있으면 덮지 않음
+                if index not in self.cache:  
                     self.preview_cache[index] = pixmap
             else:
-                # 풀 로드 → cache에 저장, preview 제거
                 self.cache[index] = pixmap
                 self.cache.move_to_end(index)
                 self.preview_cache.pop(index, None)
@@ -319,13 +316,11 @@ class CacheManager(QObject):
         if not is_preview:
             self.full_image_loaded.emit(index)
 
-
     # ── 프리페칭 ─────────────────────────────────
 
     def _prefetch(self, current_index: int, viewport_size: Tuple[int, int]) -> None:
         preview_size = (int(viewport_size[0] * 1.5), int(viewport_size[1] * 1.5))
 
-        # 후보 목록 먼저 확정 (락 없이)
         candidates: list[tuple[int, Optional[Tuple[int, int]]]] = []
         for i in range(1, self.ahead_count + 1):
             idx = current_index + i
@@ -352,7 +347,6 @@ class CacheManager(QObject):
                 if idx in self.active_workers: continue
                 worker = ImageLoadWorker(
                     idx, self.image_list[idx], 
-                    #ImageLoader(), 
                     self.loader,
                     max_size, 
                     bridge=self._bridge,
@@ -360,7 +354,6 @@ class CacheManager(QObject):
                 )
                 self.active_workers[idx] = worker
             self.thread_pool.start(worker)
-
 
     # ── 메모리 관리 ──────────────────────────────
 
@@ -509,7 +502,6 @@ class CacheManager(QObject):
         
         if removed_count > 0:
             info_print(f"캐시 무효화: 인덱스 {start_index}부터 {removed_count}개 제거")
-
 
     # ── 통계 ─────────────────────────────────────
 

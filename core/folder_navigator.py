@@ -21,13 +21,13 @@ from utils.debug import debug_print, error_print, info_print, warning_print
 class SortOrder(Enum):
 
     """정렬 순서"""
-    HIGHLIGHT = "highlight"  # 하이라이트 순
-    NAME = "name"            # 파일명 순
-    CREATED = "created"      # 생성일 순
-    MODIFIED = "modified"    # 수정일 순
-    SIZE = "size"            # 파일 크기 순
-    EXIF_DATE = "exif_date"        # EXIF 촬영 날짜
-    CAMERA_MODEL = "camera_model"  # 카메라 기종
+    HIGHLIGHT = "highlight"  
+    NAME = "name"           
+    CREATED = "created"    
+    MODIFIED = "modified"  
+    SIZE = "size"           
+    EXIF_DATE = "exif_date"      
+    CAMERA_MODEL = "camera_model"
 
 
 class SortWorkerThread(QThread):
@@ -271,7 +271,6 @@ class FolderScanThread(QThread):
             # ===== 취소 체크를 더 자주 =====
             with os.scandir(self.folder) as entries:
                 for i, entry in enumerate(entries):
-                    # 매 파일마다 취소 체크
                     if self._is_cancelled:
                         info_print(f"🛑 스캔 취소됨")
                         return
@@ -283,14 +282,13 @@ class FolderScanThread(QThread):
                         if self._is_cancelled:
                             info_print(f"🛑 스캔 취소됨")
                             return
-                        self.progress.emit(i + 1, -1)  # 전체 개수는 -1
+                        self.progress.emit(i + 1, -1) 
             
             # ===== 취소 체크 =====
             if self._is_cancelled:
                 info_print(f"🛑 정렬 전 취소됨")
                 return
             
-            # 정렬
             files = natsorted(files)
             
             # ===== 최종 취소 체크 =====
@@ -325,15 +323,15 @@ class FolderNavigator(QObject):
         '.orf', '.rw2', '.pef', '.srw',
     }
     
-    folder_changed = Signal(Path)         # 폴더 변경
-    index_changed = Signal(int)           # 인덱스 변경
-    folder_scan_started = Signal()        # 스캔 시작
-    folder_scan_progress = Signal(int, int)  # 스캔 진행 (현재, 전체)
-    folder_scan_completed = Signal(int)   # 스캔 완료 (파일 수)
-    highlight_changed       = Signal(Path, bool)   # (file_path, is_highlighted)
-    highlights_cleared      = Signal()             # 전체 해제 시
-    highlights_set          = Signal(set)          # 일괄 설정 시 (set[Path])
-    sort_order_changed = Signal(object, bool)  # (SortOrder, reverse) — UI 동기화 전용
+    folder_changed = Signal(Path)    
+    index_changed = Signal(int)       
+    folder_scan_started = Signal()     
+    folder_scan_progress = Signal(int, int) 
+    folder_scan_completed = Signal(int)  
+    highlight_changed       = Signal(Path, bool)  
+    highlights_cleared      = Signal()         
+    highlights_set          = Signal(set)        
+    sort_order_changed = Signal(object, bool) 
 
     # ============================================
     # 초기화
@@ -369,7 +367,6 @@ class FolderNavigator(QObject):
 
         self._pending_scan_request: Optional[tuple[Path, Optional[Path], bool]] = None
         self._bulk_deleting: bool = False
-
 
     # ============================================
     # 폴더 열기 및 인덱싱
@@ -488,11 +485,6 @@ class FolderNavigator(QObject):
             try:
                 # 삭제할 파일들의 인덱스 찾기
                 indices_to_delete = []
-                # for file_path in files_to_delete:
-                #     if file_path in self.image_files:
-                #         idx = self.image_files.index(file_path)
-                #         indices_to_delete.append(idx)
-
                 index_map = {path: i for i, path in enumerate(self.image_files)}
                 indices_to_delete = [
                     index_map[p] for p in files_to_delete if p in index_map
@@ -506,8 +498,6 @@ class FolderNavigator(QObject):
                 first_deleted_idx = indices_to_delete[0]
                 last_deleted_idx = indices_to_delete[-1]
                 
-                # 삭제 범위의 다음 파일 선택
-                # 예: [10, 11, 12, ..., 19] 삭제 → 새 인덱스 10 (원래 20번)
                 next_index = first_deleted_idx
                 
                 # 범위 초과 시 마지막 파일
@@ -524,7 +514,6 @@ class FolderNavigator(QObject):
             except Exception as e:
                 error_print(f"인덱스 계산 실패: {e}")
                 return 0
-
 
     # ============================================
     # 비동기 스캔 (내부)
@@ -564,8 +553,6 @@ class FolderNavigator(QObject):
                 old_thread.cancel()
 
                 if old_thread.isRunning():
-                    # 최대 300ms 대기 — 타임아웃이면 그냥 진행
-                    # (cancel() 플래그로 스레드 내부에서 곧 종료됨)
                     if not old_thread.wait(300):
                         warning_print("⚠️ 이전 스캔 스레드 아직 실행 중 — 계속 진행")
 
@@ -606,7 +593,6 @@ class FolderNavigator(QObject):
     def _index_folder(self, folder: Path):
         """폴더 내 모든 이미지 파일 인덱싱 (동기)"""
         try:
-            # 리스트 컴프리헨션 대신 제너레이터
             files = [
                 file_path for file_path in folder.iterdir()
                 if file_path.is_file() and 
@@ -718,7 +704,7 @@ class FolderNavigator(QObject):
             if self.current_folder != snapshot_folder:
                 warning_print(
                     f"_on_resort_done: 폴더 변경됨 "
-                    f"({snapshot_folder.name if snapshot_folder else 'None'} → "  # ← 수정
+                    f"({snapshot_folder.name if snapshot_folder else 'None'} → " 
                     f"{self.current_folder.name if self.current_folder else 'None'}), 결과 무시"
                 )
                 return
@@ -814,7 +800,6 @@ class FolderNavigator(QObject):
         if not self.current_folder:
             return
 
-        # 다중 삭제 진행 중이면 즉시 reload 하지 않음
         if self._bulk_deleting:
             info_print("⏸️ reload_after_deletion: 다중 삭제 중 — 스킵")
             return
@@ -923,11 +908,10 @@ class FolderNavigator(QObject):
 
     def _restore_current_index(self, current_file: Optional[Path]) -> None:
         """현재 인덱스 복원 및 시그널 발생"""
+
         if current_file and current_file in self.image_files:
-            # 파일이 존재하면 해당 위치로
             self.current_index = self.image_files.index(current_file)
         elif self.image_files:
-            # 파일이 없음 (삭제된 경우) → _temp_scan_prev_index 사용
             fallback = min(self._temp_scan_prev_index, len(self.image_files) - 1)
             self.current_index = max(0, fallback)
         else:
@@ -953,7 +937,7 @@ class FolderNavigator(QObject):
     def _save_sort_order(self) -> None:
         if self.current_folder is None:
             return
-        # HIGHLIGHT는 reverse 무의미 — False로 강제 정규화
+
         order = self.current_sort_order
         reverse = False if order == SortOrder.HIGHLIGHT else self._sort_reverse
         if order != SortOrder.NAME or reverse:
@@ -1016,7 +1000,6 @@ class FolderNavigator(QObject):
         if self._highlighted:
             self._highlights_by_folder[self.current_folder] = self._highlighted
             if len(self._highlights_by_folder) > 200: 
-                # 하이라이트 없는 폴더부터 제거
                 empty = [k for k, v in self._highlights_by_folder.items() if not v]
                 for k in empty[:50]:
                     del self._highlights_by_folder[k]
@@ -1025,7 +1008,6 @@ class FolderNavigator(QObject):
 
 
     def _restore_highlights(self, folder: Path) -> None:
-        # 이미 하이라이트가 있는 폴더면 복원, 없으면 새 빈 set (dict 미등록)
         if folder in self._highlights_by_folder:
             self._highlighted = self._highlights_by_folder[folder]
         else:
@@ -1080,7 +1062,7 @@ class FolderNavigator(QObject):
         total = self.get_total_highlight_count()
         self._highlights_by_folder.clear()
         self._highlighted.clear()
-        self.highlights_cleared.emit()  # ThumbnailBar 동기화
+        self.highlights_cleared.emit() 
         return total
 
 
@@ -1239,7 +1221,6 @@ class FolderNavigator(QObject):
     def get_total_highlight_count(self) -> int:
         """전체 폴더 합산 하이라이트 수 (상태바 표시용)"""
         return sum(len(s) for s in self._highlights_by_folder.values())
-
 
     # ============================================
     # 상태 정보

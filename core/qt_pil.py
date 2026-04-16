@@ -1,4 +1,6 @@
+# -*- coding: utf-8 -*-
 # core/qt_pil.py
+
 from __future__ import annotations
 
 import ctypes

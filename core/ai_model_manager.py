@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 # core/ai_model_manager.py
+
 from __future__ import annotations
 
 import traceback
@@ -18,6 +19,7 @@ from utils.lang_manager import t
 
 @dataclass(frozen=True)
 class ModelInfo:
+
     key:        str
     filename:   str
     hf_repo:    str
@@ -70,7 +72,7 @@ def is_model_cached(key: str) -> bool:
 def check_dependencies() -> tuple[bool, list[str]]:
     missing: list[str] = []
     try:
-        import onnxruntime  # noqa: F401
+        import onnxruntime
     except ImportError:
         missing.append("onnxruntime")
     return len(missing) == 0, missing
@@ -94,14 +96,17 @@ class AIModelDownloadWorker(QThread):
     progress: Signal = Signal(int, int)
     failed:   Signal = Signal(str)
 
+
     def __init__(self, model_key: str, parent=None) -> None:
         super().__init__(parent)
         self._key  = model_key
         self._stop = False
 
+
     def cancel(self) -> None:
         self._stop = True
         self.requestInterruption()
+
 
     def run(self) -> None:
         try:
@@ -113,7 +118,6 @@ class AIModelDownloadWorker(QThread):
             model_dir.mkdir(parents=True, exist_ok=True)
             final_dest = model_dir / info.filename
 
-            # 이미 캐시된 경우
             if final_dest.exists() and final_dest.stat().st_size >= info.min_size:
                 self.progress.emit(info.min_size, info.min_size)
                 self.finished.emit()
@@ -146,7 +150,6 @@ class AIModelDownloadWorker(QThread):
             debug_print(t('ai_model_manager.download_complete', label=info.label, path=final_dest))
             self.progress.emit(final_dest.stat().st_size, final_dest.stat().st_size)
 
-            # ZIP 압축 해제
             if info.is_zip:
                 debug_print(t('ai_model_manager.zip_extracting', label=info.label))
                 with zipfile.ZipFile(final_dest, "r") as zf:

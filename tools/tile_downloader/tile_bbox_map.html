@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<link href="/assets/maplibre-gl.css" rel="stylesheet">
+<script src="/assets/maplibre-gl.js"></script>
+<script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body, #map { width: 100%; height: 100%; background: #1a1a1a; }
+
+#hint {
+  position: fixed; bottom: 46px; left: 50%; transform: translateX(-50%);
+  background: rgba(0,0,0,.75); color: #fff;
+  font: 12px/1.5 sans-serif; padding: 6px 16px;
+  border-radius: 20px; pointer-events: none;
+  white-space: nowrap; display: none; z-index: 20;
+}
+#coords {
+  position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%);
+  background: rgba(0,0,0,.78); color: #e0e0e0;
+  font: 11px/1.5 monospace; padding: 5px 14px;
+  border-radius: 16px; pointer-events: none;
+  white-space: nowrap; display: none; z-index: 20;
+}
+
+/* ── 코너 핸들 ─────────────────────────────────────────── */
+.bbox-handle {
+  position: absolute;
+  width: 11px; height: 11px;
+  background: #ffffff; border: 2.5px solid #4A90E2;
+  border-radius: 2px;
+  transform: translate(-50%, -50%);
+  cursor: crosshair; z-index: 15;
+  pointer-events: all;
+  display: none;
+  box-shadow: 0 1px 4px rgba(0,0,0,.5);
+}
+.bbox-handle:hover { background: #b3d4ff; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="hint"></div>
+<div id="coords"></div>
+
+<!-- 4 코너 핸들 (NW / NE / SW / SE) -->
+<div class="bbox-handle" id="h-nw" data-corner="nw"></div>
+<div class="bbox-handle" id="h-ne" data-corner="ne"></div>
+<div class="bbox-handle" id="h-sw" data-corner="sw"></div>
+<div class="bbox-handle" id="h-se" data-corner="se"></div>
+
+<script>
+'use strict';
+
+var tileBridge  = null;
+var map         = null;
+
+// BBOX { lonMin, latMin, lonMax, latMax }
+var bbox        = null;
+
+// 그리기 상태
+var isDrawing   = false;
+var drawStart   = null;   // {lng, lat}
+var drawMode    = false;
+
+// 코너 리사이즈 상태
+var isResizing  = false;
+var fixedLngLat = null;   // 드래그하지 않는 반대쪽 코너
+
+// ── QWebChannel 초기화 ─────────────────────────────────────────────────────
+new QWebChannel(qt.webChannelTransport, function(ch) {
+  tileBridge = ch.objects.tileBridge;
+  initMap();
+});
+
+// ── MapLibre 초기화 ────────────────────────────────────────────────────────
+function initMap() {
+  map = new maplibregl.Map({
+    container: 'map',
+    style: {
+      version: 8,
+      sources: {
+        raster: {
+          type:    'raster',
+          tiles: ["/tiles/{z}/{x}/{y}.webp"],
+          tileSize: ${TILESIZE},
+          scheme: '${SCHEME}',
+          minzoom:  ${MINZOOM},
+          maxzoom:  ${MAXZOOM},
+        }
+      },
+      layers: [{
+        id: 'raster-layer', type: 'raster', source: 'raster',
+        paint: { 'raster-fade-duration': 0 }
+      }]
+    },
+    center:  [${CENTER_LON}, ${CENTER_LAT}],
+    zoom:     ${INIT_ZOOM},
+    attributionControl: false,
+    fadeDuration: 0, antialias: false,
+    maxZoom: ${MAXZOOM}, minZoom: ${MINZOOM}
+  });
+
+  map.addControl(new maplibregl.NavigationControl(), 'top-right');
+  map.addControl(new maplibregl.ScaleControl({ maxWidth: 100 }), 'bottom-left');
+  map.addControl(new maplibregl.AttributionControl({
+      compact: false,
+      customAttribution: [
+          '<a href="https://github.com/ddodoki/dodoRynx" target="_blank">dodoRynx</a>',
+          '<a href="https://github.com/protomaps/basemaps" target="_blank">Protomaps</a>',
+          '<a href="https://github.com/maplibre/maplibre-gl-js" target="_blank">MapLibre GL JS</a>',
+          '© <a href="https://openstreetmap.org" target="_blank">OpenStreetMap</a> contributors'
+      ].join(' · ')
+  }), 'bottom-right');
+
+  map.on('load', onMapLoad);
+}
+
+// ── 맵 로드 완료 ───────────────────────────────────────────────────────────
+function onMapLoad() {
+
+  // BBOX 렌더링용 소스 & 레이어
+  map.addSource('bbox-src', {
+    type: 'geojson',
+    data: { type: 'FeatureCollection', features: [] }
+  });
+  map.addLayer({
+    id: 'bbox-fill', type: 'fill', source: 'bbox-src',
+    paint: { 'fill-color': '#4A90E2', 'fill-opacity': 0.15 }
+  });
+  map.addLayer({
+    id: 'bbox-line', type: 'line', source: 'bbox-src',
+    paint: {
+      'line-color': '#4A90E2', 'line-width': 2.5,
+      'line-dasharray': [5, 3]
+    }
+  });
+
+  // ── 캔버스 드래그 그리기 이벤트 ─────────────────────────────────────────
+  var canvas = map.getCanvas();
+
+  canvas.addEventListener('mousedown', function(e) {
+    if (e.target.classList.contains('bbox-handle')) return;
+    if (!drawMode || e.button !== 0) return;
+    e.preventDefault();
+    isDrawing = true;
+    drawStart = map.unproject([e.offsetX, e.offsetY]);
+    setHandlesVisible(false);
+  }, true);
+
+  canvas.addEventListener('mousemove', function(e) {
+    if (!isDrawing || !drawStart) return;
+    var cur = map.unproject([e.offsetX, e.offsetY]);
+    renderRect(drawStart, cur);
+  }, true);
+
+
+
+  // ── 코너 핸들 드래그 리사이즈 ────────────────────────────────────────────
+  document.querySelectorAll('.bbox-handle').forEach(function(handle) {
+    handle.addEventListener('mousedown', function(e) {
+      if (!bbox) return;
+      e.preventDefault(); e.stopPropagation();
+      isResizing = true;
+      var corner = handle.dataset.corner;
+      // 드래그하는 코너의 대각선 반대 코너 좌표를 고정
+      var fixedMap = {
+        nw: { lng: bbox.lonMax, lat: bbox.latMin },
+        ne: { lng: bbox.lonMin, lat: bbox.latMin },
+        sw: { lng: bbox.lonMax, lat: bbox.latMax },
+        se: { lng: bbox.lonMin, lat: bbox.latMax }
+      };
+      fixedLngLat = fixedMap[corner];
+      map.dragPan.disable();
+    });
+  });
+
+  // 리사이즈 mousemove / mouseup 은 document 레벨에서 처리
+  // (커서가 핸들 밖으로 이탈해도 계속 추적)
+  document.addEventListener('mousemove', function(e) {
+    if (!isResizing || !fixedLngLat) return;
+    var cr = map.getCanvas().getBoundingClientRect();
+    var x  = e.clientX - cr.left;
+    var y  = e.clientY - cr.top;
+    // 캔버스 범위 클리핑
+    x = Math.max(0, Math.min(cr.width,  x));
+    y = Math.max(0, Math.min(cr.height, y));
+    var cur = map.unproject([x, y]);
+    renderRect(fixedLngLat, cur);
+  });
+
+  document.addEventListener('mouseup', function() {
+    if (!isResizing) return;
+    isResizing = false; fixedLngLat = null;
+    // 리사이즈 종료 후 드래그 모드 상태에 맞게 dragPan 복원
+    if (drawMode) map.dragPan.disable();
+    else          map.dragPan.enable();
+    if (bbox) finalizeBbox();
+  });
+
+  document.addEventListener('mouseup', function(e) {
+
+      // ── 리사이즈 종료 ──────────────────────────────────────────
+      if (isResizing) {
+          isResizing = false; fixedLngLat = null;
+          if (drawMode) map.dragPan.disable();
+          else          map.dragPan.enable();
+          if (bbox) finalizeBbox();
+          return;
+      }
+
+      // ── 드로우 종료 (canvas 밖에서 떼도 정상 처리) ─────────────
+      if (!isDrawing) return;
+      isDrawing = false;
+
+      var cr = map.getCanvas().getBoundingClientRect();
+      var x  = Math.max(0, Math.min(cr.width,  e.clientX - cr.left));
+      var y  = Math.max(0, Math.min(cr.height, e.clientY - cr.top));
+      var cur = map.unproject([x, y]);
+      renderRect(drawStart, cur);
+
+      if (bbox) {
+          finalizeBbox();
+          setDrawMode(false);
+          if (tileBridge) tileBridge.onDrawModeExited();
+      }
+  });  
+  // 지도 이동/줌 시 핸들 위치 재계산
+  map.on('move', updateHandlePositions);
+
+  tileBridge.onMapReady();
+}
+
+// ── 직사각형 렌더링 ────────────────────────────────────────────────────────
+function renderRect(a, b) {
+  var lonMin = Math.max(-180, Math.min(a.lng, b.lng));
+  var lonMax = Math.min( 180, Math.max(a.lng, b.lng));
+  var latMin = Math.max(-85.05, Math.min(a.lat, b.lat));
+  var latMax = Math.min( 85.05, Math.max(a.lat, b.lat));
+
+  // 너무 작은 사각형은 무시
+  if (Math.abs(lonMax - lonMin) < 0.001 ||
+      Math.abs(latMax - latMin) < 0.001) return;
+
+  bbox = { lonMin: lonMin, latMin: latMin, lonMax: lonMax, latMax: latMax };
+
+  map.getSource('bbox-src').setData({
+    type: 'Feature',
+    geometry: {
+      type: 'Polygon',
+      coordinates: [[
+        [lonMin, latMin], [lonMax, latMin],
+        [lonMax, latMax], [lonMin, latMax],
+        [lonMin, latMin]
+      ]]
+    }
+  });
+
+  updateCoordDisplay();
+  updateHandlePositions();
+  setHandlesVisible(true);
+}
+
+// ── 코너 핸들 위치 업데이트 ────────────────────────────────────────────────
+function updateHandlePositions() {
+  if (!bbox || !map) return;
+  var pos = {
+    nw: map.project([bbox.lonMin, bbox.latMax]),
+    ne: map.project([bbox.lonMax, bbox.latMax]),
+    sw: map.project([bbox.lonMin, bbox.latMin]),
+    se: map.project([bbox.lonMax, bbox.latMin]),
+  };
+  ['nw','ne','sw','se'].forEach(function(id) {
+    var el = document.getElementById('h-' + id);
+    if (!el) return;
+    el.style.left = pos[id].x + 'px';
+    el.style.top  = pos[id].y + 'px';
+  });
+}
+
+function setHandlesVisible(v) {
+  document.querySelectorAll('.bbox-handle').forEach(function(el) {
+    el.style.display = v ? 'block' : 'none';
+  });
+}
+
+// ── 좌표 오버레이 업데이트 ─────────────────────────────────────────────────
+function updateCoordDisplay() {
+  var el = document.getElementById('coords');
+  if (!bbox) { el.style.display = 'none'; return; }
+  el.style.display = 'block';
+  el.textContent =
+    'W ' + bbox.lonMin.toFixed(4) + '  S ' + bbox.latMin.toFixed(4) +
+    '  E ' + bbox.lonMax.toFixed(4) + '  N ' + bbox.latMax.toFixed(4);
+}
+
+// ── BBOX 확정 → Python 브리지 호출 ────────────────────────────────────────
+function finalizeBbox() {
+  if (bbox && tileBridge)
+    tileBridge.onBboxChanged(bbox.lonMin, bbox.latMin, bbox.lonMax, bbox.latMax);
+}
+
+// ── Python → JS 공개 API ──────────────────────────────────────────────────
+function setBbox(lonMin, latMin, lonMax, latMax) {
+  renderRect({ lng: lonMin, lat: latMin }, { lng: lonMax, lat: latMax });
+}
+
+function clearBbox() {
+  bbox = null;
+  if (map && map.getSource('bbox-src'))
+    map.getSource('bbox-src').setData(
+      { type: 'FeatureCollection', features: [] });
+  setHandlesVisible(false);
+  updateCoordDisplay();
+  if (tileBridge) tileBridge.onBboxCleared();
+}
+
+function setDrawMode(enabled) {
+  drawMode = enabled;
+  var canvas = map.getCanvas();
+  var hint   = document.getElementById('hint');
+  if (enabled) {
+    canvas.style.cursor = 'crosshair';
+    map.dragPan.disable();
+    hint.textContent   = '🖱 드래그하여 다운로드 범위 지정  |  ESC: 취소';
+    hint.style.display = 'block';
+  } else {
+    canvas.style.cursor = '';
+    map.dragPan.enable();
+    hint.style.display  = 'none';
+    isDrawing = false; drawStart = null;
+  }
+}
+
+function fitToBbox() {
+  if (!bbox || !map) return;
+  map.fitBounds(
+    [[bbox.lonMin, bbox.latMin], [bbox.lonMax, bbox.latMax]],
+    { padding: 64, duration: 400, maxZoom: 14 }
+  );
+}
+
+function fitAll() {
+  map.flyTo({ center: [0, 20], zoom: 2, duration: 600 });
+}
+
+// ── ESC → 드로우 모드 해제 ──────────────────────────────────────────────────
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape' && drawMode) {
+    setDrawMode(false);
+    if (tileBridge) tileBridge.onDrawModeExited();
+  }
+});
+</script>
+</body>
+</html>

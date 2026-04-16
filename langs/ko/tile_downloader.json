@@ -1,0 +1,341 @@
+{
+  "tile_downloader": {
+    "meta": { "language": "한국어" },
+
+    "window": { "title": "Tile Downloader" },
+
+    "state": {
+      "idle":        "대기 중",
+      "calculating": "계산 중...",
+      "ready":       "시작 준비 완료",
+      "running":     "다운로드 중",
+      "paused":      "일시정지",
+      "cancelling":  "취소 중..."
+    },
+    "badge": {
+      "idle":        "● 대기",
+      "calculating": "● 계산 중",
+      "ready":       "● 준비",
+      "running":     "● 다운로드",
+      "paused":      "● 일시정지",
+      "cancelling":  "● 취소 중"
+    },
+
+    "toolbar": {
+      "btn_calc":        "⟳ 계산",
+      "btn_calc_count":  "🔢 타일 수 계산",
+      "btn_calc_cancel": "⏹ 계산 취소",
+      "btn_save_preset": "💾 프리셋 저장",
+      "btn_load_preset": "📂 불러오기",
+      "btn_start":  "▶ 다운로드 시작",
+      "btn_pause":  "⏸ 일시정지",
+      "btn_resume": "▶ 재개",
+      "btn_cancel": "✕ 취소"
+    },
+
+    "grp_server": {
+      "title":        "서버 설정",
+      "label_url":    "Base URL(TileServer GL)",
+      "label_style":  "Style ID",
+      "btn_conn":     "🔌 연결 테스트",
+      "conn_testing": "연결 중...",
+      "conn_no_url":  "URL을 입력하세요",
+      "conn_ok":      "✅ {msg}",
+      "conn_fail":    "❌ {msg}",
+      "style_ok":     "✓",
+      "style_miss":   "✗ 없는 스타일",
+      "fmt_none":     "설정 없음 (기본값 사용)",
+      "fmt_legacy":   "webp={webp} / jpeg={jpeg} ⚠️구버전",
+      "fmt_new":      "webp={webp} / jpeg={jpeg}",
+      "result_ok":    "✓ 연결 성공\n스타일 '{style}': {style_mark}\n사용 가능: {styles}\n화질: {fmt}",
+      "result_fail":  "서버 응답 없음: {e}"
+    },
+
+    "grp_tile": {
+      "title":      "타일 설정",
+      "label_fmt":  "포맷",
+      "label_size": "타일 크기",
+      "fmt_webp": "WebP",
+      "fmt_png":  "PNG",
+      "fmt_jpg":  "JPEG",
+      "size_256": "256px (표준)",
+      "size_2x":  "512px (@2x 레티나)",
+      "size_512": "512px (네이티브 /512/)"
+    },
+
+    "grp_area": {
+      "title":          "다운로드 범위",
+      "label_preset":   "국가/지역 프리셋",
+      "btn_map_sel":    "🗺️ 지도로 선택",
+      "btn_map_tip":    "MapLibre 지도에서 드래그로 범위 선택",
+      "label_lon_min":  "경도 최소",
+      "label_lat_min":  "위도 최소",
+      "label_lon_max":  "경도 최대",
+      "label_lat_max":  "위도 최대",
+      "antimer_warn":   "⚠️ 날짜변경선 통과 국가 — 2개 영역 자동 분할"
+    },
+
+    "grp_zoom": {
+      "title":     "줌 레벨",
+      "label_min": "최소",
+      "label_max": "최대",
+      "rec_max":   "(권장 최대: Z{z_max})"
+    },
+
+    "grp_output": {
+      "title":       "출력 경로",
+      "placeholder": "출력 루트 폴더 선택...",
+      "dlg_title":   "출력 폴더 선택",
+      "path_preview":"예: {path}"
+    },
+
+    "grp_advanced": {
+      "title":      "고급 설정",
+      "label_conc": "동시 요청:"
+    },
+
+    "grp_estimate": {
+      "title":          "예상 정보",
+      "msg_initial":    "계산 후 표시됩니다",
+      "msg_calculating":"계산 중...",
+      "msg_done":       "계산 완료",
+      "msg_changed":    "설정이 변경되었습니다. 다시 계산하세요.",
+      "msg_error":      "오류: {msg}",
+      "msg_cancelled":  "계산 취소됨",
+      "label_total":    "전체 타일:",
+      "label_new":      "신규/기존:",
+      "label_size":     "예상 크기:",
+      "label_disk":     "디스크 여유:",
+      "label_eta":      "예상 시간:",
+      "label_tmp":      "임시 파일:",
+      "val_total":      "전체 타일: {count}개",
+      "val_new":        "이어받기: {exist}개 완료 → 남은: {new}개",
+      "val_size":       "추가 예상 용량: {mb} MB",
+      "val_disk":       "디스크 여유: {icon} {gb} GB",
+      "val_disk_fail":  "디스크 확인 실패",
+      "val_eta":        "예상 소요: {eta} (동시 {conc}개 기준)",
+      "val_tmp":        "복구 임시파일: {n}개 (시작 시 자동 삭제)",
+      "warn_large":     "대용량 경고",
+      "warn_large_msg": "총 {total}개의 타일을 다운로드합니다. 계속하시겠습니까?",
+      "calc_bbox":  "BBOX 분할 계산 중...",
+      "calc_z":     "줌별 타일 수 계산 중...",
+      "calc_scan":  "총 {total}개 확인. 기존 파일 스캔 중..."      
+    },
+
+    "tabs": {
+      "progress": "📥 다운로드 진행",
+      "queue":    "📋 작업 큐",
+      "log":      "📋 로그",
+      "history":  "🕘 세션 히스토리"
+    },
+
+    "tab_progress": {
+      "label_overall":  "전체 진행",
+      "card_success":   "성공",
+      "card_skip":      "스킵",
+      "card_fail":      "실패",
+      "card_speed":     "타일/s",
+      "eta_initial":    "ETA: --",
+      "label_zoom":     "줌별 진행",
+      "zoom_col_z":     "Z",
+      "zoom_col_bar":   "진행",
+      "zoom_col_count": "타일 수",
+      "zoom_col_status":"상태",
+      "zoom_done":      "✓",
+      "zoom_running":   "…",
+      "btn_retry":      "❌ 실패 타일 재시도",
+      "lbl_speed":      "속도: {speed} t/s",
+      "lbl_eta":        "남은 시간: {eta}",
+      "lbl_success":    "성공: {n}",
+      "lbl_skip":       "스킵: {n}",
+      "lbl_fail":       "실패: {n}"
+    },
+
+    "tab_queue": {
+      "btn_add":      "➕ 현재 설정 추가",
+      "btn_run_all":  "▶▶ 일괄 시작",
+      "btn_stop":     "⏹ 중지",
+      "btn_up":       "▲",
+      "btn_down":     "▼",
+      "btn_del":      "🗑 삭제",
+      "btn_clr_done": "완료 제거",
+      "btn_retry":    "실패 재시도",
+      "btn_save":     "💾 저장",
+      "label_after":  "완료 후:",
+      "after_none":   "아무것도 안 함",
+      "after_sleep":  "절전 모드",
+      "after_shutdown":"시스템 종료",
+      "label_delay":  " 작업 간 딜레이:",
+      "col_name":     "이름",
+      "col_z":        "Z범위",
+      "col_fmt":      "포맷",
+      "col_tiles":    "타일",
+      "col_prog":     "진행",
+      "col_status":   "상태",
+      "col_elapsed":  "소요",
+      "col_error":    "오류",
+      "dlg_no_pending_title": "알림",
+      "dlg_no_pending_msg":   "대기 중인 작업이 없습니다.",
+      "dlg_del_running_title":"오류",
+      "dlg_del_running_msg":  "실행 중인 작업은 삭제할 수 없습니다.",
+      "dlg_add_error_title":  "오류",
+      "dlg_add_error_msg":    "Base URL, Style ID, 출력 경로를 모두 입력하세요.",
+      "dlg_all_done_title":   "큐 완료",
+      "dlg_all_done_msg":     "모든 작업이 완료되었습니다.",
+      "dlg_sleep_title":      "절전",
+      "dlg_sleep_msg":        "절전 모드로 전환합니다.",
+      "dlg_shutdown_title":   "시스템 종료",
+      "dlg_shutdown_msg":     "30초 후 시스템을 종료합니다.",
+      "calc_error": "계산 오류: {e}"
+    },
+
+    "tab_log": {
+      "chk_info":       "INFO",
+      "chk_warn":       "WARN",
+      "chk_err":        "ERROR",
+      "chk_autoscroll": "자동스크롤",
+      "btn_clear":      "지우기",
+      "btn_export":     "내보내기",
+      "dlg_export_title":"로그 내보내기",
+      "export_filename": "tiledownloader.log"
+    },
+
+    "tab_history": {
+      "col_date":    "날짜",
+      "col_style":   "스타일",
+      "col_preset":  "프리셋",
+      "col_z":       "Z범위",
+      "col_fmt":     "포맷",
+      "col_total":   "전체",
+      "col_success": "성공",
+      "col_fail":    "실패",
+      "col_elapsed": "소요",
+      "btn_load":    "설정 불러오기",
+      "btn_del":     "삭제"
+    },
+
+    "statusbar": {
+      "idle":          "대기 중",
+      "disk_initial":  "디스크: --",
+      "disk":          "디스크: {gb} GB",
+      "speed_initial": "속도: --",
+      "speed":         "속도: {speed} t/s"
+    },
+
+    "engine": {
+      "dlg_done_title":      "완료",
+      "dlg_cancelled_title": "취소됨",
+      "dlg_done_msg":        "완료\n성공: {success}  스킵: {skip}  실패: {fail}\n소요: {dur}",
+      "dlg_cancelled_msg":   "취소됨\n성공: {success}  스킵: {skip}  실패: {fail}\n소요: {dur}",
+      "dlg_retry_title":     "실패 타일 재시도",
+      "dlg_retry_msg":       "실패한 타일 {count}개를 다시 다운로드하시겠습니까?",
+      "log_error":         "엔진 오류: {e}",
+      "log_sentinel_fail": "SENTINEL {placed}/{concurrency} 투입 — 강제 종료 필요",
+      "log_http_skip":     "[{status}] {url}",
+      "log_http_retry":    "[{status}] 재시도 {attempt}/3 → {url}",
+      "log_timeout":       "[TIMEOUT] 재시도 {attempt}/3 → {url}",
+      "log_io":            "[IO] {e}",
+      "log_net":           "[NET] {e}  재시도 {attempt}/3",
+      "log_fail":          "[FAIL] {url}",
+      "log_disk_low":      "디스크 여유 공간 부족 ({mb} MB) — 자동 일시정지",
+      "log_disk_ok":       "디스크 공간 확보됨 ({mb} MB) — 재개",
+      "log_disk_err":      "디스크 확인 실패: {e}"      
+    },
+
+    "preset": {
+      "dlg_save_title":  "프리셋 저장",
+      "dlg_save_label":  "프리셋 이름:",
+      "dlg_load_title":  "프리셋 불러오기",
+      "dlg_load_empty":  "저장된 프리셋이 없습니다.",
+      "dlg_load_select": "불러올 프리셋을 선택하세요:",
+      "dlg_load_error":  "설정 불러오기 실패: {e}",
+      "err_version":     "지원하지 않는 프리셋 버전입니다.",
+      "err_field":       "프리셋 필드 누락: {k}",
+      "err_zoom":        "줌 레벨 범위 오류: z_min={z_min}, z_max={z_max}",
+      "err_format":      "지원하지 않는 포맷: {fmt}",
+      "err_size_mode":   "지원하지 않는 타일 크기 모드: {mode}",
+      "err_concurrency": "동시 요청 수 범위 오류: {val}"      
+    },
+
+    "close": {
+      "dlg_title": "종료 확인",
+      "dlg_msg":   "다운로드가 진행 중입니다. 종료하시겠습니까?"
+    },
+    "bbox_map": {
+    "btn_draw":      "✏️ 영역 그리기",
+    "btn_clear":     "🗑️ 지우기",
+    "btn_fit":       "🎯 선택 범위로 이동",
+    "btn_world":     "🌍 전체 보기",
+    "hint_initial":  "범위를 선택하세요",
+    "dlg_title":     "지도에서 다운로드 범위 선택",
+    "no_webengine":  "WebEngine 미설치\npip install PySide6-Addons"
+    },
+    "job_status": {
+    "pending":   "대기",
+    "running":   "실행 중",
+    "done":      "완료",
+    "failed":    "실패",
+    "cancelled": "취소됨",
+    "skipped":   "건너뜀"
+    },
+    "presets": {
+        "world":   "전 세계",
+        "KR":      "대한민국",
+        "KR_N":    "한반도 전체",
+        "JP":      "일본",
+        "CN":      "중국",
+        "TW":      "대만",
+        "US":      "미국 (본토)",
+        "US_ALL":  "미국 (전체)",
+        "RU":      "러시아",
+        "EU":      "유럽",
+        "DE":      "독일",
+        "GB":      "영국",
+        "FR":      "프랑스",
+        "IN":      "인도",
+        "AU":      "호주",
+        "BR":      "브라질",
+        "SA":      "동남아시아",
+        "custom":  "직접 입력"
+    },
+    "job": {
+        "custom_area": "직접입력"
+    },
+    "logic": {
+    "gpxpy_missing":         "gpxpy 미설치: pip install gpxpy",
+    "parse_fail":            "GPX 파싱 실패: {name}",
+    "warn_encoding":         "인코딩 {enc}으로 파싱됨",
+    "warn_coord_fail":       "좌표 변환 실패 (track={ti} seg={si} pt={pi}) → 제거",
+    "warn_coord_range":      "범위 초과 좌표 ({lat:.4f},{lon:.4f}) → 제거",
+    "warn_time_reverse":     "타임스탬프 역전 (track={ti} seg={si} pt={pi}) → 무효화",
+    "warn_time_dup":         "중복 타임스탬프 (track={ti} seg={si} pt={pi})",
+    "warn_empty_seg":        "빈 세그먼트 제거 (track={ti} seg={si})",
+    "warn_empty_track":      "빈 트랙 제거 (track={ti})",
+    "warn_no_track":         "트랙 없음",
+    "merge_empty":           "합칠 파일이 없습니다",
+    "split_no_ts_gap":       "타임스탬프 없음 → 시간 갭 분할 불가",
+    "split_gap_zero":        "갭 시간은 0보다 커야 합니다",
+    "split_no_ts_date":      "타임스탬프 없음 → 날짜 분할 불가",
+    "split_dist_zero":       "거리는 0보다 커야 합니다",
+    "split_pts_zero":        "포인트 수는 1 이상이어야 합니다",
+    "save_no_gpxpy":         "gpxpy 미설치",
+    "save_src_conflict":     "원본 파일 덮어쓰기 차단: {name}",
+    "save_exists":           "파일 이미 존재: {name}",
+    "save_no_permission":    "쓰기 권한 없음: {folder}"
+    },
+    "analyzer": {
+    "anomaly_speed":    "순간속도 {spd:.0f} km/h (임계: {max_spd})",
+    "anomaly_dup_time": "중복 타임스탬프: {time}",
+    "err_max_speed":    "max_speed_kmh 는 0보다 커야 합니다",
+    "err_window":       "window 는 1 이상이어야 합니다"
+    },
+    "map_preview": {
+    "webengine_missing": "WebEngine 미설치\npip install PySide6-Addons",
+    "webengine_init_fail": "GpxMapPreview: WebEngine 초기화 실패"
+    },
+    "map_html": {
+    "split_hint":         "지도를 클릭하여 분할 지점 추가",
+    "split_marker_title": "클릭하여 분할 지점 제거"
+    }    
+  }
+}

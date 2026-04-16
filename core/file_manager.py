@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 # core/file_manager.py
+
 """
 파일·폴더·하이라이트 관리 모듈
 
@@ -19,11 +20,12 @@ import subprocess
 import sys
 import uuid
 from pathlib import Path
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Optional
 
 import send2trash
-from PySide6.QtCore import QMimeData, QThread, QTimer, Qt, QUrl, Signal
-from PySide6.QtWidgets import QApplication, QFileDialog, QInputDialog, QMessageBox
+from PySide6.QtCore import QMimeData, QThread, QTimer, QUrl, Signal
+from PySide6.QtWidgets import QApplication, QDialog, QFileDialog
+from utils.dark_dialog import DarkMessageBox as _DarkMessageBox, DarkInputDialog as _DarkInputDialog
 
 from utils.debug import debug_print, error_print, info_print, warning_print
 from utils.lang_manager import t
@@ -84,15 +86,13 @@ class FileWorkerThread(QThread):
                     send2trash.send2trash(str(src))
 
                 elif self.operation in ("copy", "move"):
-                    # target_folder None 가드 추가
                     if self.target_folder is None:
                         raise ValueError("target_folder가 지정되지 않았습니다.")
 
                     dst = self.target_folder / src.name
                     if dst.exists():
-                        # 복합 확장자 처리: .tar.gz → stem=img, suffix=.tar.gz
                         name = src.name
-                        suffixes = ''.join(src.suffixes)      # .tar.gz
+                        suffixes = ''.join(src.suffixes) 
                         stem = src.name[: -len(suffixes)] if suffixes else src.stem
 
                         counter = 1
@@ -109,6 +109,10 @@ class FileWorkerThread(QThread):
                         shutil.move(str(src), str(dst))
 
                 success += 1
+
+            except PermissionError as e:
+                fail += 1
+                error_print(f"[삭제 실패 — 파일 잠금] {filename}: {e}")
 
             except Exception as e:
                 fail += 1
@@ -140,7 +144,6 @@ class FileOperations:
             mw,
             t('file_manager.open_image_title'),
             str(Path.home()),
-            #t('file_manager.open_image_filter'),
             ext_filter
         )
         if filepath:
@@ -167,25 +170,19 @@ class FileOperations:
         current_name = mw._current_file.stem
         current_ext  = mw._current_file.suffix
 
-        dialog = QInputDialog(mw)
-        dialog.setWindowTitle(t('file_manager.rename_dialog_title'))
-        dialog.setLabelText(t('file_manager.rename_dialog_body'))
-        dialog.setTextValue(current_name)
-        dialog.setWindowFlags(
-            Qt.WindowType.Dialog
-            | Qt.WindowType.MSWindowsFixedSizeDialogHint
-            | Qt.WindowType.WindowTitleHint
-            | Qt.WindowType.WindowCloseButtonHint
+        dialog = _DarkInputDialog(
+            mw,
+            title=t('file_manager.rename_dialog_title'),
+            label=t('file_manager.rename_dialog_body'),
+            text=current_name,
         )
-        dialog.setMinimumSize(300, 150)
-        dialog.setMaximumSize(300, 150)
-        dialog.resize(300, 150)
 
         target_file = mw._current_file
-        ok = dialog.exec()
-        new_name = dialog.textValue().strip()
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        new_name = dialog.value()
 
-        if not ok or not new_name or new_name == current_name:
+        if not new_name or new_name == current_name:
             return
 
         try:
@@ -203,18 +200,16 @@ class FileOperations:
                     target_file.rename(tmp_path)
                     tmp_path.rename(new_path)
                 except Exception as e:
-                    # 2단계 실패 시 1단계 롤백
                     if tmp_path.exists() and not target_file.exists():
                         tmp_path.rename(target_file)
-                    raise  # 상위 except로 전달
+                    raise  
 
             elif new_path.exists():
-                # 실제 다른 파일이 같은 이름으로 존재
-                QMessageBox.warning(
-                    mw,
-                    t('file_manager.rename_error_title'),
-                    t('file_manager.rename_exists', name=new_path.name),
-                )
+                _DarkMessageBox(
+                    mw, kind='warning',
+                    title=t('file_manager.rename_error_title'),
+                    body=t('file_manager.rename_exists', name=new_path.name),
+                ).exec()
                 return
 
             else:
@@ -228,19 +223,19 @@ class FileOperations:
             mw._show_status_message(t('file_manager.renamed', name=new_path.name), 3000)
 
         except PermissionError:
-            QMessageBox.critical(
-                mw,
-                t('file_manager.rename_error_title'),
-                t('file_manager.rename_permission_error', name=target_file.name),
-            )
+            _DarkMessageBox(
+                mw, kind='danger',
+                title=t('file_manager.rename_error_title'),
+                body=t('file_manager.rename_permission_error', name=target_file.name),
+            ).exec()
             error_print(f"rename_file PermissionError: {target_file}")
 
         except Exception as e:
-            QMessageBox.critical(
-                mw,
-                t('file_manager.rename_error_title'),
-                t('file_manager.rename_error_msg', error=e),
-            )
+            _DarkMessageBox(
+                mw, kind='danger',
+                title=t('file_manager.rename_error_title'),
+                body=t('file_manager.rename_error_msg', error=e),
+            ).exec()
             error_print(f"rename_file: {e}")
             
     # ── 붙여넣기 ──────────────────────────────────────────────
@@ -263,13 +258,13 @@ class FileOperations:
             dest_dir = getattr(mw.navigator, 'current_folder', None)
 
         if not dest_dir or not dest_dir.is_dir():
-            QMessageBox.warning(mw, "Paste", "Please select a target folder.")
+            _DarkMessageBox(mw, kind='warning', title="Paste", body="Please select a target folder.").exec()
             return
 
         clipboard = QApplication.clipboard()
         mime = clipboard.mimeData()
         if not mime or not mime.hasUrls():
-            QMessageBox.warning(mw, "Paste", "No files in the clipboard.")
+            _DarkMessageBox(mw, kind='warning', title="Paste", body="No files in the clipboard.").exec()
             return
 
         files = [Path(url.toLocalFile()) for url in mime.urls()
@@ -396,6 +391,8 @@ class HighlightOperations:
 
     def __init__(self, main_window: "MainWindow") -> None:
         self._mw: "MainWindow" = main_window
+        self._pending_hl_count: Optional[int] = None
+        self._pending_hl_next_index: Optional[int] = None
 
 
     def toggle_highlight(self) -> None:
@@ -404,7 +401,6 @@ class HighlightOperations:
         if not current_file:
             return
         is_highlighted = mw.navigator.toggle_highlight(current_file)
-        #self._sync_thumbnail_highlight(current_file, is_highlighted)
         highlight_count = mw.navigator.get_highlight_count()
         status = "하이라이트 설정" if is_highlighted else "하이라이트 해제"
         mw._show_status_message(t('file_manager.highlight_status', status=status, count=highlight_count), 1500)
@@ -429,73 +425,79 @@ class HighlightOperations:
         if total == 0:
             return
 
-        # 전체 폴더 하이라이트 일괄 삭제
-        # mw.navigator._highlights_by_folder.clear()
-        # mw.navigator._highlighted.clear()
         mw.navigator.clear_all_highlights_all_folders()
 
-        # UI 동기화
         mw._sync_highlight_state(force_full_sync=True)
         mw._show_status_message(
             t('file_manager.highlight_cleared', count=total), 2000
         )
-        
+
 
     def delete_highlighted_files(self) -> None:
         mw = self._mw
         highlighted = mw.navigator.get_highlighted_files()
         if not highlighted:
-            QMessageBox.information(mw, t('file_manager.no_highlight_title'),
-                t('file_manager.no_highlight_msg'))
+            _DarkMessageBox(
+                mw, kind='info',
+                title=t('file_manager.no_highlight_title'),
+                body=t('file_manager.no_highlight_msg'),
+            ).exec()
             return
 
         preview = "\n".join(f.name for f in list(highlighted)[:5])
         if len(highlighted) > 5:
             preview += f"\n... 외 {len(highlighted) - 5}개"
-        reply = QMessageBox.question(
-            mw, t('file_manager.delete_hl_title'),
-            t('file_manager.delete_hl_msg', count=len(highlighted), preview=preview),
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
+        _confirm = _DarkMessageBox(
+            mw, kind='question',
+            title=t('file_manager.delete_hl_title'),
+            body=t('file_manager.delete_hl_msg', count=len(highlighted), preview=preview),
         )
-        if reply != QMessageBox.StandardButton.Yes:
+        if _confirm.exec() != QDialog.DialogCode.Accepted:
             return
 
-        count = len(highlighted)
+        current = mw._current_file
+        highlighted_list = list(highlighted)
+
+        current_to_delete = current if (current and current in set(highlighted_list)) else None
+        others = [f for f in highlighted_list if f != current_to_delete]
+
+        count = len(highlighted_list)
         next_index = mw.navigator.calculate_next_index_after_deletion(
-            files_to_delete=highlighted, deletion_mode="multi"
+            files_to_delete=highlighted_list, deletion_mode="multi"
         )
 
-        # ── 이벤트 억제 ──────────────────────────────────────────
-        mw.folder_watcher.pause_events()           # pending 누적, 타이머 정지
-        mw.folder_watcher.suppress_batch_deleted() # batch_deleted 1회 억제
-        mw.navigator.bulk_delete_start()           # reload_after_deletion 억제
+        mw.folder_watcher.pause_events()
+        mw.folder_watcher.suppress_batch_deleted()
+        mw.navigator.bulk_delete_start()
 
-        # ── 삭제 실행 ────────────────────────────────────────────
         failed = []
-        for path in highlighted:
+        for path in others:
             try:
                 send2trash.send2trash(str(path))
             except Exception as e:
                 failed.append(path)
                 error_print(f"삭제 실패: {path.name} — {e}")
 
-        # ── 정리 ─────────────────────────────────────────────────
         mw.navigator.clear_highlights()
-        mw.navigator.bulk_delete_end(next_index)       # _bulk_deleting=False, index 저장
-        mw.file_manager.start_bulk_suppress(2000)      # on_file_deleted × N 억제
-        mw.folder_watcher.resume_events()              # _events_paused=False
+        mw.navigator.bulk_delete_end(next_index)
+        mw.file_manager.start_bulk_suppress(2000)
+        mw.folder_watcher.resume_events()
 
-        # ── 직접 1회 reload ───────────────────────────────────────
-        def on_done(count_after: int) -> None:
-            mw._clear_op_status(f"{count}개 삭제 완료", 2000)
-            try:
-                mw.navigator.folder_scan_completed.disconnect(on_done)
-            except Exception:
-                pass
-
-        mw.navigator.folder_scan_completed.connect(on_done)
-        mw.navigator.reload_async()   # ← 이 1회만 스캔
+        if current_to_delete:
+            mw.navigator._temp_scan_prev_index = next_index
+            if hasattr(mw, 'image_viewer'):
+                mw.image_viewer.release_current_file()
+            mw._is_deleting = True
+            mw._run_file_worker('delete', [current_to_delete])
+        else:
+            def on_done(count_after: int) -> None:
+                mw._clear_op_status(f"{count}개 삭제 완료", 2000)
+                try:
+                    mw.navigator.folder_scan_completed.disconnect(on_done)
+                except Exception:
+                    pass
+            mw.navigator.folder_scan_completed.connect(on_done)
+            mw.navigator.reload_async()
 
         if failed:
             warning_print(f"⚠️ {len(failed)}개 파일 삭제 실패")
@@ -505,7 +507,11 @@ class HighlightOperations:
         mw          = self._mw
         highlighted = mw.navigator.get_highlighted_files()
         if not highlighted:
-            QMessageBox.information(mw, t('print_dialog.notice_title'), t('print_dialog.no_highlight_msg'))
+            _DarkMessageBox(
+                mw, kind='info',
+                title=t('print_dialog.notice_title'),
+                body=t('print_dialog.no_highlight_msg'),
+            ).exec()
             return
 
         mime = QMimeData()
@@ -521,7 +527,11 @@ class HighlightOperations:
         mw          = self._mw
         highlighted = mw.navigator.get_highlighted_files()
         if not highlighted:
-            QMessageBox.information(mw, t('print_dialog.notice_title'), t('print_dialog.no_highlight_msg'))
+            _DarkMessageBox(
+                mw, kind='info',
+                title=t('print_dialog.notice_title'),
+                body=t('print_dialog.no_highlight_msg'),
+            ).exec()
             return
 
         mime = QMimeData()
@@ -535,12 +545,10 @@ class HighlightOperations:
 
     def _sync_thumbnail_highlight(self, filepath: Path, is_highlighted: bool) -> None:
         mw = self._mw
-        # ThumbnailBar highlighted_files 동기화
         if is_highlighted:
             mw.thumbnail_bar.highlighted_files.add(filepath)
         else:
             mw.thumbnail_bar.highlighted_files.discard(filepath)
-        # 썸네일 아이템 UI 갱신
         try:
             index = mw.thumbnail_bar.image_list.index(filepath)
             if 0 <= index < len(mw.thumbnail_bar.thumbnail_items):
@@ -576,7 +584,7 @@ class FolderWatchHandler:
         self._pending_added_files: list = []
         self._add_debounce_timer = QTimer()
         self._add_debounce_timer.setSingleShot(True)
-        self._add_debounce_timer.setInterval(250)  # 250ms 안에 들어오는 파일 전부 묶음
+        self._add_debounce_timer.setInterval(250) 
         self._add_debounce_timer.timeout.connect(self._flush_added_files)
 
         # bulk 삭제 직후 개별 on_file_deleted 억제
@@ -599,7 +607,6 @@ class FolderWatchHandler:
         label = f"'{files[0].name}'" if n == 1 else f"{n}개 파일"
 
         def on_reload_complete(count):
-            # 스캔 완료 후 image_files 확인 → 이제 valid가 채워짐
             valid = [f for f in files if f in mw.navigator.image_files]
             if valid:
                 mw.navigator.set_temporary_highlights(valid)
@@ -622,7 +629,6 @@ class FolderWatchHandler:
         # 중복 방지 후 누적
         if filepath not in self._pending_added_files:
             self._pending_added_files.append(filepath)
-        # 타이머 재시작 (디바운스: 마지막 파일 추가 후 250ms 뒤에 실행)
         self._add_debounce_timer.start()
 
 
@@ -641,14 +647,14 @@ class FolderWatchHandler:
     def on_file_deleted(self, filepath: Path) -> None:
         mw = self._mw
 
-        # bulk 삭제 억제 중이면 무시 (on_batch_deleted가 처리)
-        if self._bulk_suppress:
-            debug_print(f"bulk suppress 중 - on_file_deleted 무시: {filepath.name}")
-            return
-
         if getattr(mw, '_is_deleting', False):
             mw._is_deleting = False
             mw.navigator.reload_after_deletion()
+            return
+
+        # bulk 삭제 억제 중이면 무시 (on_batch_deleted가 처리)
+        if self._bulk_suppress:
+            debug_print(f"bulk suppress 중 - on_file_deleted 무시: {filepath.name}")
             return
 
         sn = _short_name(filepath.name)
@@ -699,15 +705,11 @@ class FolderWatchHandler:
         info_print(f"배치 삭제 감지: {count}개")
         mw._set_op_status(f"{count}개 삭제 감지 중...", 0, 0)
 
-        # clear_highlights()가 이미 호출된 경우 중복 처리 방지
-        # 하이라이트가 남아있는 경우(외부 삭제 등)만 정리
         for fp in deleted_files:
             if mw.navigator.is_highlighted(fp):
                 mw.navigator.toggle_highlight(fp)
                 mw.thumbnail_bar.highlighted_files.discard(fp) 
 
-        # next_index는 bulk_delete_end에서 이미 설정됨
-        # _temp_scan_prev_index 덮어쓰기 방지 — 값이 이미 있으면 유지
         if mw.navigator._temp_scan_prev_index is None:
             next_index = mw.navigator.calculate_next_index_after_deletion(
                 files_to_delete=deleted_files, deletion_mode="auto"
@@ -750,7 +752,6 @@ class FileManager:
     def open_file_dialog(self)           -> None: self._file_ops.open_file_dialog()
     def open_folder_dialog(self)         -> None: self._file_ops.open_folder_dialog()
     def rename_file(self)                -> None: self._file_ops.rename_file()
-    #def paste_file(self)                 -> None: self._file_ops.paste_file()
     def paste_file(self, target_folder: Optional[Path] = None) -> None:
         self._file_ops.paste_file(target_folder)
     def copy_file_path(self)             -> None: self._file_ops.copy_file_path()
@@ -789,7 +790,7 @@ class FileManager:
         if self._file_worker and self._file_worker.isRunning():
             if self._file_worker.operation == "delete":
                 warning_print("삭제 작업 진행 중 — 완료 후 재시도하세요.")
-                QMessageBox.warning(mw, "작업 중", "파일 삭제가 진행 중입니다.\n완료 후 다시 시도하세요.")
+                _DarkMessageBox(mw, kind='warning', title="작업 중", body="파일 삭제가 진행 중입니다.\n완료 후 다시 시도하세요.").exec()
                 return
 
             self._file_worker.cancel()
@@ -820,9 +821,33 @@ class FileManager:
     def _on_file_op_finished(self, success: int, fail: int, operation: str) -> None:
         mw = self._mw
 
-        if operation == "delete":
-            mw._is_deleting = False
+        if operation == 'delete':
+            hl_count = self._hl_ops._pending_hl_count
+            if hl_count is not None:
+                hl_next_index = self._hl_ops._pending_hl_next_index or 0
+                self._hl_ops._pending_hl_count = None
+                self._hl_ops._pending_hl_next_index = None
 
+                mw.navigator.clear_highlights()
+                mw.navigator.bulk_delete_end(hl_next_index)
+                mw.file_manager.start_bulk_suppress(2000)
+                mw.folder_watcher.resume_events()
+
+                def on_done(count_after: int) -> None:
+                    mw._clear_op_status(f"{hl_count}개 삭제 완료", 2000)
+                    try:
+                        mw.navigator.folder_scan_completed.disconnect(on_done)
+                    except Exception:
+                        pass
+
+                mw.navigator.folder_scan_completed.connect(on_done)
+                mw.navigator.reload_async()
+
+                if fail:
+                    warning_print(f"⚠️ {fail}개 파일 삭제 실패")
+                return
+
+            mw._is_deleting = False
             if mw.navigator.image_files:
                 QTimer.singleShot(0, mw._load_current_image)
             else:
@@ -831,9 +856,9 @@ class FileManager:
         op_label = {'copy': '복사', 'move': '이동', 'delete': '삭제'}.get(operation, operation)
         msg = f"{op_label} 완료: {success}개"
         if fail:
-            msg += f" (실패 {fail}개)"
+            msg += f" (실패: {fail}개)"
         mw._clear_op_status(msg, 3000)
-        
+
 
     def cancel_worker(self) -> None:
         """앱 종료 시 호출."""
@@ -890,7 +915,7 @@ class FileManager:
         files = self._get_target_files()
         if not files:
             return
-        # 다중/단일 메시지 분기
+
         is_multi = len(files) > 1
         if is_multi:
             preview = "\n".join(f.name for f in files[:5])
@@ -902,10 +927,12 @@ class FileManager:
             msg = t('file_manager.delete_single_msg', name=files[0].name)
             mode = "single"
 
-        reply = QMessageBox.question(mw, t('file_manager.delete_file_title'), msg,
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No)
-        if reply != QMessageBox.StandardButton.Yes:
+        _confirm = _DarkMessageBox(
+            mw, kind='question',
+            title=t('file_manager.delete_file_title'),
+            body=msg,
+        )
+        if _confirm.exec() != QDialog.DialogCode.Accepted:
             return
 
         next_index = mw.navigator.calculate_next_index_after_deletion(
@@ -913,6 +940,8 @@ class FileManager:
         mw.navigator._temp_scan_prev_index = next_index
 
         if mw._current_file in set(files):
+            if hasattr(mw, 'image_viewer'):
+                mw.image_viewer.release_current_file()
             mw._is_deleting = True
 
         mw._run_file_worker("delete", files)
